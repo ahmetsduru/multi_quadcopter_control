@@ -40,7 +40,7 @@ void referencePositionCallback(const geometry_msgs::Vector3::ConstPtr& msg, cons
 }
 
 int main(int argc, char **argv) {
-    ros::init(argc, argv, "reference_position_converter");
+    ros::init(argc, argv, "rviz_data_handler");
     ros::NodeHandle nh;
 
     // Path için publisher başlat

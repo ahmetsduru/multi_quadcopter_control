@@ -1,20 +1,3 @@
-real_time_control:
-  Kp_x: 0.4
-  Ki_x: 0.001
-  Kd_x: 0.1
-
-  Kp_y: -0.6
-  Ki_y: 0.0
-  Kd_y: -0.2
-
-  Kp_z: 10.0
-  Ki_z: 0.2
-  Kd_z: 3.0
-
-  max_thrust: 4.905
-  min_thrust: 0.0
-  hz: 20  # Frequency in Hz
-
 mid_level_controller:
   # PID gains for thrust, phi, theta
   kp_thrust_x: 1.0

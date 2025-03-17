@@ -65,6 +65,19 @@ include_directories(
   ${Boost_INCLUDE_DIRS}
 )
 
+## Apply specific optimizations for performance-critical targets
+set(CRITICAL_OPT_FLAGS "-O3 -march=native -funroll-loops")
+
+add_executable(multi_mid_level_cont_node src/mid_level_cont_node.cpp src/mid_level_cont.cpp)
+target_link_libraries(multi_mid_level_cont_node ${catkin_LIBRARIES})
+add_dependencies(multi_mid_level_cont_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+set_target_properties(multi_mid_level_cont_node PROPERTIES COMPILE_FLAGS "${CRITICAL_OPT_FLAGS}")
+
+add_executable(multi_low_level_cont_node src/low_level_cont_node.cpp src/low_level_cont.cpp)
+target_link_libraries(multi_low_level_cont_node ${catkin_LIBRARIES})
+add_dependencies(multi_low_level_cont_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+set_target_properties(multi_low_level_cont_node PROPERTIES COMPILE_FLAGS "${CRITICAL_OPT_FLAGS}")
+
 ## Other executables
 add_executable(multi_trajectory_generator_node src/trajectory_generator_node.cpp src/trajectory_generator.cpp)
 target_link_libraries(multi_trajectory_generator_node ${catkin_LIBRARIES})
@@ -74,8 +87,12 @@ add_executable(multi_waypoint_server_node src/waypoint_server_node.cpp src/waypo
 target_link_libraries(multi_waypoint_server_node ${catkin_LIBRARIES})
 add_dependencies(multi_waypoint_server_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
-add_executable(reference_position_converter src/reference_position_converter.cpp)
-target_link_libraries(reference_position_converter ${catkin_LIBRARIES})
+add_executable(multi_eom src/eom.cpp)
+target_link_libraries(multi_eom ${catkin_LIBRARIES} ${Boost_LIBRARIES})
+add_dependencies(multi_eom ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+
+add_executable(multi_rviz_data_handler src/rviz_data_handler.cpp)
+target_link_libraries(multi_rviz_data_handler ${catkin_LIBRARIES})
 
 
 #############
@@ -85,6 +102,10 @@ target_link_libraries(reference_position_converter ${catkin_LIBRARIES})
 install(TARGETS
   multi_trajectory_generator_node
   multi_waypoint_server_node
+  multi_mid_level_cont_node
+  multi_low_level_cont_node
+  multi_eom
+  multi_rviz_data_handler
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
