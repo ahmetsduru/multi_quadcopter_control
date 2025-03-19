@@ -5,7 +5,7 @@
     <visual>
       <origin xyz="0.0 0.0 0.0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://multi_quadcopter_control/meshes/quad_model_v1.dae" scale="0.008 0.008 0.008"/>
+        <mesh filename="package://multi_quadcopter_control/meshes/quad_model_v1.dae" scale="0.005 0.005 0.005"/>
       </geometry>
     </visual>
 
@@ -13,7 +13,7 @@
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://multi_quadcopter_control/meshes/quad_model_v1.dae" scale="0.008 0.008 0.008"/>
+        <mesh filename="package://multi_quadcopter_control/meshes/quad_model_v1.dae" scale="0.005 0.005 0.005"/>
       </geometry>
     </collision>
   </link>

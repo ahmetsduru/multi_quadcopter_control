@@ -15,6 +15,7 @@ tf2_ros::TransformBroadcaster* tf_broadcaster_ptr = nullptr; // Pointer for TF b
 ros::Subscriber dummy_sub;       // Dummy Subscriber
 
 geometry_msgs::Vector3 latest_euler_angles;  // Latest updated Euler angles
+geometry_msgs::Vector3 initial_position;     // Initial Position Offset
 
 void actualEulerCallback(const geometry_msgs::Vector3::ConstPtr& msg) {
     latest_euler_angles = *msg;  // Update Euler angles
@@ -32,9 +33,9 @@ void actualPositionCallback(const geometry_msgs::Vector3::ConstPtr& msg, const s
     geometry_msgs::PoseStamped pose;
     pose.header.stamp = current_time;
     pose.header.frame_id = "world";  // Frame name used in RViz
-    pose.pose.position.x = msg->x;
-    pose.pose.position.y = msg->y;
-    pose.pose.position.z = msg->z;
+    pose.pose.position.x = msg->x + initial_position.x;
+    pose.pose.position.y = msg->y + initial_position.y;
+    pose.pose.position.z = msg->z + initial_position.z;
 
     pose.pose.orientation.x = quat.x();
     pose.pose.orientation.y = quat.y();
@@ -58,9 +59,9 @@ void actualPositionCallback(const geometry_msgs::Vector3::ConstPtr& msg, const s
         transformStamped.header.frame_id = "world";
         transformStamped.child_frame_id = drone_ns + "/base_link";
 
-        transformStamped.transform.translation.x = msg->x;
-        transformStamped.transform.translation.y = msg->y;
-        transformStamped.transform.translation.z = msg->z;
+        transformStamped.transform.translation.x = msg->x + initial_position.x;
+        transformStamped.transform.translation.y = msg->y + initial_position.y;
+        transformStamped.transform.translation.z = msg->z + initial_position.z;
 
         transformStamped.transform.rotation.x = quat.x();
         transformStamped.transform.rotation.y = quat.y();
@@ -77,9 +78,9 @@ void referencePositionCallback(const geometry_msgs::Vector3::ConstPtr& msg) {
     geometry_msgs::PoseStamped pose;
     pose.header.stamp = current_time;
     pose.header.frame_id = "world";
-    pose.pose.position.x = msg->x;
-    pose.pose.position.y = msg->y;
-    pose.pose.position.z = msg->z;
+    pose.pose.position.x = msg->x + initial_position.x;
+    pose.pose.position.y = msg->y + initial_position.y;
+    pose.pose.position.z = msg->z + initial_position.z;
 
     // **Check the frame_id of the Reference Path message**
     if (ref_path_msg.header.frame_id.empty()) {
@@ -108,6 +109,11 @@ int main(int argc, char **argv) {
     
     path_pub = nh.advertise<nav_msgs::Path>("actual_position_path", 10);
     ref_path_pub = nh.advertise<nav_msgs::Path>("reference_position_path", 10);
+
+    // **Read Initial Position Offset from Parameter Server**
+    nh.param("initial_x", initial_position.x, 1.0);
+    nh.param("initial_y", initial_position.y, 0.0);
+    nh.param("initial_z", initial_position.z, 0.0);
 
     // **Start subscribers for actual_position, actual_euler_angles, and reference_position**
     ros::Subscriber pos_sub = nh.subscribe<geometry_msgs::Vector3>("actual_position", 10, 

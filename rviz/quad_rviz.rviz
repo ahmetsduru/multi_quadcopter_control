@@ -5,7 +5,10 @@ Panels:
     Property Tree Widget:
       Expanded:
         - /Global Options1
-      Splitter Ratio: 0.49854227900505066
+        - /Axes5
+        - /Axes6
+        - /Axes7
+      Splitter Ratio: 0.5
     Tree Height: 746
   - Class: rviz/Selection
     Name: Selection
@@ -45,7 +48,7 @@ Visualization Manager:
       Offset:
         X: 0
         Y: 0
-        Z: 0
+        Z: -0.20000000298023224
       Plane: XY
       Plane Cell Count: 50
       Reference Frame: <Fixed Frame>
@@ -53,36 +56,36 @@ Visualization Manager:
     - Alpha: 1
       Class: rviz/Axes
       Enabled: true
-      Length: 0.5
+      Length: 1
       Name: Axes
-      Radius: 0.019999999552965164
-      Reference Frame: <Fixed Frame>
+      Radius: 0.07500000298023224
+      Reference Frame: world
       Show Trail: false
       Value: true
     - Alpha: 1
       Class: rviz/Axes
       Enabled: true
-      Length: 1
+      Length: 0.75
       Name: Axes
-      Radius: 0.10000000149011612
+      Radius: 0.07500000298023224
       Reference Frame: drone1/base_link
       Show Trail: false
       Value: true
     - Alpha: 1
       Class: rviz/Axes
       Enabled: true
-      Length: 1
+      Length: 0.75
       Name: Axes
-      Radius: 0.10000000149011612
+      Radius: 0.07500000298023224
       Reference Frame: drone2/base_link
       Show Trail: false
       Value: true
     - Alpha: 1
       Class: rviz/Axes
       Enabled: true
-      Length: 1
+      Length: 0.75
       Name: Axes
-      Radius: 0.10000000149011612
+      Radius: 0.07500000298023224
       Reference Frame: drone3/base_link
       Show Trail: false
       Value: true
@@ -137,7 +140,7 @@ Visualization Manager:
     - Alpha: 1
       Buffer Length: 1
       Class: rviz/Path
-      Color: 100; 100; 0
+      Color: 0; 0; 0
       Enabled: false
       Head Diameter: 0.30000001192092896
       Head Length: 0.20000000298023224
@@ -232,7 +235,7 @@ Visualization Manager:
       Value: false
     - Alpha: 1
       Class: rviz/RobotModel
-      Collision Enabled: true
+      Collision Enabled: false
       Enabled: true
       Links:
         All Links Enabled: true
@@ -253,7 +256,7 @@ Visualization Manager:
       Visual Enabled: true
     - Alpha: 1
       Class: rviz/RobotModel
-      Collision Enabled: true
+      Collision Enabled: false
       Enabled: true
       Links:
         All Links Enabled: true
@@ -274,7 +277,7 @@ Visualization Manager:
       Visual Enabled: true
     - Alpha: 1
       Class: rviz/RobotModel
-      Collision Enabled: true
+      Collision Enabled: false
       Enabled: true
       Links:
         All Links Enabled: true
@@ -293,6 +296,96 @@ Visualization Manager:
       Update Interval: 0
       Value: true
       Visual Enabled: true
+    - Alpha: 1
+      Class: rviz/RobotModel
+      Collision Enabled: false
+      Enabled: true
+      Links:
+        All Links Enabled: true
+        Expand Joint Details: false
+        Expand Link Details: false
+        Expand Tree: false
+        Link Tree Style: Links in Alphabetic Order
+        base_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+      Name: RobotModel
+      Robot Description: /drone4/robot_description
+      TF Prefix: drone4
+      Update Interval: 0
+      Value: true
+      Visual Enabled: true
+    - Alpha: 1
+      Class: rviz/RobotModel
+      Collision Enabled: false
+      Enabled: true
+      Links:
+        All Links Enabled: true
+        Expand Joint Details: false
+        Expand Link Details: false
+        Expand Tree: false
+        Link Tree Style: Links in Alphabetic Order
+        base_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+      Name: RobotModel
+      Robot Description: /drone5/robot_description
+      TF Prefix: drone5
+      Update Interval: 0
+      Value: true
+      Visual Enabled: true
+    - Alpha: 1
+      Class: rviz/RobotModel
+      Collision Enabled: false
+      Enabled: true
+      Links:
+        All Links Enabled: true
+        Expand Joint Details: false
+        Expand Link Details: false
+        Expand Tree: false
+        Link Tree Style: Links in Alphabetic Order
+        base_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+      Name: RobotModel
+      Robot Description: /drone6/robot_description
+      TF Prefix: drone6
+      Update Interval: 0
+      Value: true
+      Visual Enabled: true
+    - Alpha: 1
+      Class: rviz/Axes
+      Enabled: true
+      Length: 0.75
+      Name: Axes
+      Radius: 0.07500000298023224
+      Reference Frame: drone4/base_link
+      Show Trail: false
+      Value: true
+    - Alpha: 1
+      Class: rviz/Axes
+      Enabled: true
+      Length: 0.75
+      Name: Axes
+      Radius: 0.07500000298023224
+      Reference Frame: drone5/base_link
+      Show Trail: false
+      Value: true
+    - Alpha: 1
+      Class: rviz/Axes
+      Enabled: true
+      Length: 0.75
+      Name: Axes
+      Radius: 0.07500000298023224
+      Reference Frame: drone6/base_link
+      Show Trail: false
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 100; 100; 100
@@ -321,7 +414,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 37.901859283447266
+      Distance: 48.35327911376953
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -329,17 +422,17 @@ Visualization Manager:
         Value: false
       Field of View: 0.7853981852531433
       Focal Point:
-        X: -0.45245951414108276
-        Y: 3.584045886993408
-        Z: 2.2620818614959717
-      Focal Shape Fixed Size: false
+        X: -5.896056175231934
+        Y: -4.35623836517334
+        Z: -8.479766845703125
+      Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.5703970193862915
-      Target Frame: <Fixed Frame>
-      Yaw: 1.1603983640670776
+      Pitch: 0.26539644598960876
+      Target Frame: drone1/base_link
+      Yaw: 0.5403903722763062
     Saved: ~
 Window Geometry:
   Displays:
