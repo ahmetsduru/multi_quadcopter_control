@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<robot name="quadcopter">
+  <link name="base_link">
+    <!-- Visual representation using the DAE mesh file -->
+    <visual>
+      <origin xyz="0.0 0.0 0.0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://multi_quadcopter_control/meshes/quad_model_v2.dae" scale="0.01 0.01 0.01"/>
+      </geometry>
+    </visual>
+
+    <!-- Collision representation using the DAE mesh file -->
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://multi_quadcopter_control/meshes/quad_model_v2.dae" scale="0.01 0.01 0.01"/>
+      </geometry>
+    </collision>
+  </link>
+</robot>

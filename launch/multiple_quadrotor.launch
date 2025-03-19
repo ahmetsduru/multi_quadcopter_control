@@ -1,0 +1,52 @@
+<launch>
+    <rosparam file="$(find multi_quadcopter_control)/config/trajectory_crescent.yaml" command="load"/>
+    <rosparam file="$(find multi_quadcopter_control)/config/trajectory_random.yaml" command="load"/>
+    <rosparam file="$(find multi_quadcopter_control)/config/trajectory_random_2.yaml" command="load"/>
+    <rosparam file="$(find multi_quadcopter_control)/config/trajectory_random_3.yaml" command="load"/>
+    <rosparam file="$(find multi_quadcopter_control)/config/trajectory_hover.yaml" command="load"/>
+    <rosparam file="$(find multi_quadcopter_control)/config/trajectory_pid_tuning.yaml" command="load"/>
+
+    <group ns="drone1">
+        <rosparam file="$(find multi_quadcopter_control)/config/trajectory_manager_drone1.yaml" command="load"/>
+        <rosparam file="$(find multi_quadcopter_control)/config/quadcopter_params_1.yaml" command="load"/>
+
+        <node name="waypoint_server" pkg="multi_quadcopter_control" type="multi_waypoint_server_node" output="screen" />
+        <node name="trajectory_generator" pkg="multi_quadcopter_control" type="multi_trajectory_generator_node" output="screen" />
+        <node name="mid_level_cont" pkg="multi_quadcopter_control" type="multi_mid_level_cont_node" output="screen" />
+        <node name="low_level_cont" pkg="multi_quadcopter_control" type="multi_low_level_cont_node" output="screen" />
+        <node name="eom" pkg="multi_quadcopter_control" type="eom" output="screen" />
+        <node name="rviz_data_handler" pkg="multi_quadcopter_control" type="multi_rviz_data_handler" output="screen" />
+
+        <param name="robot_description" command="$(find xacro)/xacro $(find multi_quadcopter_control)/urdf/quad_cad.urdf" />
+    </group>
+
+    <group ns="drone2">
+        <rosparam file="$(find multi_quadcopter_control)/config/trajectory_manager_drone2.yaml" command="load"/>
+        <rosparam file="$(find multi_quadcopter_control)/config/quadcopter_params_2.yaml" command="load"/>
+
+        <node name="waypoint_server" pkg="multi_quadcopter_control" type="multi_waypoint_server_node" output="screen" />
+        <node name="trajectory_generator" pkg="multi_quadcopter_control" type="multi_trajectory_generator_node" output="screen" />
+        <node name="mid_level_cont" pkg="multi_quadcopter_control" type="multi_mid_level_cont_node" output="screen" />
+        <node name="low_level_cont" pkg="multi_quadcopter_control" type="multi_low_level_cont_node" output="screen" />
+        <node name="eom" pkg="multi_quadcopter_control" type="eom" output="screen" />
+        <node name="rviz_data_handler" pkg="multi_quadcopter_control" type="multi_rviz_data_handler" output="screen" />
+
+        <param name="robot_description" command="$(find xacro)/xacro $(find multi_quadcopter_control)/urdf/quad_black.urdf" />
+    </group>
+
+    <group ns="drone3">
+        <rosparam file="$(find multi_quadcopter_control)/config/trajectory_manager_drone3.yaml" command="load"/>
+        <rosparam file="$(find multi_quadcopter_control)/config/quadcopter_params_2.yaml" command="load"/>
+
+        <node name="waypoint_server" pkg="multi_quadcopter_control" type="multi_waypoint_server_node" output="screen" />
+        <node name="trajectory_generator" pkg="multi_quadcopter_control" type="multi_trajectory_generator_node" output="screen" />
+        <node name="mid_level_cont" pkg="multi_quadcopter_control" type="multi_mid_level_cont_node" output="screen" />
+        <node name="low_level_cont" pkg="multi_quadcopter_control" type="multi_low_level_cont_node" output="screen" />
+        <node name="eom" pkg="multi_quadcopter_control" type="eom" output="screen" />
+        <node name="rviz_data_handler" pkg="multi_quadcopter_control" type="multi_rviz_data_handler" output="screen" />
+
+        <param name="robot_description" command="$(find xacro)/xacro $(find multi_quadcopter_control)/urdf/quad_cad_2.urdf" />
+    </group>
+
+    <node name="rviz" pkg="rviz" type="rviz" args="-d $(find multi_quadcopter_control)/rviz/quad_rviz.rviz" output="screen" />
+</launch>

@@ -21,14 +21,23 @@ WaypointServer::WaypointServer(ros::NodeHandle& nh) : m_current_trajectory_index
 // Callback function for the service
 bool WaypointServer::getTrajectoryCallback(multi_quadcopter_control::WaypointService::Request &req,
                                            multi_quadcopter_control::WaypointService::Response &res) {
+    static bool all_trajectories_logged = false;  // Flag to prevent repeated message logging
+
     if (m_current_trajectory_index >= m_trajectories.size()) {
         res.points_x.clear();
         res.points_y.clear();
         res.points_z.clear();
         res.times.clear();
-        ROS_INFO("All trajectories completed. Sending empty trajectory points and times.");
+
+        if (!all_trajectories_logged) {  // Log the message only once
+            ROS_INFO("All trajectories completed. Sending empty trajectory points and times.");
+            all_trajectories_logged = true;  // Mark message as logged to prevent repetition
+        }
+
         return true;
     }
+
+    all_trajectories_logged = false;  // Reset flag if there are more trajectories to send
 
     const auto& traj = m_trajectories[m_current_trajectory_index];
 

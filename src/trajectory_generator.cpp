@@ -21,25 +21,29 @@ TrajectoryGenerator::TrajectoryGenerator(ros::NodeHandle& nh)
 bool TrajectoryGenerator::getTrajectoryFromServer() {
     multi_quadcopter_control::WaypointService srv;
 
-    if (m_trajectory_client.call(srv)) {
-        m_points_x = srv.response.points_x;
-        m_points_y = srv.response.points_y;
-        m_points_z = srv.response.points_z;
-        m_times = srv.response.times;
-        m_ros_rate = srv.response.ros_rate;
-        m_trajectory_method = srv.response.method;
-
-        if (m_points_x.empty() || m_points_y.empty() || m_points_z.empty() || m_times.empty()) {
-            ROS_WARN("Empty trajectory data received. No further requests will be made.");
-            m_no_more_trajectory = true;
-            return false;
-        }
-
-        return true;
-    } else {
+    if (!m_trajectory_client.call(srv)) {
+        ROS_ERROR("Failed to call trajectory service.");
         return false;
     }
+
+    m_points_x = srv.response.points_x;
+    m_points_y = srv.response.points_y;
+    m_points_z = srv.response.points_z;
+    m_times = srv.response.times;
+    m_ros_rate = srv.response.ros_rate;
+    m_trajectory_method = srv.response.method;
+
+    if (m_points_x.empty() || m_points_y.empty() || m_points_z.empty() || m_times.empty()) {
+        if (!m_no_more_trajectory) {  
+            ROS_WARN("Empty trajectory data received. No further requests will be made.");
+            m_no_more_trajectory = true;
+        }
+        return false;
+    }
+
+    return true;
 }
+
 
 void TrajectoryGenerator::generateTrajectory() {
     ros::Rate loop_rate(m_ros_rate);
@@ -652,7 +656,7 @@ void TrajectoryGenerator::solveMinimumJerk() {
         m_acceleration_pub.publish(m_acceleration);
 
         // 3. segmente ulaşıldığında yeni waypoint seti iste
-        if (i == 3 && getTrajectoryFromServer()) {
+        if (i == 4 && getTrajectoryFromServer()) {
             ROS_INFO("New waypoint set received. The trajectory will be generated again.");
             generateTrajectory();  // Yeni verilerle yörüngeyi yeniden başlat
             return;

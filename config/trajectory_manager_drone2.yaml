@@ -1,5 +1,5 @@
 trajectory_manager:
-  is_psi_active: false
+  is_psi_active: true
   active_trajectories: ["trajectory_crescent"]  # Birden fazla yörünge seçilebilir
   available_trajectory:
     - name: "trajectory_hover"

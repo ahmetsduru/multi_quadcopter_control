@@ -3,20 +3,17 @@
   <link name="base_link">
     <!-- Visual representation using the DAE mesh file -->
     <visual>
-      <origin xyz="-0.828 -0.717 -0.0375" rpy="0 0 0"/>
+      <origin xyz="0.0 0.0 0.0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://multi_quadcopter_control/meshes/quad_cad.dae" scale="0.3 0.3 0.3"/>
+        <mesh filename="package://multi_quadcopter_control/meshes/quad_model_v3.dae" scale="0.008 0.008 0.008"/>
       </geometry>
-      <material name="">
-        <color rgba="0.4 0.4 0.4 1"/>
-      </material>
     </visual>
 
     <!-- Collision representation using the DAE mesh file -->
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://multi_quadcopter_control/meshes/quad_cad.dae" scale="0.3 0.3 0.3"/>
+        <mesh filename="package://multi_quadcopter_control/meshes/quad_model_v3.dae" scale="0.008 0.008 0.008"/>
       </geometry>
     </collision>
   </link>
