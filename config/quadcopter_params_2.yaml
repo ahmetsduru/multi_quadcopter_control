@@ -63,7 +63,7 @@ state_derivative_solver_node:
   # Impulse force parameters
   impulse_force: [0.0, 0.0, 0.0]  # Force applied as an impulse (Newton)
   force_impulse_start_time: 6.0  # Time when the force impulse starts (seconds)
-  force_impulse_duration: 0.1  # Duration of the force impulse (seconds)
+  force_impulse_duration: 10.0  # Duration of the force impulse (seconds)
 
   # Impulse torque parameters
   impulse_torque: [0.0, 0.0, 0.0]  # Torque applied as an impulse (Nm)

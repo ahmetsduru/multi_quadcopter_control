@@ -24,7 +24,7 @@ void actualEulerCallback(const geometry_msgs::Vector3::ConstPtr& msg) {
 void actualPositionCallback(const geometry_msgs::Vector3::ConstPtr& msg, const std::string& drone_ns) {
     ros::Time current_time = ros::Time::now();  // Continuously updated time
 
-    // 🛠 **Compute Quaternion from Euler Angles**
+    // **Compute Quaternion from Euler Angles**
     tf2::Quaternion quat;
     quat.setRPY(latest_euler_angles.x, latest_euler_angles.y, latest_euler_angles.z);
     quat.normalize(); // Normalize to prevent errors
@@ -111,7 +111,7 @@ int main(int argc, char **argv) {
     ref_path_pub = nh.advertise<nav_msgs::Path>("reference_position_path", 10);
 
     // **Read Initial Position Offset from Parameter Server**
-    nh.param("initial_x", initial_position.x, 1.0);
+    nh.param("initial_x", initial_position.x, 0.0);
     nh.param("initial_y", initial_position.y, 0.0);
     nh.param("initial_z", initial_position.z, 0.0);
 

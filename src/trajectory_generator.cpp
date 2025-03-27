@@ -1023,16 +1023,3 @@ void TrajectoryGenerator::generatePsi() {
     }
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
