@@ -27,6 +27,8 @@ std::map<std::string, geometry_msgs::Vector3> drone_positions;
 std::map<std::string, ros::Subscriber> subscribers;
 // Stores initial position offsets per drone
 std::map<std::string, geometry_msgs::Vector3> drone_initial_offsets;
+// Publishers for disturbance force per drone
+std::map<std::string, ros::Publisher> disturbance_publishers;
 
 // Extracts drone name from the topic path
 std::string extractDroneName(const std::string& topic_name) {
@@ -62,7 +64,7 @@ int main(int argc, char** argv) {
     ros::init(argc, argv, "dynamic_drone_position_listener");
     ros::NodeHandle nh;
 
-    ros::Rate rate(10.0);
+    ros::Rate rate(500.0);
     ros::Time last_topic_check = ros::Time::now();
     ros::Duration topic_check_interval(1.0);
 
@@ -89,6 +91,10 @@ int main(int argc, char** argv) {
                     subscribers[topic] = nh.subscribe<geometry_msgs::Vector3>(
                         topic, 10, boost::bind(positionCallback, _1, topic));
                     ROS_INFO("Subscribed to topic: %s", topic.c_str());
+
+                    std::string drone_name = extractDroneName(topic);
+                    std::string disturbance_topic = "/" + drone_name + "/disturbance_force";
+                    disturbance_publishers[drone_name] = nh.advertise<geometry_msgs::Vector3>(disturbance_topic, 10);
                 }
             }
             last_topic_check = ros::Time::now();
@@ -99,20 +105,42 @@ int main(int argc, char** argv) {
             drone_count_logged = true;
         }
 
-        // Check distances between drone pairs and identify which drone is above or below
+        // Initialize all disturbance forces to zero
+        std::map<std::string, geometry_msgs::Vector3> disturbances;
+        for (const auto& pair : drone_positions) {
+            geometry_msgs::Vector3 zero_force;
+            zero_force.x = 0.0;
+            zero_force.y = 0.0;
+            zero_force.z = 0.0;
+            disturbances[pair.first] = zero_force;
+        }
+
+        // Check distances between drone pairs and apply disturbance to the bottom one
         for (const auto& drone1 : drone_positions) {
             for (const auto& drone2 : drone_positions) {
-                if (drone1.first >= drone2.first) continue;  // Avoid duplicate pairs
-
-                bool drone1_above_drone2 = drone1.second.z > drone2.second.z;
+                if (drone1.first >= drone2.first) continue;
 
                 double distance = computeDistance(drone1.second, drone2.second);
                 if (distance < 0.5) {
+                    std::string top_drone = drone1.second.z > drone2.second.z ? drone1.first : drone2.first;
+                    std::string bottom_drone = drone1.second.z > drone2.second.z ? drone2.first : drone1.first;
+
                     ROS_INFO("CLOSE PAIR -> Top: %s | Bottom: %s | Distance: %.2f m",
-                             drone1_above_drone2 ? drone1.first.c_str() : drone2.first.c_str(),
-                             drone1_above_drone2 ? drone2.first.c_str() : drone1.first.c_str(),
-                             distance);
+                             top_drone.c_str(), bottom_drone.c_str(), distance);
+
+                    geometry_msgs::Vector3 force;
+                    force.x = 0.0;
+                    force.y = 0.0;
+                    force.z = -2.0;
+                    disturbances[bottom_drone] = force;
                 }
+            }
+        }
+
+        // Publish disturbance forces
+        for (const auto& pair : disturbances) {
+            if (disturbance_publishers.find(pair.first) != disturbance_publishers.end()) {
+                disturbance_publishers[pair.first].publish(pair.second);
             }
         }
 

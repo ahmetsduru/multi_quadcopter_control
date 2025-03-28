@@ -50,22 +50,5 @@ state_derivative_solver_node:
   tau_torque: 0.2
 
   rho: 1.225
-  A_rotor: 0.001905
   A_trans: [0.003, 0, 0, 0, 0.003, 0, 0, 0, 0.03]
-  r_propeller: 0.0635
-  Cd_rot: 0.02
   Cd_trans: [0.08, 0, 0, 0, 0.08, 0, 0, 0, 0.8]
-  kt_coeff: 0.0000007
-  km_coeff: 0.00000002
-  I_rotor: 0.0000215
-  l: 0.1 # Arm length 
-  
-  # Impulse force parameters
-  impulse_force: [0.0, 0.0, 0.0]  # Force applied as an impulse (Newton)
-  force_impulse_start_time: 6.0  # Time when the force impulse starts (seconds)
-  force_impulse_duration: 10.0  # Duration of the force impulse (seconds)
-
-  # Impulse torque parameters
-  impulse_torque: [0.0, 0.0, 0.0]  # Torque applied as an impulse (Nm)
-  torque_impulse_start_time: 35.0  # Time when the torque impulse starts (seconds)
-  torque_impulse_duration: 0.05  # Duration of the torque impulse (seconds)

@@ -18,7 +18,7 @@
         <node name="trajectory_generator" pkg="multi_quadcopter_control" type="multi_trajectory_generator_node" output="screen" launch-prefix="nice -n -5"/>
         <node name="mid_level_cont" pkg="multi_quadcopter_control" type="multi_mid_level_cont_node" output="screen" launch-prefix="nice -n -5"/>
         <node name="low_level_cont" pkg="multi_quadcopter_control" type="multi_low_level_cont_node" output="screen" launch-prefix="nice -n -5"/>
-        <node name="eom" pkg="multi_quadcopter_control" type="eom" output="screen" launch-prefix="nice -n -5"/>
+        <node name="eom" pkg="multi_quadcopter_control" type="multi_eom" output="screen" launch-prefix="nice -n -5"/>
         <node name="rviz_data_handler" pkg="multi_quadcopter_control" type="multi_rviz_data_handler" output="screen" launch-prefix="nice -n -5"/>
         <param name="robot_description" command="$(find xacro)/xacro $(find multi_quadcopter_control)/urdf/quad_model_v1.urdf" />
     </group>
@@ -34,7 +34,7 @@
         <node name="trajectory_generator" pkg="multi_quadcopter_control" type="multi_trajectory_generator_node" output="screen" launch-prefix="nice -n -5"/>
         <node name="mid_level_cont" pkg="multi_quadcopter_control" type="multi_mid_level_cont_node" output="screen" launch-prefix="nice -n -5"/>
         <node name="low_level_cont" pkg="multi_quadcopter_control" type="multi_low_level_cont_node" output="screen" launch-prefix="nice -n -5"/>
-        <node name="eom" pkg="multi_quadcopter_control" type="eom" output="screen" launch-prefix="nice -n -5"/>
+        <node name="eom" pkg="multi_quadcopter_control" type="multi_eom" output="screen" launch-prefix="nice -n -5"/>
         <node name="rviz_data_handler" pkg="multi_quadcopter_control" type="multi_rviz_data_handler" output="screen" launch-prefix="nice -n -5"/>
         <param name="robot_description" command="$(find xacro)/xacro $(find multi_quadcopter_control)/urdf/quad_model_v1.urdf" />
     </group>
@@ -50,7 +50,7 @@
         <node name="trajectory_generator" pkg="multi_quadcopter_control" type="multi_trajectory_generator_node" output="screen" launch-prefix="nice -n -5"/>
         <node name="mid_level_cont" pkg="multi_quadcopter_control" type="multi_mid_level_cont_node" output="screen" launch-prefix="nice -n -5"/>
         <node name="low_level_cont" pkg="multi_quadcopter_control" type="multi_low_level_cont_node" output="screen" launch-prefix="nice -n -5"/>
-        <node name="eom" pkg="multi_quadcopter_control" type="eom" output="screen" launch-prefix="nice -n -5"/>
+        <node name="eom" pkg="multi_quadcopter_control" type="multi_eom" output="screen" launch-prefix="nice -n -5"/>
         <node name="rviz_data_handler" pkg="multi_quadcopter_control" type="multi_rviz_data_handler" output="screen" launch-prefix="nice -n -5"/>
         <param name="robot_description" command="$(find xacro)/xacro $(find multi_quadcopter_control)/urdf/quad_model_v1.urdf" />
     </group>
@@ -66,7 +66,7 @@
         <node name="trajectory_generator" pkg="multi_quadcopter_control" type="multi_trajectory_generator_node" output="screen" launch-prefix="nice -n -5"/>
         <node name="mid_level_cont" pkg="multi_quadcopter_control" type="multi_mid_level_cont_node" output="screen" launch-prefix="nice -n -5"/>
         <node name="low_level_cont" pkg="multi_quadcopter_control" type="multi_low_level_cont_node" output="screen" launch-prefix="nice -n -5"/>
-        <node name="eom" pkg="multi_quadcopter_control" type="eom" output="screen" launch-prefix="nice -n -5"/>
+        <node name="eom" pkg="multi_quadcopter_control" type="multi_eom" output="screen" launch-prefix="nice -n -5"/>
         <node name="rviz_data_handler" pkg="multi_quadcopter_control" type="multi_rviz_data_handler" output="screen" launch-prefix="nice -n -5"/>
         <param name="robot_description" command="$(find xacro)/xacro $(find multi_quadcopter_control)/urdf/quad_model_v1.urdf" />
     </group>
@@ -82,7 +82,7 @@
         <node name="trajectory_generator" pkg="multi_quadcopter_control" type="multi_trajectory_generator_node" output="screen" launch-prefix="nice -n -5"/>
         <node name="mid_level_cont" pkg="multi_quadcopter_control" type="multi_mid_level_cont_node" output="screen" launch-prefix="nice -n -5"/>
         <node name="low_level_cont" pkg="multi_quadcopter_control" type="multi_low_level_cont_node" output="screen" launch-prefix="nice -n -5"/>
-        <node name="eom" pkg="multi_quadcopter_control" type="eom" output="screen" launch-prefix="nice -n -5"/>
+        <node name="eom" pkg="multi_quadcopter_control" type="multi_eom" output="screen" launch-prefix="nice -n -5"/>
         <node name="rviz_data_handler" pkg="multi_quadcopter_control" type="multi_rviz_data_handler" output="screen" launch-prefix="nice -n -5"/>
         <param name="robot_description" command="$(find xacro)/xacro $(find multi_quadcopter_control)/urdf/quad_model_v1.urdf" />
     </group>
@@ -98,7 +98,7 @@
         <node name="trajectory_generator" pkg="multi_quadcopter_control" type="multi_trajectory_generator_node" output="screen" launch-prefix="nice -n -5"/>
         <node name="mid_level_cont" pkg="multi_quadcopter_control" type="multi_mid_level_cont_node" output="screen" launch-prefix="nice -n -5"/>
         <node name="low_level_cont" pkg="multi_quadcopter_control" type="multi_low_level_cont_node" output="screen" launch-prefix="nice -n -5"/>
-        <node name="eom" pkg="multi_quadcopter_control" type="eom" output="screen" launch-prefix="nice -n -5"/>
+        <node name="eom" pkg="multi_quadcopter_control" type="multi_eom" output="screen" launch-prefix="nice -n -5"/>
         <node name="rviz_data_handler" pkg="multi_quadcopter_control" type="multi_rviz_data_handler" output="screen" launch-prefix="nice -n -5"/>
         <param name="robot_description" command="$(find xacro)/xacro $(find multi_quadcopter_control)/urdf/quad_model_v1.urdf" />
     </group>
