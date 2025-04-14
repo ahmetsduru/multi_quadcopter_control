@@ -27,7 +27,9 @@ MidLevelController::MidLevelController()
       m_prev_error_thrust_z(0.0), m_integral_thrust_z(0.0),
       m_prev_error_ref_phi(0.0), m_integral_ref_phi(0.0),
       m_prev_error_ref_theta(0.0), m_integral_ref_theta(0.0),
-      m_desired_acceleration_x(0.0), m_desired_acceleration_y(0.0), m_desired_acceleration_z(0.0) {
+      m_desired_acceleration_x(0.0), m_desired_acceleration_y(0.0), m_desired_acceleration_z(0.0), 
+      m_disturbance_x(0.0), m_disturbance_y(0.0), m_disturbance_z(0.0)
+      {
 
     // Load parameters from the parameter server
     m_nh.getParam("mid_level_controller/kp_thrust_x", m_kp_thrust_x);
@@ -60,6 +62,7 @@ MidLevelController::MidLevelController()
     m_desired_velocity_sub = m_nh.subscribe("reference_velocity", 10, &MidLevelController::desiredVelocityCallback, this);
     m_current_velocity_sub = m_nh.subscribe("actual_velocity", 10, &MidLevelController::currentVelocityCallback, this);
     m_desired_psi_sub = m_nh.subscribe("reference_psi", 10, &MidLevelController::desiredPsiCallback, this);
+    m_disturbance_sub = m_nh.subscribe("disturbance_force", 10, &MidLevelController::disturbanceCallback, this);
 
     m_desired_thrust_pub = m_nh.advertise<std_msgs::Float64>("reference_thrust", 10);
     m_desired_angles_pub = m_nh.advertise<geometry_msgs::Vector3>("reference_euler_angles", 10);
@@ -80,9 +83,9 @@ void MidLevelController::spin() {
 
 double MidLevelController::computeThrust() {
     // Kuvvetlerin dünya çerçevesinde hesaplanması
-    m_thrust_x = MidLevelNS::computePID(m_des_x, m_current_x, m_desired_velocity_x, m_current_velocity_x, m_integral_thrust_x, m_kp_thrust_x, m_ki_thrust_x, m_kd_thrust_x, m_dt, m_integral_min, m_integral_max) + m_mass * m_desired_acceleration_x;
-    m_thrust_y = MidLevelNS::computePID(m_des_y, m_current_y, m_desired_velocity_y, m_current_velocity_y, m_integral_thrust_y, m_kp_thrust_y, m_ki_thrust_y, m_kd_thrust_y, m_dt, m_integral_min, m_integral_max) + m_mass * m_desired_acceleration_y;
-    m_thrust_z = MidLevelNS::computePID(m_des_z, m_current_z, m_desired_velocity_z, m_current_velocity_z, m_integral_thrust_z, m_kp_thrust_z, m_ki_thrust_z, m_kd_thrust_z, m_dt, m_integral_min, m_integral_max) + m_mass * m_desired_acceleration_z + m_mass * 9.81;
+    m_thrust_x = MidLevelNS::computePID(m_des_x, m_current_x, m_desired_velocity_x, m_current_velocity_x, m_integral_thrust_x, m_kp_thrust_x, m_ki_thrust_x, m_kd_thrust_x, m_dt, m_integral_min, m_integral_max) + m_mass * m_desired_acceleration_x - m_disturbance_x;
+    m_thrust_y = MidLevelNS::computePID(m_des_y, m_current_y, m_desired_velocity_y, m_current_velocity_y, m_integral_thrust_y, m_kp_thrust_y, m_ki_thrust_y, m_kd_thrust_y, m_dt, m_integral_min, m_integral_max) + m_mass * m_desired_acceleration_y - m_disturbance_y;
+    m_thrust_z = MidLevelNS::computePID(m_des_z, m_current_z, m_desired_velocity_z, m_current_velocity_z, m_integral_thrust_z, m_kp_thrust_z, m_ki_thrust_z, m_kd_thrust_z, m_dt, m_integral_min, m_integral_max) + m_mass * m_desired_acceleration_z + m_mass * 9.81 - m_disturbance_z;
 
     // Dünya çerçevesindeki kuvvetlerin loglanması
     //ROS_INFO("World frame thrusts -> X: %f, Y: %f, Z: %f", m_thrust_x, m_thrust_y, m_thrust_z);
@@ -177,4 +180,10 @@ void MidLevelController::desiredAccelerationCallback(const geometry_msgs::Vector
 
 void MidLevelController::desiredPsiCallback(const std_msgs::Float64::ConstPtr& msg) {
     m_des_psi = msg->data;
+}
+
+void MidLevelController::disturbanceCallback(const geometry_msgs::Vector3::ConstPtr& msg) {
+    m_disturbance_x = msg->x;
+    m_disturbance_y = msg->y;
+    m_disturbance_z = msg->z;
 }

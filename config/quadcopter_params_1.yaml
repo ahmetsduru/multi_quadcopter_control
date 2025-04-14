@@ -16,7 +16,7 @@ mid_level_controller:
   integral_max: 0.5
 
   min_thrust: 0.0
-  max_thrust: 7.848
+  max_thrust: 15.848
 
   dt: 0.05            # Time step for 20 Hz
   

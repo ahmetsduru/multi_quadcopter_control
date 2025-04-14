@@ -29,6 +29,7 @@ private:
     ros::Subscriber m_current_velocity_sub;
     ros::Subscriber m_desired_acceleration_sub;
     ros::Subscriber m_desired_psi_sub;
+    ros::Subscriber m_disturbance_sub;
 
     ros::Publisher m_desired_thrust_pub;
     ros::Publisher m_desired_angles_pub;
@@ -41,6 +42,7 @@ private:
     double m_current_velocity_x, m_current_velocity_y, m_current_velocity_z;
     double m_current_phi, m_current_theta, m_current_psi;
     double m_desired_acceleration_x, m_desired_acceleration_y, m_desired_acceleration_z;
+    double m_disturbance_x, m_disturbance_y, m_disturbance_z;
     
     // PID gains and parameters
     double m_kp_thrust_x, m_ki_thrust_x, m_kd_thrust_x;
@@ -79,6 +81,7 @@ private:
     void currentVelocityCallback(const geometry_msgs::Vector3::ConstPtr& msg);
     void desiredAccelerationCallback(const geometry_msgs::Vector3::ConstPtr& msg);
     void desiredPsiCallback(const std_msgs::Float64::ConstPtr& msg);
+    void disturbanceCallback(const geometry_msgs::Vector3::ConstPtr& msg);
 };
 
 #endif // MID_LEVEL_CONTROLLER_H

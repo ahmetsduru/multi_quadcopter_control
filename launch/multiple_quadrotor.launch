@@ -14,6 +14,7 @@
         <param name="initial_x" value="0.0"/>
         <param name="initial_y" value="0.0"/>
         <param name="initial_z" value="0.0"/>
+        <param name="k_diagonal" value="[0.04, 0.04, 0.1]" />
         <node name="waypoint_server" pkg="multi_quadcopter_control" type="multi_waypoint_server_node" output="screen" launch-prefix="nice -n -5"/>
         <node name="trajectory_generator" pkg="multi_quadcopter_control" type="multi_trajectory_generator_node" output="screen" launch-prefix="nice -n -5"/>
         <node name="mid_level_cont" pkg="multi_quadcopter_control" type="multi_mid_level_cont_node" output="screen" launch-prefix="nice -n -5"/>
@@ -30,6 +31,7 @@
         <param name="initial_x" value="1.0"/>
         <param name="initial_y" value="0.0"/>
         <param name="initial_z" value="0.0"/>
+        <param name="k_diagonal" value="[0.04, 0.04, 0.1]" />
         <node name="waypoint_server" pkg="multi_quadcopter_control" type="multi_waypoint_server_node" output="screen" launch-prefix="nice -n -5"/>
         <node name="trajectory_generator" pkg="multi_quadcopter_control" type="multi_trajectory_generator_node" output="screen" launch-prefix="nice -n -5"/>
         <node name="mid_level_cont" pkg="multi_quadcopter_control" type="multi_mid_level_cont_node" output="screen" launch-prefix="nice -n -5"/>
@@ -46,6 +48,7 @@
         <param name="initial_x" value="-1.0"/>
         <param name="initial_y" value="0.0"/>
         <param name="initial_z" value="0.0"/>
+        <param name="k_diagonal" value="[0.04, 0.04, 0.1]" />
         <node name="waypoint_server" pkg="multi_quadcopter_control" type="multi_waypoint_server_node" output="screen" launch-prefix="nice -n -5"/>
         <node name="trajectory_generator" pkg="multi_quadcopter_control" type="multi_trajectory_generator_node" output="screen" launch-prefix="nice -n -5"/>
         <node name="mid_level_cont" pkg="multi_quadcopter_control" type="multi_mid_level_cont_node" output="screen" launch-prefix="nice -n -5"/>
@@ -59,9 +62,10 @@
     <group ns="drone4">
         <rosparam file="$(find multi_quadcopter_control)/config/trajectory_manager_drone1.yaml" command="load"/>
         <rosparam file="$(find multi_quadcopter_control)/config/quadcopter_params_2.yaml" command="load"/>
-        <param name="initial_x" value="-1.0"/>
+        <param name="initial_x" value="1.0"/>
         <param name="initial_y" value="1.0"/>
-        <param name="initial_z" value="0.0"/>
+        <param name="initial_z" value="-0.25"/>
+        <param name="k_diagonal" value="[0.04, 0.04, 0.1]" />
         <node name="waypoint_server" pkg="multi_quadcopter_control" type="multi_waypoint_server_node" output="screen" launch-prefix="nice -n -5"/>
         <node name="trajectory_generator" pkg="multi_quadcopter_control" type="multi_trajectory_generator_node" output="screen" launch-prefix="nice -n -5"/>
         <node name="mid_level_cont" pkg="multi_quadcopter_control" type="multi_mid_level_cont_node" output="screen" launch-prefix="nice -n -5"/>
@@ -78,6 +82,7 @@
         <param name="initial_x" value="1.0"/>
         <param name="initial_y" value="1.0"/>
         <param name="initial_z" value="0.0"/>
+        <param name="k_diagonal" value="[0.04, 0.04, 0.1]" />
         <node name="waypoint_server" pkg="multi_quadcopter_control" type="multi_waypoint_server_node" output="screen" launch-prefix="nice -n -5"/>
         <node name="trajectory_generator" pkg="multi_quadcopter_control" type="multi_trajectory_generator_node" output="screen" launch-prefix="nice -n -5"/>
         <node name="mid_level_cont" pkg="multi_quadcopter_control" type="multi_mid_level_cont_node" output="screen" launch-prefix="nice -n -5"/>
@@ -94,6 +99,7 @@
         <param name="initial_x" value="0.0"/>
         <param name="initial_y" value="1.0"/>
         <param name="initial_z" value="0.0"/>
+        <param name="k_diagonal" value="[0.04, 0.04, 0.1]" />
         <node name="waypoint_server" pkg="multi_quadcopter_control" type="multi_waypoint_server_node" output="screen" launch-prefix="nice -n -5"/>
         <node name="trajectory_generator" pkg="multi_quadcopter_control" type="multi_trajectory_generator_node" output="screen" launch-prefix="nice -n -5"/>
         <node name="mid_level_cont" pkg="multi_quadcopter_control" type="multi_mid_level_cont_node" output="screen" launch-prefix="nice -n -5"/>
