@@ -9,7 +9,11 @@
 
 class DroneDisturbanceManager {
 public:
-    DroneDisturbanceManager() : rate_(500.0), topic_check_interval_(1.0), drone_count_logged_(false), k_(0.1), n_(2.0) {
+    DroneDisturbanceManager() : rate_(500.0), topic_check_interval_(1.0), drone_count_logged_(false), n_(2.0) {
+        k_matrix_ << 0.04, 0.0, 0.0,
+                     0.0, 0.04, 0.0,
+                     0.0, 0.0, 0.1;
+
         for (int i = 1; i <= 10; ++i) {
             std::string drone_name = "drone" + std::to_string(i);
             std::string ns = "/" + drone_name + "/";
@@ -41,7 +45,8 @@ private:
     ros::Time last_topic_check_;
     ros::Duration topic_check_interval_;
     bool drone_count_logged_;
-    double k_, n_;
+    double n_;
+    Eigen::Matrix3d k_matrix_;
 
     std::map<std::string, geometry_msgs::Vector3> drone_positions_;
     std::map<std::string, ros::Subscriber> subscribers_;
@@ -158,14 +163,17 @@ private:
                 if (angle_deg <= 40.0) {
                     double distance = computeDistance(drone_positions_[bottom_drone], drone_positions_[top_drone]);
                     geometry_msgs::Vector3 r_ij = unitVector(drone_positions_[bottom_drone], drone_positions_[top_drone]);
-                    double force_magnitude = (-k_ * std::cos(angle_rad)) / std::pow(distance, n_);
+                    Eigen::Vector3d r_ij_vec(r_ij.x, r_ij.y, r_ij.z);
 
-                    ROS_INFO("Force magnitude for %s due to %s: %.4f", bottom_drone.c_str(), top_drone.c_str(), force_magnitude);
+                    Eigen::Vector3d force_vec = (-std::cos(angle_rad) / std::pow(distance, n_)) * k_matrix_ * r_ij_vec;
+
+                    ROS_INFO("Force magnitude for %s due to %s: [%.4f, %.4f, %.4f]", 
+                             bottom_drone.c_str(), top_drone.c_str(), force_vec(0), force_vec(1), force_vec(2));
 
                     geometry_msgs::Vector3 force;
-                    force.x = 0.4 * force_magnitude * r_ij.x;
-                    force.y = 0.4 * force_magnitude * r_ij.y;
-                    force.z = force_magnitude * r_ij.z;
+                    force.x = force_vec(0);
+                    force.y = force_vec(1);
+                    force.z = force_vec(2);
 
                     disturbances[bottom_drone] = force;
                 }
@@ -181,7 +189,7 @@ private:
 };
 
 int main(int argc, char** argv) {
-    ros::init(argc, argv, "dynamic_drone_position_listener");
+    ros::init(argc, argv, "relative_disturbance_generator");
     DroneDisturbanceManager manager;
     manager.run();
     return 0;
