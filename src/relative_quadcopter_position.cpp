@@ -145,9 +145,9 @@ private:
     }
 
     void computeAndPublishDisturbances() {
-        std::map<std::string, geometry_msgs::Vector3> disturbances;
+        std::map<std::string, Eigen::Vector3d> disturbance_accumulator;
         for (const auto& pair : drone_positions_) {
-            disturbances[pair.first] = geometry_msgs::Vector3();
+            disturbance_accumulator[pair.first] = Eigen::Vector3d::Zero();
         }
 
         for (const auto& drone1 : drone_positions_) {
@@ -160,29 +160,24 @@ private:
                 double angle_rad = computeVectorAngleWorldFrame(drone_positions_[bottom_drone], drone_positions_[top_drone]);
                 double angle_deg = angle_rad * 180.0 / M_PI;
 
-                if (angle_deg <= 40.0) {
+                if (angle_deg <= 50.0) {
                     double distance = computeDistance(drone_positions_[bottom_drone], drone_positions_[top_drone]);
                     geometry_msgs::Vector3 r_ij = unitVector(drone_positions_[bottom_drone], drone_positions_[top_drone]);
                     Eigen::Vector3d r_ij_vec(r_ij.x, r_ij.y, r_ij.z);
 
                     Eigen::Vector3d force_vec = (-std::cos(angle_rad) / std::pow(distance, n_)) * k_matrix_ * r_ij_vec;
-
-                    ROS_INFO("Force magnitude for %s due to %s: [%.4f, %.4f, %.4f]", 
-                             bottom_drone.c_str(), top_drone.c_str(), force_vec(0), force_vec(1), force_vec(2));
-
-                    geometry_msgs::Vector3 force;
-                    force.x = force_vec(0);
-                    force.y = force_vec(1);
-                    force.z = force_vec(2);
-
-                    disturbances[bottom_drone] = force;
+                    disturbance_accumulator[bottom_drone] += force_vec;
                 }
             }
         }
 
-        for (const auto& pair : disturbances) {
+        for (const auto& pair : disturbance_accumulator) {
+            geometry_msgs::Vector3 force;
+            force.x = pair.second(0);
+            force.y = pair.second(1);
+            force.z = pair.second(2);
             if (disturbance_publishers_.find(pair.first) != disturbance_publishers_.end()) {
-                disturbance_publishers_[pair.first].publish(pair.second);
+                disturbance_publishers_[pair.first].publish(force);
             }
         }
     }
