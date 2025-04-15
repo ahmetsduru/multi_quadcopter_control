@@ -29,7 +29,7 @@
         <rosparam file="$(find multi_quadcopter_control)/config/quadcopter_params_2.yaml" command="load"/>
         <param name="initial_x" value="1.2"/>
         <param name="initial_y" value="1.0"/>
-        <param name="initial_z" value="0.0"/>
+        <param name="initial_z" value="0.3"/>
         <node name="waypoint_server" pkg="multi_quadcopter_control" type="multi_waypoint_server_node" output="screen" launch-prefix="nice -n -5"/>
         <node name="trajectory_generator" pkg="multi_quadcopter_control" type="multi_trajectory_generator_node" output="screen" launch-prefix="nice -n -5"/>
         <node name="mid_level_cont" pkg="multi_quadcopter_control" type="multi_mid_level_cont_node" output="screen" launch-prefix="nice -n -5"/>
