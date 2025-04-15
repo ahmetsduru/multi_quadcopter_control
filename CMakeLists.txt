@@ -94,9 +94,9 @@ add_dependencies(multi_eom ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED
 add_executable(multi_rviz_data_handler src/rviz_data_handler.cpp)
 target_link_libraries(multi_rviz_data_handler ${catkin_LIBRARIES})
 
-add_executable(relative_quadcopter_position src/relative_quadcopter_position.cpp)
-target_link_libraries(relative_quadcopter_position ${catkin_LIBRARIES} ${Boost_LIBRARIES})
-add_dependencies(relative_quadcopter_position ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_executable(relative_disturbance_generator src/relative_disturbance_generator.cpp)
+target_link_libraries(relative_disturbance_generator ${catkin_LIBRARIES} ${Boost_LIBRARIES})
+add_dependencies(relative_disturbance_generator ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 #############
 ## Install ##
@@ -109,7 +109,7 @@ install(TARGETS
   multi_low_level_cont_node
   multi_eom
   multi_rviz_data_handler
-  relative_quadcopter_position
+  relative_disturbance_generator
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

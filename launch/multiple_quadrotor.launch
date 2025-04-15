@@ -105,5 +105,5 @@
 
     <!-- Rviz and data node -->
     <node name="rviz" pkg="rviz" type="rviz" args="-d $(find multi_quadcopter_control)/rviz/quad_rviz.rviz" output="screen"/>
-    <node name="relative_quadcopter_position" pkg="multi_quadcopter_control" type="relative_quadcopter_position" output="screen" launch-prefix="nice -n -5"/>
+    <node name="relative_disturbance_generator" pkg="multi_quadcopter_control" type="relative_disturbance_generator" output="screen" launch-prefix="nice -n -5"/>
 </launch>
