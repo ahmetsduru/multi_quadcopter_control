@@ -106,4 +106,6 @@
     <!-- Rviz and data node -->
     <node name="rviz" pkg="rviz" type="rviz" args="-d $(find multi_quadcopter_control)/rviz/quad_rviz.rviz" output="screen"/>
     <node name="relative_disturbance_generator" pkg="multi_quadcopter_control" type="relative_disturbance_generator" output="screen" launch-prefix="nice -n -5"/>
+    <param name="num_drones" value="6" />
+    <node name="data_logger" pkg="multi_quadcopter_control" type="multi_data_logger" output="screen" launch-prefix="nice -n -5"/>
 </launch>

@@ -33,6 +33,7 @@ find_package(catkin REQUIRED COMPONENTS
   tf2_geometry_msgs
   geometry_msgs
   message_filters
+  roslib
 )
 
 add_service_files(
@@ -98,6 +99,10 @@ add_executable(relative_disturbance_generator src/relative_disturbance_generator
 target_link_libraries(relative_disturbance_generator ${catkin_LIBRARIES} ${Boost_LIBRARIES})
 add_dependencies(relative_disturbance_generator ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
+add_executable(multi_data_logger src/data_logger.cpp)
+target_link_libraries(multi_data_logger ${catkin_LIBRARIES} ${Boost_LIBRARIES})
+add_dependencies(multi_data_logger ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+
 #############
 ## Install ##
 #############
@@ -110,6 +115,7 @@ install(TARGETS
   multi_eom
   multi_rviz_data_handler
   relative_disturbance_generator
+  multi_data_logger
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
