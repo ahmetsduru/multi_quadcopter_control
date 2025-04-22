@@ -32,63 +32,82 @@ for i = 1:num_drones
     fx = data{:, "dist_f.x"};  fy = data{:, "dist_f.y"};  fz = data{:, "dist_f.z"};
     thrust = data{:, "r_thr"};
 
+    tx = data{:, "r_torq.x"};  ty = data{:, "r_torq.y"};  tz = data{:, "r_torq.z"};
+
     % === POZISYON ===
     fig = figure;
-    sgtitle(sprintf('Drone %d - Position vs Time', i));
-    subplot(3,1,1); plot(time, x, 'b', time, xr, 'k:', 'LineWidth', 1.5); ylabel('X (m)'); grid on;
+    sgtitle(sprintf('Drone %d - Position vs Time', i), 'Interpreter','latex');
+    subplot(3,1,1); plot(time, x, 'b', time, xr, 'k:', 'LineWidth', 1.5); ylabel('$X$ (m)', 'Interpreter','latex'); grid on;
     legend('Actual','Reference','Location','northeast','FontSize',4,'Box','off');
-    subplot(3,1,2); plot(time, y, 'r', time, yr, 'k:', 'LineWidth', 1.5); ylabel('Y (m)'); grid on;
+    subplot(3,1,2); plot(time, y, 'r', time, yr, 'k:', 'LineWidth', 1.5); ylabel('$Y$ (m)', 'Interpreter','latex'); grid on;
     legend('Actual','Reference','Location','northeast','FontSize',4,'Box','off');
-    subplot(3,1,3); plot(time, z, 'g', time, zr, 'k:', 'LineWidth', 1.5); ylabel('Z (m)'); xlabel('Time (s)'); grid on;
+    subplot(3,1,3); plot(time, z, 'g', time, zr, 'k:', 'LineWidth', 1.5); ylabel('$Z$ (m)', 'Interpreter','latex'); xlabel('$t$ (s)', 'Interpreter','latex'); grid on;
     legend('Actual','Reference','Location','northeast','FontSize',4,'Box','off');
-    exportgraphics(fig, output_pdf, 'Append', true); close(fig);
+    %exportgraphics(fig, sprintf('drone%d_position.eps', i), 'ContentType', 'vector');
+    %exportgraphics(fig, output_pdf, 'Append', true); close(fig);
+
+    % === 3D Position Error Plot ===
+    pos_error = sqrt((x - xr).^2 + (y - yr).^2 + (z - zr).^2);
+    fig = figure;
+    sgtitle(sprintf('Drone %d - 3D Position Error vs Time', i), 'Interpreter','latex');
+    plot(time, pos_error, 'r', 'LineWidth', 1.5);
+    xlabel('$t$ (s)', 'Interpreter','latex');
+    ylabel('$e_{pos}$ (m)', 'Interpreter','latex');
+    grid on;
+    %exportgraphics(fig, sprintf('drone%d_pos_error.eps', i), 'ContentType', 'vector');
+    %exportgraphics(fig, output_pdf, 'Append', true); close(fig);
 
     % === HIZ ===
     fig = figure;
-    sgtitle(sprintf('Drone %d - Velocity vs Time', i));
-    subplot(3,1,1); plot(time, vx, 'b', time, vxr, 'k:', 'LineWidth', 1.5); ylabel('X (m/s)'); grid on;
+    sgtitle(sprintf('Drone %d - Velocity vs Time', i), 'Interpreter','latex');
+    subplot(3,1,1); plot(time, vx, 'b', time, vxr, 'k:', 'LineWidth', 1.5); ylabel('$X$ (m/s)', 'Interpreter','latex'); grid on;
     legend('Actual','Reference','Location','northeast','FontSize',4,'Box','off');
-    subplot(3,1,2); plot(time, vy, 'r', time, vyr, 'k:', 'LineWidth', 1.5); ylabel('Y (m/s)'); grid on;
+    subplot(3,1,2); plot(time, vy, 'r', time, vyr, 'k:', 'LineWidth', 1.5); ylabel('$Y$ (m/s)', 'Interpreter','latex'); grid on;
     legend('Actual','Reference','Location','northeast','FontSize',4,'Box','off');
-    subplot(3,1,3); plot(time, vz, 'g', time, vzr, 'k:', 'LineWidth', 1.5); ylabel('Z (m/s)'); xlabel('Time (s)'); grid on;
+    subplot(3,1,3); plot(time, vz, 'g', time, vzr, 'k:', 'LineWidth', 1.5); ylabel('$Z$ (m/s)', 'Interpreter','latex'); xlabel('$t$ (s)', 'Interpreter','latex'); grid on;
     legend('Actual','Reference','Location','northeast','FontSize',4,'Box','off');
-    exportgraphics(fig, output_pdf, 'Append', true); close(fig);
+    %exportgraphics(fig, sprintf('drone%d_velocity.eps', i), 'ContentType', 'vector');
+    %exportgraphics(fig, output_pdf, 'Append', true); close(fig);
 
     % === IVME ===
     fig = figure;
-    sgtitle(sprintf('Drone %d - Acceleration vs Time', i));
-    subplot(3,1,1); plot(time, ax, 'b', time, axr, 'k:', 'LineWidth', 1.5); ylabel('X (m/s^2)'); grid on;
+    sgtitle(sprintf('Drone %d - Acceleration vs Time', i), 'Interpreter','latex');
+    subplot(3,1,1); plot(time, ax, 'b', time, axr, 'k:', 'LineWidth', 1.5); ylabel('$X$ (m/s$^2$)', 'Interpreter','latex'); grid on;
     legend('Actual','Reference','Location','northeast','FontSize',4,'Box','off');
-    subplot(3,1,2); plot(time, ay, 'r', time, ayr, 'k:', 'LineWidth', 1.5); ylabel('Y (m/s^2)'); grid on;
+    subplot(3,1,2); plot(time, ay, 'r', time, ayr, 'k:', 'LineWidth', 1.5); ylabel('$Y$ (m/s$^2$)', 'Interpreter','latex'); grid on;
     legend('Actual','Reference','Location','northeast','FontSize',4,'Box','off');
-    subplot(3,1,3); plot(time, az, 'g', time, azr, 'k:', 'LineWidth', 1.5); ylabel('Z (m/s^2)'); xlabel('Time (s)'); grid on;
+    subplot(3,1,3); plot(time, az, 'g', time, azr, 'k:', 'LineWidth', 1.5); ylabel('$Z$ (m/s$^2$)', 'Interpreter','latex'); xlabel('$t$ (s)', 'Interpreter','latex'); grid on;
     legend('Actual','Reference','Location','northeast','FontSize',4,'Box','off');
-    exportgraphics(fig, output_pdf, 'Append', true); close(fig);
-
-    % === THRUST ===
-    fig = figure;
-    sgtitle(sprintf('Drone %d - Thrust vs Time', i));
-    plot(time, thrust, 'm', 'LineWidth', 1.5); grid on;
-    xlabel('Time (s)'); ylabel('Thrust (N)');
-    legend('Reference','Location','northeast','FontSize',4,'Box','off');
-    exportgraphics(fig, output_pdf, 'Append', true); close(fig);
-
-    % === DISTURBANCE FORCE ===
-    fig = figure;
-    sgtitle(sprintf('Drone %d - Disturbance Force vs Time', i));
-    subplot(3,1,1); plot(time, fx, 'c', 'LineWidth', 1.5); ylabel('Fx (N)'); grid on;
-    subplot(3,1,2); plot(time, fy, 'm', 'LineWidth', 1.5); ylabel('Fy (N)'); grid on;
-    subplot(3,1,3); plot(time, fz, 'y', 'LineWidth', 1.5); ylabel('Fz (N)'); xlabel('Time (s)'); grid on;
-    exportgraphics(fig, output_pdf, 'Append', true); close(fig);
+    %exportgraphics(fig, sprintf('drone%d_acceleration.eps', i), 'ContentType', 'vector');
+    %exportgraphics(fig, output_pdf, 'Append', true); close(fig);
 
     % === EULER AÇILARI ===
     fig = figure;
-    sgtitle(sprintf('Drone %d - Euler Angles vs Time', i));
-    subplot(3,1,1); plot(time, roll_a, 'b', time, roll_r, 'k:', 'LineWidth', 1.5); ylabel('Roll (rad)'); grid on;
+    sgtitle(sprintf('Drone %d - Euler Angles vs Time', i), 'Interpreter','latex');
+    subplot(3,1,1); plot(time, roll_a, 'b', time, roll_r, 'k:', 'LineWidth', 1.5); ylabel('$\phi$ (rad)', 'Interpreter','latex'); grid on;
     legend('Actual','Reference','Location','northeast','FontSize',4,'Box','off');
-    subplot(3,1,2); plot(time, pitch_a, 'r', time, pitch_r, 'k:', 'LineWidth', 1.5); ylabel('Pitch (rad)'); grid on;
+    subplot(3,1,2); plot(time, pitch_a, 'r', time, pitch_r, 'k:', 'LineWidth', 1.5); ylabel('$\theta$ (rad)', 'Interpreter','latex'); grid on;
     legend('Actual','Reference','Location','northeast','FontSize',4,'Box','off');
-    subplot(3,1,3); plot(time, yaw_a, 'g', time, yaw_r, 'k:', 'LineWidth', 1.5); ylabel('Yaw (rad)'); xlabel('Time (s)'); grid on;
+    subplot(3,1,3); plot(time, yaw_a, 'g', time, yaw_r, 'k:', 'LineWidth', 1.5); ylabel('$\psi$ (rad)', 'Interpreter','latex'); xlabel('$t$ (s)', 'Interpreter','latex'); grid on;
     legend('Actual','Reference','Location','northeast','FontSize',4,'Box','off');
-    exportgraphics(fig, output_pdf, 'Append', true); close(fig);
+    %exportgraphics(fig, sprintf('drone%d_euler.eps', i), 'ContentType', 'vector');
+    %exportgraphics(fig, output_pdf, 'Append', true); close(fig);
+
+    % === THRUST ===
+    fig = figure;
+    sgtitle(sprintf('Drone %d - Thrust vs Time', i), 'Interpreter','latex');
+    plot(time, thrust, 'm', 'LineWidth', 1.5); grid on;
+    xlabel('$t$ (s)', 'Interpreter','latex'); ylabel('$T$ (N)', 'Interpreter','latex');
+    legend('Reference','Location','northeast','FontSize',4,'Box','off');
+    %exportgraphics(fig, sprintf('drone%d_thrust.eps', i), 'ContentType', 'vector');
+    %exportgraphics(fig, output_pdf, 'Append', true); close(fig);
+
+    % === DISTURBANCE FORCE ===
+    fig = figure;
+    sgtitle(sprintf('Drone %d - Disturbance Force vs Time', i), 'Interpreter','latex');
+    subplot(3,1,1); plot(time, fx, 'c', 'LineWidth', 1.5); ylabel('$F_x$ (N)', 'Interpreter','latex'); grid on;
+    subplot(3,1,2); plot(time, fy, 'm', 'LineWidth', 1.5); ylabel('$F_y$ (N)', 'Interpreter','latex'); grid on;
+    subplot(3,1,3); plot(time, fz, 'y', 'LineWidth', 1.5); ylabel('$F_z$ (N)', 'Interpreter','latex'); xlabel('$t$ (s)', 'Interpreter','latex'); grid on;
+    %exportgraphics(fig, sprintf('drone%d_disturbance.eps', i), 'ContentType', 'vector');
+    %exportgraphics(fig, output_pdf, 'Append', true); close(fig);
 end
