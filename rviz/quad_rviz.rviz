@@ -7,7 +7,6 @@ Panels:
         - /Global Options1
         - /Axes5
         - /Axes6
-        - /Axes7
       Splitter Ratio: 0.5
     Tree Height: 746
   - Class: rviz/Selection
@@ -339,27 +338,6 @@ Visualization Manager:
       Value: true
       Visual Enabled: true
     - Alpha: 1
-      Class: rviz/RobotModel
-      Collision Enabled: true
-      Enabled: true
-      Links:
-        All Links Enabled: true
-        Expand Joint Details: false
-        Expand Link Details: false
-        Expand Tree: false
-        Link Tree Style: Links in Alphabetic Order
-        base_link:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-      Name: RobotModel
-      Robot Description: /drone6/robot_description
-      TF Prefix: drone6
-      Update Interval: 0
-      Value: true
-      Visual Enabled: true
-    - Alpha: 1
       Class: rviz/Axes
       Enabled: true
       Length: 0.5
@@ -375,15 +353,6 @@ Visualization Manager:
       Name: Axes
       Radius: 0.029999999329447746
       Reference Frame: drone5/base_link
-      Show Trail: false
-      Value: true
-    - Alpha: 1
-      Class: rviz/Axes
-      Enabled: true
-      Length: 0.5
-      Name: Axes
-      Radius: 0.029999999329447746
-      Reference Frame: drone6/base_link
       Show Trail: false
       Value: true
   Enabled: true
@@ -414,7 +383,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 10
+      Distance: 14.049280166625977
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -422,17 +391,17 @@ Visualization Manager:
         Value: false
       Field of View: 0.7853981852531433
       Focal Point:
-        X: 0
-        Y: 0
-        Z: 0
+        X: -0.6605632305145264
+        Y: 1.3487712144851685
+        Z: -0.5505912899971008
       Focal Shape Fixed Size: false
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.37539851665496826
+      Pitch: 0.515398383140564
       Target Frame: drone1/base_link
-      Yaw: 0.60039883852005
+      Yaw: 0.6903987526893616
     Saved: ~
 Window Geometry:
   Displays:

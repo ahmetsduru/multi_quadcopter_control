@@ -1,74 +1,94 @@
 clear all;
 clc;
 
-% Parameters
+%% Parameters
 n = 2.0;
 k_matrix = diag([0.04, 0.04, 0.1]);  % Disturbance force gain matrix (diagonal)
 
-% Create meshgrid for distance and angle
-distances = linspace(0.2, 1, 40);          
+%% Create meshgrid for distance and gamma (angle)
+distances_positive = linspace(0.2, 1, 40);    
+distances_negative = linspace(-1, -0.2, 40);  
+distances = [distances_negative, distances_positive];  % Merge negative and positive distances
+
 angles_deg = linspace(-90, 90, 40);        
 [D, A] = meshgrid(distances, angles_deg);   
-A_rad = deg2rad(A);                         
+A_rad = deg2rad(A);
 
-% Initialize force magnitude matrix
+%% Initialize force magnitude matrix
 force_magnitude = zeros(size(D));
 
-% Compute force magnitude at each point in the grid
+%% Compute force magnitude at each point
 for i = 1:size(D, 1)
     for j = 1:size(D, 2)
         d = D(i, j);                  
-        theta = A_rad(i, j);          
+        gamma = A_rad(i, j);           % GAMMA in radians
 
         % Direction vector in the yz-plane (unit vector)
-        unit_rij = [0; sin(theta); cos(theta)];
+        unit_rij = [0; sin(gamma); cos(gamma)];
 
         % Disturbance force calculation
-        force_vec = (-cos(theta) / d^n) * k_matrix * unit_rij;
-        force_magnitude(i, j) = norm(force_vec);  
+        if abs(d) >= 0.2
+            force_vec = (-cos(gamma) / d^n) * k_matrix * unit_rij;
+            force_magnitude(i, j) = norm(force_vec);
+        else
+            force_magnitude(i, j) = NaN;  % Collision region (assign NaN for clarity)
+        end
     end
 end
 
-% Enhanced 3D surface plot
+%% Enhanced 3D surface plot
 figure;
 s = surf(D, A, force_magnitude);  
-s.EdgeColor = 'k';                % Black grid lines
-s.LineStyle = '-';                % Solid lines
-s.LineWidth = 0.05;                % Thin grid lines
-s.FaceAlpha = 0.8;               % Almost opaque
-s.FaceLighting = 'gouraud';       % Smooth lighting
+s.EdgeColor = 'k';                
+s.LineStyle = '-';                
+s.LineWidth = 0.05;                
+s.FaceAlpha = 0.8;               
+s.FaceLighting = 'gouraud';       
 s.AmbientStrength = 0.3;
+shading faceted;
+hold on;
 
-xlabel('$\mathrm{Distance~(m)}$', 'FontSize', 12, 'FontWeight', 'bold', 'Interpreter', 'latex');
-ylabel('$\mathrm{Angle~(^{\circ})}$', 'FontSize', 12, 'FontWeight', 'bold', 'Interpreter', 'latex');
-zlabel('$\|\vec{F}\|~\mathrm{(N)}$', 'FontSize', 12, 'FontWeight', 'bold', 'Interpreter', 'latex');
-title('$\mathrm{Force~vs.~Distance~and~Angle}$', 'FontSize', 13, 'FontWeight', 'bold', 'Interpreter', 'latex');
+% Highlight Collision Region (-0.2m < d < 0.2m)
+collision_x = [-0.2, 0.2, 0.2, -0.2];
+collision_y = [-90, -90, 90, 90];
+collision_z_top = ones(1,4) * max(force_magnitude(:), [], 'omitnan') * 1.1;
+collision_z_bottom = zeros(1,4);
+
+fill3(collision_x, collision_y, collision_z_top, 'r', 'FaceAlpha', 0.15, 'EdgeColor', 'none');
+fill3(collision_x, collision_y, collision_z_bottom, 'r', 'FaceAlpha', 0.15, 'EdgeColor', 'none');
+
+% Label the collision zone
+text(0, 0, max(force_magnitude(:), [], 'omitnan')*1.15, ...
+    '\textbf{Collision Region}', 'HorizontalAlignment', 'center', ...
+    'Interpreter', 'latex', 'FontSize', 14, 'FontWeight', 'bold', 'Color', 'r');
+
+%% Labels and Titles
+xlabel('$d_{bt}~(m)$', 'FontSize', 14, 'FontWeight', 'bold', 'Interpreter', 'latex');
+ylabel('$\gamma~(^{\circ})$', 'FontSize', 14, 'FontWeight', 'bold', 'Interpreter', 'latex');
+zlabel('$\|\textbf{f}_{dist}\|~\mathrm{(N)}$', 'FontSize', 14, 'FontWeight', 'bold', 'Interpreter', 'latex');
 
 cbar = colorbar;
 cbar.TickLabelInterpreter = 'latex';
 cbar.Label.Interpreter = 'latex';
-cbar.Label.FontSize = 12;
+cbar.Label.FontSize = 14;
 cbar.Label.FontWeight = 'bold';
 
-% Custom pastel + vivid colormap with clearer contrast
+%% Colormap
 better_contrast_map = [
-    0.4  0.6  1.00;   % canlı mavi (daha koyu)
-    0.6  0.85 0.6;    % açık yeşil (maviyle kontrast)
-    0.95 0.95 0.4;    % limon sarısı
-    1.00 0.6  0.2;    % turuncu
-    1.00 0.4  0.6     % pembe-menekşe (canlı ama pastel)
+    0.4  0.6  1.00;   
+    0.6  0.85 0.6;    
+    0.95 0.95 0.4;    
+    1.00 0.6  0.2;    
+    1.00 0.4  0.6     
 ];
-
-% Interpolate to smooth 256-color map
 contrast_colormap = interp1(linspace(0,1,size(better_contrast_map,1)), better_contrast_map, linspace(0,1,256));
-
-% Apply it in your plot
 colormap(contrast_colormap);
 
-
 grid on;
-shading faceted;
-
-view(45, 30);          
+view(30, 20);          
 material shiny;
-%exportgraphics(gcf, 'force_surface_plot.eps', 'ContentType', 'vector');
+
+%% Optional: Save the figure
+% exportgraphics(gcf, 'force_surface_plot_with_collision.eps', 'ContentType', 'vector');
+
+hold off;

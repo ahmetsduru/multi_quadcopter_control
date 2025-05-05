@@ -1,16 +1,13 @@
 <launch>
     <rosparam file="$(find multi_quadcopter_control)/config/trajectory_crescent.yaml" command="load"/>
-    <rosparam file="$(find multi_quadcopter_control)/config/trajectory_random.yaml" command="load"/>
-    <rosparam file="$(find multi_quadcopter_control)/config/trajectory_random_2.yaml" command="load"/>
-    <rosparam file="$(find multi_quadcopter_control)/config/trajectory_random_3.yaml" command="load"/>
-    <rosparam file="$(find multi_quadcopter_control)/config/trajectory_random_4.yaml" command="load"/>
+    <rosparam file="$(find multi_quadcopter_control)/config/all_trajectories.yaml" command="load"/>
     <rosparam file="$(find multi_quadcopter_control)/config/trajectory_hover.yaml" command="load"/>
     <rosparam file="$(find multi_quadcopter_control)/config/trajectory_pid_tuning.yaml" command="load"/>
 
     <!-- Drone 1 -->
     <group ns="drone1">
         <rosparam file="$(find multi_quadcopter_control)/config/trajectory_manager_drone1.yaml" command="load"/>
-        <rosparam file="$(find multi_quadcopter_control)/config/quadcopter_params_1.yaml" command="load"/>
+        <rosparam file="$(find multi_quadcopter_control)/config/quadcopter_params_2.yaml" command="load"/>
         <param name="initial_x" value="0.0"/>
         <param name="initial_y" value="0.0"/>
         <param name="initial_z" value="0.0"/>
@@ -25,11 +22,11 @@
 
     <!-- Drone 2 -->
     <group ns="drone2">
-        <rosparam file="$(find multi_quadcopter_control)/config/trajectory_manager_drone1.yaml" command="load"/>
+        <rosparam file="$(find multi_quadcopter_control)/config/trajectory_manager_drone2.yaml" command="load"/>
         <rosparam file="$(find multi_quadcopter_control)/config/quadcopter_params_2.yaml" command="load"/>
-        <param name="initial_x" value="1.2"/>
-        <param name="initial_y" value="1.0"/>
-        <param name="initial_z" value="0.3"/>
+        <param name="initial_x" value="-2.0"/>
+        <param name="initial_y" value="2.0"/>
+        <param name="initial_z" value="0.0"/>
         <node name="waypoint_server" pkg="multi_quadcopter_control" type="multi_waypoint_server_node" output="screen" launch-prefix="nice -n -5"/>
         <node name="trajectory_generator" pkg="multi_quadcopter_control" type="multi_trajectory_generator_node" output="screen" launch-prefix="nice -n -5"/>
         <node name="mid_level_cont" pkg="multi_quadcopter_control" type="multi_mid_level_cont_node" output="screen" launch-prefix="nice -n -5"/>
@@ -41,10 +38,10 @@
 
     <!-- Drone 3 -->
     <group ns="drone3">
-        <rosparam file="$(find multi_quadcopter_control)/config/trajectory_manager_drone1.yaml" command="load"/>
+        <rosparam file="$(find multi_quadcopter_control)/config/trajectory_manager_drone3.yaml" command="load"/>
         <rosparam file="$(find multi_quadcopter_control)/config/quadcopter_params_2.yaml" command="load"/>
-        <param name="initial_x" value="-1.0"/>
-        <param name="initial_y" value="0.0"/>
+        <param name="initial_x" value="2.0"/>
+        <param name="initial_y" value="2.0"/>
         <param name="initial_z" value="0.0"/>
         <node name="waypoint_server" pkg="multi_quadcopter_control" type="multi_waypoint_server_node" output="screen" launch-prefix="nice -n -5"/>
         <node name="trajectory_generator" pkg="multi_quadcopter_control" type="multi_trajectory_generator_node" output="screen" launch-prefix="nice -n -5"/>
@@ -57,11 +54,11 @@
 
     <!-- Drone 4 -->
     <group ns="drone4">
-        <rosparam file="$(find multi_quadcopter_control)/config/trajectory_manager_drone1.yaml" command="load"/>
+        <rosparam file="$(find multi_quadcopter_control)/config/trajectory_manager_drone4.yaml" command="load"/>
         <rosparam file="$(find multi_quadcopter_control)/config/quadcopter_params_2.yaml" command="load"/>
-        <param name="initial_x" value="1.0"/>
-        <param name="initial_y" value="1.0"/>
-        <param name="initial_z" value="-0.25"/>
+        <param name="initial_x" value="4.0"/>
+        <param name="initial_y" value="4.0"/>
+        <param name="initial_z" value="0.0"/>
         <node name="waypoint_server" pkg="multi_quadcopter_control" type="multi_waypoint_server_node" output="screen" launch-prefix="nice -n -5"/>
         <node name="trajectory_generator" pkg="multi_quadcopter_control" type="multi_trajectory_generator_node" output="screen" launch-prefix="nice -n -5"/>
         <node name="mid_level_cont" pkg="multi_quadcopter_control" type="multi_mid_level_cont_node" output="screen" launch-prefix="nice -n -5"/>
@@ -73,10 +70,10 @@
 
     <!-- Drone 5 -->
     <group ns="drone5">
-        <rosparam file="$(find multi_quadcopter_control)/config/trajectory_manager_drone1.yaml" command="load"/>
+        <rosparam file="$(find multi_quadcopter_control)/config/trajectory_manager_drone5.yaml" command="load"/>
         <rosparam file="$(find multi_quadcopter_control)/config/quadcopter_params_2.yaml" command="load"/>
-        <param name="initial_x" value="0.8"/>
-        <param name="initial_y" value="1.0"/>
+        <param name="initial_x" value="-4.0"/>
+        <param name="initial_y" value="4.0"/>
         <param name="initial_z" value="0.0"/>
         <node name="waypoint_server" pkg="multi_quadcopter_control" type="multi_waypoint_server_node" output="screen" launch-prefix="nice -n -5"/>
         <node name="trajectory_generator" pkg="multi_quadcopter_control" type="multi_trajectory_generator_node" output="screen" launch-prefix="nice -n -5"/>
@@ -86,26 +83,10 @@
         <node name="rviz_data_handler" pkg="multi_quadcopter_control" type="multi_rviz_data_handler" output="screen" launch-prefix="nice -n -5"/>
         <param name="robot_description" command="$(find xacro)/xacro $(find multi_quadcopter_control)/urdf/quad_model_v1.urdf" />
     </group>
-
-    <!-- Drone 6 -->
-    <group ns="drone6">
-        <rosparam file="$(find multi_quadcopter_control)/config/trajectory_manager_drone4.yaml" command="load"/>
-        <rosparam file="$(find multi_quadcopter_control)/config/quadcopter_params_1.yaml" command="load"/>
-        <param name="initial_x" value="0.0"/>
-        <param name="initial_y" value="1.0"/>
-        <param name="initial_z" value="0.0"/>
-        <node name="waypoint_server" pkg="multi_quadcopter_control" type="multi_waypoint_server_node" output="screen" launch-prefix="nice -n -5"/>
-        <node name="trajectory_generator" pkg="multi_quadcopter_control" type="multi_trajectory_generator_node" output="screen" launch-prefix="nice -n -5"/>
-        <node name="mid_level_cont" pkg="multi_quadcopter_control" type="multi_mid_level_cont_node" output="screen" launch-prefix="nice -n -5"/>
-        <node name="low_level_cont" pkg="multi_quadcopter_control" type="multi_low_level_cont_node" output="screen" launch-prefix="nice -n -5"/>
-        <node name="eom" pkg="multi_quadcopter_control" type="multi_eom" output="screen" launch-prefix="nice -n -5"/>
-        <node name="rviz_data_handler" pkg="multi_quadcopter_control" type="multi_rviz_data_handler" output="screen" launch-prefix="nice -n -5"/>
-        <param name="robot_description" command="$(find xacro)/xacro $(find multi_quadcopter_control)/urdf/quad_model_v1.urdf" />
-    </group>
-
+    
     <!-- Rviz and data node -->
     <node name="rviz" pkg="rviz" type="rviz" args="-d $(find multi_quadcopter_control)/rviz/quad_rviz.rviz" output="screen"/>
     <node name="relative_disturbance_generator" pkg="multi_quadcopter_control" type="relative_disturbance_generator" output="screen" launch-prefix="nice -n -5"/>
-    <param name="num_drones" value="6" />
+    <param name="num_drones" value="5" />
     <node name="data_logger" pkg="multi_quadcopter_control" type="multi_data_logger" output="screen" launch-prefix="nice -n -5"/>
 </launch>

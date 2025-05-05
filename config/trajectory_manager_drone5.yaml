@@ -2,8 +2,8 @@ trajectory_manager:
   is_psi_active: true
   active_trajectories: [
     "trajectory_random", 
-    "trajectory_random_2", 
-    "trajectory_random_3_3"
+    "trajectory_random_2_5", 
+    "trajectory_random_3_5"
   ]  
   available_trajectory:
     - name: "trajectory_random"

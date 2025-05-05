@@ -1,7 +1,0 @@
-trajectory_random_4:
-  points_x: [0.0, 3.0, 3.0, 6.0, 9.0, 14.0]
-  points_y: [0.0, 1.0, 5.0, 5.0, 9.0, 11.0]
-  points_z: [0.0, 4.35, 4.35, 4.35, 4.35, 9.45]
-  times: [0.0, 10.0, 12.0, 16.0, 20.0, 24.0]
-  ros_rate: 20.0
-  method: "minimum_jerk"  # "cubic_spline", "natural_cubic_spline", "minimum_jerk", "minimum_snap"

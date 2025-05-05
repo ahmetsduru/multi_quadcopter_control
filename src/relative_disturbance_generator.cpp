@@ -160,13 +160,18 @@ private:
                 double angle_rad = computeVectorAngleWorldFrame(drone_positions_[bottom_drone], drone_positions_[top_drone]);
                 double angle_deg = angle_rad * 180.0 / M_PI;
 
-                if (angle_deg <= 50.0) {
-                    double distance = computeDistance(drone_positions_[bottom_drone], drone_positions_[top_drone]);
-                    geometry_msgs::Vector3 r_ij = unitVector(drone_positions_[bottom_drone], drone_positions_[top_drone]);
-                    Eigen::Vector3d r_ij_vec(r_ij.x, r_ij.y, r_ij.z);
+                double distance = computeDistance(drone_positions_[bottom_drone], drone_positions_[top_drone]);
 
-                    Eigen::Vector3d force_vec = (-std::cos(angle_rad) / std::pow(distance, n_)) * k_matrix_ * r_ij_vec;
-                    disturbance_accumulator[bottom_drone] += force_vec;
+                if (angle_deg <= 60.0) {
+                    if (distance >= 0.2) {
+                        geometry_msgs::Vector3 r_ij = unitVector(drone_positions_[bottom_drone], drone_positions_[top_drone]);
+                        Eigen::Vector3d r_ij_vec(r_ij.x, r_ij.y, r_ij.z);
+
+                        Eigen::Vector3d force_vec = (-std::cos(angle_rad) / std::pow(distance, n_)) * k_matrix_ * r_ij_vec;
+                        disturbance_accumulator[bottom_drone] += force_vec;
+                    } else {
+                        ROS_WARN("Collision Warning: %s and %s are too close (distance = %.3f m)", bottom_drone.c_str(), top_drone.c_str(), distance);
+                    }
                 }
             }
         }

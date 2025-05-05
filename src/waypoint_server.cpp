@@ -54,17 +54,18 @@ bool WaypointServer::getTrajectoryCallback(multi_quadcopter_control::WaypointSer
     return true;
 }
 
-// Function to load a trajectory from the parameter server
-void WaypointServer::loadTrajectory(ros::NodeHandle& nh, const std::string& trajectory_namespace) {
+void WaypointServer::loadTrajectory(ros::NodeHandle& nh, const std::string& trajectory_name) {
     TrajectoryData traj;
-    nh.getParam("/" + trajectory_namespace + "/points_x", traj.m_points_x);
-    nh.getParam("/" + trajectory_namespace + "/points_y", traj.m_points_y);
-    nh.getParam("/" + trajectory_namespace + "/points_z", traj.m_points_z);
-    nh.getParam("/" + trajectory_namespace + "/times", traj.m_times);
-    nh.getParam("/" + trajectory_namespace + "/ros_rate", traj.m_ros_rate);
-    nh.getParam("/" + trajectory_namespace + "/method", traj.m_method);
+    std::string base_path = "/trajectories/" + trajectory_name;
+
+    nh.getParam(base_path + "/points_x", traj.m_points_x);
+    nh.getParam(base_path + "/points_y", traj.m_points_y);
+    nh.getParam(base_path + "/points_z", traj.m_points_z);
+    nh.getParam(base_path + "/times", traj.m_times);
+    nh.getParam(base_path + "/ros_rate", traj.m_ros_rate);
+    nh.getParam(base_path + "/method", traj.m_method);
 
     m_trajectories.push_back(traj);
-
-    ROS_INFO("Loaded trajectory: %s", trajectory_namespace.c_str());
+    ROS_INFO("Loaded trajectory: %s", trajectory_name.c_str());
 }
+

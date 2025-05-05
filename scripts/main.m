@@ -9,7 +9,7 @@ end
 for i = 1:num_drones
     filename = fullfile(log_dir, sprintf('drone%d_log.txt', i));
     if ~isfile(filename)
-        warning('Dosya bulunamadı: %s', filename);
+        warning('File not found: %s', filename);
         continue;
     end
 
@@ -44,7 +44,7 @@ for i = 1:num_drones
     subplot(3,1,3); plot(time, z, 'g', time, zr, 'k:', 'LineWidth', 1.5); ylabel('$Z$ (m)', 'Interpreter','latex'); xlabel('$t$ (s)', 'Interpreter','latex'); grid on;
     legend('Actual','Reference','Location','northeast','FontSize',4,'Box','off');
     %exportgraphics(fig, sprintf('drone%d_position.eps', i), 'ContentType', 'vector');
-    %exportgraphics(fig, output_pdf, 'Append', true); close(fig);
+    exportgraphics(fig, output_pdf, 'Append', true); close(fig);
 
     % === 3D Position Error Plot ===
     pos_error = sqrt((x - xr).^2 + (y - yr).^2 + (z - zr).^2);
@@ -55,7 +55,7 @@ for i = 1:num_drones
     ylabel('$e_{pos}$ (m)', 'Interpreter','latex');
     grid on;
     %exportgraphics(fig, sprintf('drone%d_pos_error.eps', i), 'ContentType', 'vector');
-    %exportgraphics(fig, output_pdf, 'Append', true); close(fig);
+    exportgraphics(fig, output_pdf, 'Append', true); close(fig);
 
     % === HIZ ===
     fig = figure;
@@ -67,7 +67,7 @@ for i = 1:num_drones
     subplot(3,1,3); plot(time, vz, 'g', time, vzr, 'k:', 'LineWidth', 1.5); ylabel('$Z$ (m/s)', 'Interpreter','latex'); xlabel('$t$ (s)', 'Interpreter','latex'); grid on;
     legend('Actual','Reference','Location','northeast','FontSize',4,'Box','off');
     %exportgraphics(fig, sprintf('drone%d_velocity.eps', i), 'ContentType', 'vector');
-    %exportgraphics(fig, output_pdf, 'Append', true); close(fig);
+    exportgraphics(fig, output_pdf, 'Append', true); close(fig);
 
     % === IVME ===
     fig = figure;
@@ -79,7 +79,7 @@ for i = 1:num_drones
     subplot(3,1,3); plot(time, az, 'g', time, azr, 'k:', 'LineWidth', 1.5); ylabel('$Z$ (m/s$^2$)', 'Interpreter','latex'); xlabel('$t$ (s)', 'Interpreter','latex'); grid on;
     legend('Actual','Reference','Location','northeast','FontSize',4,'Box','off');
     %exportgraphics(fig, sprintf('drone%d_acceleration.eps', i), 'ContentType', 'vector');
-    %exportgraphics(fig, output_pdf, 'Append', true); close(fig);
+    exportgraphics(fig, output_pdf, 'Append', true); close(fig);
 
     % === EULER AÇILARI ===
     fig = figure;
@@ -91,7 +91,7 @@ for i = 1:num_drones
     subplot(3,1,3); plot(time, yaw_a, 'g', time, yaw_r, 'k:', 'LineWidth', 1.5); ylabel('$\psi$ (rad)', 'Interpreter','latex'); xlabel('$t$ (s)', 'Interpreter','latex'); grid on;
     legend('Actual','Reference','Location','northeast','FontSize',4,'Box','off');
     %exportgraphics(fig, sprintf('drone%d_euler.eps', i), 'ContentType', 'vector');
-    %exportgraphics(fig, output_pdf, 'Append', true); close(fig);
+    exportgraphics(fig, output_pdf, 'Append', true); close(fig);
 
     % === THRUST ===
     fig = figure;
@@ -100,7 +100,7 @@ for i = 1:num_drones
     xlabel('$t$ (s)', 'Interpreter','latex'); ylabel('$T$ (N)', 'Interpreter','latex');
     legend('Reference','Location','northeast','FontSize',4,'Box','off');
     %exportgraphics(fig, sprintf('drone%d_thrust.eps', i), 'ContentType', 'vector');
-    %exportgraphics(fig, output_pdf, 'Append', true); close(fig);
+    exportgraphics(fig, output_pdf, 'Append', true); close(fig);
 
     % === DISTURBANCE FORCE ===
     fig = figure;
@@ -109,5 +109,5 @@ for i = 1:num_drones
     subplot(3,1,2); plot(time, fy, 'm', 'LineWidth', 1.5); ylabel('$F_y$ (N)', 'Interpreter','latex'); grid on;
     subplot(3,1,3); plot(time, fz, 'y', 'LineWidth', 1.5); ylabel('$F_z$ (N)', 'Interpreter','latex'); xlabel('$t$ (s)', 'Interpreter','latex'); grid on;
     %exportgraphics(fig, sprintf('drone%d_disturbance.eps', i), 'ContentType', 'vector');
-    %exportgraphics(fig, output_pdf, 'Append', true); close(fig);
+    exportgraphics(fig, output_pdf, 'Append', true); close(fig);
 end
