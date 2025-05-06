@@ -401,7 +401,7 @@ void TrajectoryGenerator::solveCubicSpline() {
         m_acceleration_pub.publish(m_acceleration);
         
         // 3. segmente ulaşıldığında yeni waypoint seti iste
-        if (i == 5 && getTrajectoryFromServer()) {
+        if (i == 6 && getTrajectoryFromServer()) {
             ROS_INFO("New waypoint set received. The trajectory will be generated again.");
             generateTrajectory();  // Yeni verilerle yörüngeyi yeniden başlat
             return;
@@ -656,7 +656,7 @@ void TrajectoryGenerator::solveMinimumJerk() {
         m_acceleration_pub.publish(m_acceleration);
 
         // 3. segmente ulaşıldığında yeni waypoint seti iste
-        if (i == 5 && getTrajectoryFromServer()) {
+        if (i == 6 && getTrajectoryFromServer()) {
             ROS_INFO("New waypoint set received. The trajectory will be generated again.");
             generateTrajectory();  // Yeni verilerle yörüngeyi yeniden başlat
             return;
@@ -975,7 +975,7 @@ void TrajectoryGenerator::solveMinimumSnap() {
         m_jerk.z = jerk_z;
 
         // 3. segmente ulaşıldığında yeni waypoint seti iste
-        if (i == 5 && getTrajectoryFromServer()) {
+        if (i == 3 && getTrajectoryFromServer()) {
             ROS_INFO("New waypoint set received. The trajectory will be generated again.");
             generateTrajectory();  // Yeni verilerle yörüngeyi yeniden başlat
             return;

@@ -1,12 +1,15 @@
 trajectory_manager:
   is_psi_active: true
   active_trajectories: [
-    "trajectory_random", 
+    "trajectory_random",
+    "trajectory_random_1", 
     "trajectory_random_2_4", 
     "trajectory_random_3_4"
   ]  
   available_trajectory:
     - name: "trajectory_random"
+      file: "all_trajectories.yaml"
+    - name: "trajectory_random_1"
       file: "all_trajectories.yaml"
     - name: "trajectory_random_2"
       file: "all_trajectories.yaml"
