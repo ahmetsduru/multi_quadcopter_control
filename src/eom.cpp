@@ -8,7 +8,7 @@
 
 class Quadcopter {
 public:
-    Quadcopter(ros::NodeHandle& nh) {
+    Quadcopter(ros::NodeHandle& nh) : thrust_received(false) {
         loadParameters(nh);
         initializeSubscribers(nh);
         initializePublishers(nh);
@@ -16,7 +16,12 @@ public:
     }
 
     void update() {
-        updateThrust(thrust, thrust_actual, tau_thrust, dt);
+        if (thrust_received) {
+            updateThrust(thrust, thrust_actual, tau_thrust, dt);
+        } else {
+            thrust_actual = m * 9.81;  // İlk thrust gelene kadar hover thrust uygula
+        }
+
         updateTorques(torques, torques_actual, tau_torque, dt);
 
         Eigen::Vector3d thrust_vec(0, 0, thrust_actual);
@@ -45,6 +50,8 @@ private:
     std::vector<double> x;
     double thrust, thrust_actual;
     Eigen::Vector3d torques;
+    bool thrust_received;
+
     ros::Subscriber thrust_sub, torques_sub, disturbance_sub;
     ros::Publisher pos_pub, euler_pub, velocity_pub, angular_velocity_pub, acceleration_pub;
 
@@ -89,8 +96,8 @@ private:
 
     void initializeState() {
         x = std::vector<double>(18, 0.0);
-        x[3] = x[7] = x[11] = 1.0;
-        thrust_actual = 0.0;
+        x[3] = x[7] = x[11] = 1.0;  // Rotation matrix başlangıcı
+        thrust_actual = m * 9.81;   // Hover thrust
         torques_actual.setZero();
         disturbance_force.setZero();
         t = 0.0;
@@ -137,24 +144,26 @@ private:
     }
 
     void publishState() {
-        publishVec(pos_pub, x[0], x[1], x[2]);
-        publishVec(velocity_pub, x[12], x[13], x[14]);
-        publishVec(angular_velocity_pub, x[15], x[16], x[17]);
+        if(thrust_received){
+            publishVec(pos_pub, x[0], x[1], x[2]);
+            publishVec(velocity_pub, x[12], x[13], x[14]);
+            publishVec(angular_velocity_pub, x[15], x[16], x[17]);
 
-        Eigen::Matrix3d R;
-        R << x[3], x[4], x[5],
-             x[6], x[7], x[8],
-             x[9], x[10], x[11];
-        publishVec(euler_pub,
-            atan2(R(2,1), R(2,2)),
-            -asin(R(2,0)),
-            atan2(R(1,0), R(0,0)));
+            Eigen::Matrix3d R;
+            R << x[3], x[4], x[5],
+                 x[6], x[7], x[8],
+                 x[9], x[10], x[11];
+            publishVec(euler_pub,
+                atan2(R(2,1), R(2,2)),
+                -asin(R(2,0)),
+                atan2(R(1,0), R(0,0)));
 
-        Eigen::Vector3d V(&x[12]);
-        Eigen::Vector3d drag = -0.5 * rho * (Cd_trans * A_trans * V.array().square().matrix());
-        Eigen::Vector3d thrust_vec(0, 0, thrust_actual);
-        Eigen::Vector3d acc = (R * thrust_vec + drag + m * g + disturbance_force) / m;
-        publishVec(acceleration_pub, acc[0], acc[1], acc[2]);
+            Eigen::Vector3d V(&x[12]);
+            Eigen::Vector3d drag = -0.5 * rho * (Cd_trans * A_trans * V.array().square().matrix());
+            Eigen::Vector3d thrust_vec(0, 0, thrust_actual);
+            Eigen::Vector3d acc = (R * thrust_vec + drag + m * g + disturbance_force) / m;
+            publishVec(acceleration_pub, acc[0], acc[1], acc[2]);
+        }
     }
 
     void publishVec(ros::Publisher& pub, double x, double y, double z) {
@@ -163,10 +172,15 @@ private:
         pub.publish(msg);
     }
 
-    void thrustCallback(const std_msgs::Float64::ConstPtr& msg) { thrust = msg->data; }
+    void thrustCallback(const std_msgs::Float64::ConstPtr& msg) {
+        thrust = msg->data;
+        thrust_received = true;
+    }
+
     void torquesCallback(const geometry_msgs::Vector3::ConstPtr& msg) {
         torques = Eigen::Vector3d(msg->x, msg->y, msg->z);
     }
+
     void disturbanceCallback(const geometry_msgs::Vector3::ConstPtr& msg) {
         disturbance_force = Eigen::Vector3d(msg->x, msg->y, msg->z);
     }
@@ -183,6 +197,7 @@ private:
 int main(int argc, char** argv) {
     ros::init(argc, argv, "multi_eom");
     ros::NodeHandle nh;
+
     Quadcopter quad(nh);
     double dt;
     nh.getParam("state_derivative_solver_node/dt", dt);

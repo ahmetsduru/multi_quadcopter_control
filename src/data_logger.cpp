@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <thread>
+#include <iomanip>
 #include <ros/package.h>
 
 struct DroneData {
@@ -20,7 +22,7 @@ struct DroneData {
 class DroneLogger {
 public:
     DroneLogger(const std::string& drone_name)
-        : m_drone_name(drone_name), m_timer_started(false)
+        : m_drone_name(drone_name)
     {
         std::string ns = "/" + m_drone_name + "/";
 
@@ -53,8 +55,11 @@ public:
         m_log_file.open(log_file_path, std::ios::out);
         writeHeader();
 
-        // 500 Hz timer başlat
-        m_timer = m_nh.createTimer(ros::Duration(1.0 / 500.0), &DroneLogger::timerCallback, this);
+        // 0.5 saniyelik gecikmeden sonra timer başlat
+        std::thread([this]() {
+            ros::Duration(0.35).sleep();
+            m_timer = m_nh.createTimer(ros::Duration(1.0 / 500.0), &DroneLogger::timerCallback, this);
+        }).detach();
     }
 
     ~DroneLogger() {
@@ -68,7 +73,6 @@ private:
     std::ofstream m_log_file;
     ros::NodeHandle m_nh;
     ros::Timer m_timer;
-    bool m_timer_started;
     DroneData m_data;
     geometry_msgs::Vector3 m_initial_offset;
     std::vector<ros::Subscriber> m_subscribers;
@@ -88,20 +92,20 @@ private:
         m_log_file << ", r_thr"
                    << ", r_psi"
                    << "\n";
-    }   
+    }
 
     void writeDataRow() {
         double now = ros::Time::now().toSec();
-    
+
         m_log_file << std::fixed << std::setprecision(9) << now;
         m_log_file.unsetf(std::ios::floatfield);
-    
+
         auto writeVec = [&](const geometry_msgs::Vector3& vec) {
             m_log_file << ", " << vec.x
                        << ", " << vec.y
                        << ", " << vec.z;
         };
-    
+
         writeVec(m_data.actual_position);
         writeVec(m_data.actual_velocity);
         writeVec(m_data.actual_acceleration);
@@ -113,14 +117,14 @@ private:
         writeVec(m_data.reference_euler_angles);
         writeVec(m_data.reference_torques);
         writeVec(m_data.disturbance_force);
-    
+
         m_log_file << ", " << m_data.reference_thrust
                    << ", " << m_data.reference_psi
                    << "\n";
-    }     
+    }
 
     void timerCallback(const ros::TimerEvent&) {
-        writeDataRow();  // sadece timer'dan çağrılıyor
+        writeDataRow();
     }
 
     void subscribeVector(const std::string& topic, geometry_msgs::Vector3 DroneData::*field, bool apply_offset = false) {

@@ -109,13 +109,13 @@ fig = figure;
 hold on;
 for i = 1:num_drones
     if ~isempty(thrust_all{i})
-        plot(time_all{i}, thrust_all{i}, 'LineWidth', 1.5, 'Color', colors(i,:), 'DisplayName', sprintf('Drone %d', i));
+        plot(time_all{i}, thrust_all{i}, 'LineWidth', 1.5, 'Color', colors(i,:), 'DisplayName', sprintf('Quadcopter %d', i));
     end
 end
 hold off;
 grid on;
 xlabel('$t$ (s)', 'Interpreter','latex');
-ylabel('$T$ (N)', 'Interpreter','latex');
+ylabel('$\left\|\textbf{f}_{\mathrm{thrust}}\right\|$ (N)', 'Interpreter', 'latex');
 legend('show', 'Location','northeast', 'FontSize', 6, 'Box', 'off');
 sgtitle('All Drones - Thrust vs Time', 'Interpreter','latex');
 exportgraphics(fig, sprintf('drone_thrust.eps'), 'ContentType', 'vector');
@@ -123,7 +123,7 @@ exportgraphics(fig, output_pdf, 'Append', true);
 close(fig);
 
 
-% === TÜM DRONE'LAR - DISTURBANCE FORCES ===
+%% === TÜM DRONE'LAR - DISTURBANCE FORCES ===
 fig = figure;
 sgtitle('All Drones - Disturbance Forces vs Time', 'Interpreter','latex');
 
@@ -135,10 +135,10 @@ for i = 1:num_drones
         data = readtable(filename, 'VariableNamingRule', 'preserve');
         time = data{:, "time"} - data{1, "time"};
         fx = data{:, "dist_f.x"};
-        plot(time, fx, 'LineWidth', 1.2, 'Color', colors(i,:), 'DisplayName', sprintf('Drone %d', i));
+        plot(time, fx, 'LineWidth', 1.2, 'Color', colors(i,:), 'DisplayName', sprintf('Quadcopter %d', i));
     end
 end
-ylabel('$F_x$ (N)', 'Interpreter','latex'); grid on; legend('show','FontSize',6,'Box','off');
+ylabel('$f_{dist,x}$ (N)', 'Interpreter','latex'); grid on; legend('show','FontSize',6,'Box','off');
 
 % Fy
 subplot(3,1,2); hold on;
@@ -148,10 +148,10 @@ for i = 1:num_drones
         data = readtable(filename, 'VariableNamingRule', 'preserve');
         time = data{:, "time"} - data{1, "time"};
         fy = data{:, "dist_f.y"};
-        plot(time, fy, 'LineWidth', 1.2, 'Color', colors(i,:), 'DisplayName', sprintf('Drone %d', i));
+        plot(time, fy, 'LineWidth', 1.2, 'Color', colors(i,:), 'DisplayName', sprintf('Quadcopter %d', i));
     end
 end
-ylabel('$F_y$ (N)', 'Interpreter','latex'); grid on; legend('show','FontSize',6,'Box','off');
+ylabel('$f_{dist,y}$ (N)', 'Interpreter','latex'); grid on; legend('show','FontSize',6,'Box','off');
 
 % Fz
 subplot(3,1,3); hold on;
@@ -161,15 +161,15 @@ for i = 1:num_drones
         data = readtable(filename, 'VariableNamingRule', 'preserve');
         time = data{:, "time"} - data{1, "time"};
         fz = data{:, "dist_f.z"};
-        plot(time, fz, 'LineWidth', 1.2, 'Color', colors(i,:), 'DisplayName', sprintf('Drone %d', i));
+        plot(time, fz, 'LineWidth', 1.2, 'Color', colors(i,:), 'DisplayName', sprintf('Quadcopter %d', i));
     end
 end
-ylabel('$F_z$ (N)', 'Interpreter','latex'); xlabel('$t$ (s)', 'Interpreter','latex'); grid on; legend('show','FontSize',6,'Box','off');
+ylabel('$f_{dist,z}$ (N)', 'Interpreter','latex'); xlabel('$t$ (s)', 'Interpreter','latex'); grid on; legend('show','FontSize',6,'Box','off');
 exportgraphics(fig, sprintf('drone_disturbance.eps'), 'ContentType', 'vector');
 exportgraphics(fig, output_pdf, 'Append', true);
 close(fig);
 
-
+%%
 fig = figure;
 sgtitle('All Drones - Position (Actual vs Reference) vs Time', 'Interpreter','latex');
 
@@ -183,7 +183,7 @@ for i = 1:num_drones
         x = data{:, "a_pos.x"};
         xr = data{:, "r_pos.x"};
         plot(time, x, '-',  'Color', colors(i,:), 'LineWidth', 1.2, ...
-            'DisplayName', sprintf('Drone %d Actual', i));
+            'DisplayName', sprintf('Quadcopter %d', i));
         if i == 1  % sadece bir kez göster
             plot(time, xr, ':k', 'LineWidth', 1.0, 'DisplayName', 'Reference');
         else
@@ -191,7 +191,7 @@ for i = 1:num_drones
         end
     end
 end
-ylabel('$X$ (m)', 'Interpreter','latex'); grid on;
+ylabel('$x$ (m)', 'Interpreter','latex'); grid on;
 legend('show', 'FontSize', 5, 'Location', 'northeast', 'Box', 'off');
 
 % === Y ===
@@ -204,7 +204,7 @@ for i = 1:num_drones
         y = data{:, "a_pos.y"};
         yr = data{:, "r_pos.y"};
         plot(time, y, '-',  'Color', colors(i,:), 'LineWidth', 1.2, ...
-            'DisplayName', sprintf('Drone %d Actual', i));
+            'DisplayName', sprintf('Quadcopter %d', i));
         if i == 1
             plot(time, yr, ':k', 'LineWidth', 1.0, 'DisplayName', 'Reference');
         else
@@ -212,7 +212,7 @@ for i = 1:num_drones
         end
     end
 end
-ylabel('$Y$ (m)', 'Interpreter','latex'); grid on;
+ylabel('$y$ (m)', 'Interpreter','latex'); grid on;
 legend('show', 'FontSize', 5, 'Location', 'northeast', 'Box', 'off');
 
 % === Z ===
@@ -225,7 +225,7 @@ for i = 1:num_drones
         z = data{:, "a_pos.z"};
         zr = data{:, "r_pos.z"};
         plot(time, z, '-',  'Color', colors(i,:), 'LineWidth', 1.2, ...
-            'DisplayName', sprintf('Drone %d Actual', i));
+            'DisplayName', sprintf('Quadcopter %d', i));
         if i == 1
             plot(time, zr, ':k', 'LineWidth', 1.0, 'DisplayName', 'Reference');
         else
@@ -233,87 +233,87 @@ for i = 1:num_drones
         end
     end
 end
-ylabel('$Z$ (m)', 'Interpreter','latex');
+ylabel('$z$ (m)', 'Interpreter','latex');
 xlabel('$t$ (s)', 'Interpreter','latex'); grid on;
 legend('show', 'FontSize', 5, 'Location', 'northeast', 'Box', 'off');
 
 % Export and close
-exportgraphics(fig, sprintf('drone_disturbance.eps'), 'ContentType', 'vector');
-exportgraphics(gcf, output_pdf, 'Append', true);  % fig yerine gcf kullanmak güvenlidir
+exportgraphics(fig, 'drone_pos.eps', 'ContentType', 'vector');
+exportgraphics(gcf, output_pdf, 'Append', true);  
 close(fig);
 
-% === HER DRONE İÇİN 3D KONUM GRAFİĞİ ===
-for i = 1:num_drones
-    filename = fullfile(log_dir, sprintf('drone%d_log.txt', i));
-    if ~isfile(filename)
-        warning('File not found: %s', filename);
-        continue;
-    end
 
-    data = readtable(filename, 'VariableNamingRule', 'preserve');
-    x = data{:, "a_pos.x"};
-    y = data{:, "a_pos.y"};
-    z = data{:, "a_pos.z"};
-    xr = data{:, "r_pos.x"};
-    yr = data{:, "r_pos.y"};
-    zr = data{:, "r_pos.z"};
+%% === HER DRONE İÇİN 3D KONUM GRAFİĞİ ===
+%for i = 1:num_drones
+%    filename = fullfile(log_dir, sprintf('drone%d_log.txt', i));
+%    if ~isfile(filename)
+%        warning('File not found: %s', filename);
+%        continue;
+%    end
+%
+%    data = readtable(filename, 'VariableNamingRule', 'preserve');
+%    x = data{:, "a_pos.x"};
+%    y = data{:, "a_pos.y"};
+%    z = data{:, "a_pos.z"};
+%    xr = data{:, "r_pos.x"};
+%    yr = data{:, "r_pos.y"};
+%    zr = data{:, "r_pos.z"};
+%
+%    fig = figure;
+%    hold on;
+%    grid on;
+%    axis equal;
+%    plot3(x, y, z, '-', 'Color', colors(i,:), 'LineWidth', 1.5, 'DisplayName', 'Actual');
+%    plot3(xr, yr, zr, ':k', 'LineWidth', 1.2, 'DisplayName', 'Reference');
+%    xlabel('$X$ (m)', 'Interpreter','latex');
+%    ylabel('$Y$ (m)', 'Interpreter','latex');
+%    zlabel('$Z$ (m)', 'Interpreter','latex');
+%    title(sprintf('Drone %d - 3D Position', i), 'Interpreter','latex');
+%    legend('show', 'FontSize', 6, 'Box', 'off', 'Location', 'best');
+%    view(45, 25); % açıyı isteğe göre ayarlayabilirsin
+%
+%    %exportgraphics(fig, sprintf('drone%d_3d_position.eps', i), 'ContentType', 'vector');
+%    exportgraphics(gcf, output_pdf, 'Append', true);
+%    close(fig);
+%end
 
-    fig = figure;
-    hold on;
-    grid on;
-    axis equal;
-    plot3(x, y, z, '-', 'Color', colors(i,:), 'LineWidth', 1.5, 'DisplayName', 'Actual');
-    plot3(xr, yr, zr, ':k', 'LineWidth', 1.2, 'DisplayName', 'Reference');
-    xlabel('$X$ (m)', 'Interpreter','latex');
-    ylabel('$Y$ (m)', 'Interpreter','latex');
-    zlabel('$Z$ (m)', 'Interpreter','latex');
-    title(sprintf('Drone %d - 3D Position', i), 'Interpreter','latex');
-    legend('show', 'FontSize', 6, 'Box', 'off', 'Location', 'best');
-    view(45, 25); % açıyı isteğe göre ayarlayabilirsin
+%% === TÜM DRONE'LAR - 3D KONUM (ACTUAL + REFERENCE) ===
+%fig = figure;
+%hold on;
+%grid on;
+%axis equal;
+%
+%for i = 1:num_drones
+%    filename = fullfile(log_dir, sprintf('drone%d_log.txt', i));
+%    if ~isfile(filename)
+%        warning('File not found: %s', filename);
+%        continue;
+%    end
+%
+%    data = readtable(filename, 'VariableNamingRule', 'preserve');
+%    x  = data{:, "a_pos.x"};  y  = data{:, "a_pos.y"};  z  = data{:, "a_pos.z"};
+%    xr = data{:, "r_pos.x"};  yr = data{:, "r_pos.y"};  zr = data{:, "r_pos.z"};
+%
+%    % Gerçek ve referans yolları çiz
+%    plot3(x, y, z, '-', 'Color', colors(i,:), 'LineWidth', 1.5, ...
+%        'DisplayName', sprintf('Drone %d Actual', i));
+%    plot3(xr, yr, zr, ':', 'Color', colors(i,:), 'LineWidth', 1.2, ...
+%        'HandleVisibility', 'off');
+%end
+%
+%xlabel('$X$ (m)', 'Interpreter','latex');
+%ylabel('$Y$ (m)', 'Interpreter','latex');
+%zlabel('$Z$ (m)', 'Interpreter','latex');
+%title('All Drones - 3D Position (Actual Trajectories)', 'Interpreter','latex');
+%legend('show', 'Location','bestoutside', 'FontSize', 6, 'Box','off');
+%view(45, 25);  % Görüntüleme açısı
+%
+%% Kaydet
+%%exportgraphics(fig, 'all_drones_3d_position.eps', 'ContentType', 'vector');
+%exportgraphics(gcf, output_pdf, 'Append', true);
+%close(fig);
 
-    %exportgraphics(fig, sprintf('drone%d_3d_position.eps', i), 'ContentType', 'vector');
-    exportgraphics(fig, output_pdf, 'Append', true);
-    close(fig);
-end
-
-% === TÜM DRONE'LAR - 3D KONUM (ACTUAL + REFERENCE) ===
-fig = figure;
-hold on;
-grid on;
-axis equal;
-
-for i = 1:num_drones
-    filename = fullfile(log_dir, sprintf('drone%d_log.txt', i));
-    if ~isfile(filename)
-        warning('File not found: %s', filename);
-        continue;
-    end
-
-    data = readtable(filename, 'VariableNamingRule', 'preserve');
-    x  = data{:, "a_pos.x"};  y  = data{:, "a_pos.y"};  z  = data{:, "a_pos.z"};
-    xr = data{:, "r_pos.x"};  yr = data{:, "r_pos.y"};  zr = data{:, "r_pos.z"};
-
-    % Gerçek ve referans yolları çiz
-    plot3(x, y, z, '-', 'Color', colors(i,:), 'LineWidth', 1.5, ...
-        'DisplayName', sprintf('Drone %d Actual', i));
-    plot3(xr, yr, zr, ':', 'Color', colors(i,:), 'LineWidth', 1.2, ...
-        'HandleVisibility', 'off');
-end
-
-xlabel('$X$ (m)', 'Interpreter','latex');
-ylabel('$Y$ (m)', 'Interpreter','latex');
-zlabel('$Z$ (m)', 'Interpreter','latex');
-title('All Drones - 3D Position (Actual Trajectories)', 'Interpreter','latex');
-legend('show', 'Location','bestoutside', 'FontSize', 6, 'Box','off');
-view(45, 25);  % Görüntüleme açısı
-
-% Kaydet
-%exportgraphics(fig, 'all_drones_3d_position.eps', 'ContentType', 'vector');
-exportgraphics(fig, output_pdf, 'Append', true);
-close(fig);
-
-%%%%%%%%%%%%%%%%
-% === HER DRONE İÇİN 3D KONUM GRAFİĞİ ===
+%% === HER DRONE İÇİN 3D KONUM GRAFİĞİ ===
 for i = 1:num_drones
     filename = fullfile(log_dir, sprintf('drone%d_log.txt', i));
     if ~isfile(filename)
@@ -363,7 +363,7 @@ for i = 1:num_drones
             px = waypoint_sets{t,1};
             py = waypoint_sets{t,2};
             pz = waypoint_sets{t,3};
-            scatter3(px, py, pz, 60, waypoint_colors(t,:), 'filled', ...
+            scatter3(px, py, pz, 30, waypoint_colors(t,:), 'filled', ...
                      'HandleVisibility', 'off');  % legend'e eklenmez
         end
     end
@@ -376,10 +376,260 @@ for i = 1:num_drones
     view(45, 25);
 
     % === Grafik çıktıları ===
-    if i == 1
+    %if i == 1
         savefig(fig, sprintf('drone%d_3d_position_with_waypoints.fig', i));
-    end
+    %end
 
-    exportgraphics(fig, output_pdf, 'Append', true);
+    exportgraphics(gcf, output_pdf, 'Append', true);
     close(fig);
 end
+
+
+%% === TÜM DRONE'LAR - VELOCITY (Actual vs Reference) ===
+fig = figure;
+sgtitle('All Drones - Velocity (Actual vs Reference) vs Time', 'Interpreter','latex');
+
+% === Vx ===
+subplot(3,1,1); hold on;
+for i = 1:num_drones
+    filename = fullfile(log_dir, sprintf('drone%d_log.txt', i));
+    if isfile(filename)
+        data = readtable(filename, 'VariableNamingRule', 'preserve');
+        time = data{:, "time"} - data{1, "time"};
+        vx = data{:, "a_vel.x"};
+        vxr = data{:, "r_vel.x"};
+        plot(time, vx, '-', 'Color', colors(i,:), 'LineWidth', 1.2, ...
+             'DisplayName', sprintf('Quadcopter %d', i));
+        if i == 1
+            plot(time, vxr, ':k', 'LineWidth', 1.0, 'DisplayName', 'Reference');
+        else
+            plot(time, vxr, ':k', 'LineWidth', 1.0, 'HandleVisibility', 'off');
+        end
+    end
+end
+ylabel('$v_x$ (m/s)', 'Interpreter','latex'); grid on;
+legend('show', 'FontSize', 5, 'Location', 'northeast', 'Box', 'off');
+
+% === Vy ===
+subplot(3,1,2); hold on;
+for i = 1:num_drones
+    filename = fullfile(log_dir, sprintf('drone%d_log.txt', i));
+    if isfile(filename)
+        data = readtable(filename, 'VariableNamingRule', 'preserve');
+        time = data{:, "time"} - data{1, "time"};
+        vy = data{:, "a_vel.y"};
+        vyr = data{:, "r_vel.y"};
+        plot(time, vy, '-', 'Color', colors(i,:), 'LineWidth', 1.2, ...
+             'DisplayName', sprintf('Quadcopter %d', i));
+        if i == 1
+            plot(time, vyr, ':k', 'LineWidth', 1.0, 'DisplayName', 'Reference');
+        else
+            plot(time, vyr, ':k', 'LineWidth', 1.0, 'HandleVisibility', 'off');
+        end
+    end
+end
+ylabel('$v_y$ (m/s)', 'Interpreter','latex'); grid on;
+legend('show', 'FontSize', 5, 'Location', 'northeast', 'Box', 'off');
+
+% === Vz ===
+subplot(3,1,3); hold on;
+for i = 1:num_drones
+    filename = fullfile(log_dir, sprintf('drone%d_log.txt', i));
+    if isfile(filename)
+        data = readtable(filename, 'VariableNamingRule', 'preserve');
+        time = data{:, "time"} - data{1, "time"};
+        vz = data{:, "a_vel.z"};
+        vzr = data{:, "r_vel.z"};
+        plot(time, vz, '-', 'Color', colors(i,:), 'LineWidth', 1.2, ...
+             'DisplayName', sprintf('Quadcopter %d', i));
+        if i == 1
+            plot(time, vzr, ':k', 'LineWidth', 1.0, 'DisplayName', 'Reference');
+        else
+            plot(time, vzr, ':k', 'LineWidth', 1.0, 'HandleVisibility', 'off');
+        end
+    end
+end
+ylabel('$v_z$ (m/s)', 'Interpreter','latex'); xlabel('$t$ (s)', 'Interpreter','latex'); grid on;
+legend('show', 'FontSize', 5, 'Location', 'northeast', 'Box', 'off');
+
+% === Grafik çıktısı ===
+exportgraphics(fig, 'all_drones_velocity.eps', 'ContentType', 'vector');
+exportgraphics(fig, output_pdf, 'Append', true);
+close(fig);
+
+
+%% === TÜM DRONE'LAR - ACCELERATION (Actual vs Reference) ===
+fig = figure;
+sgtitle('All Drones - Acceleration (Actual vs Reference) vs Time', 'Interpreter','latex');
+
+% === ax ===
+subplot(3,1,1); hold on;
+for i = 1:num_drones
+    filename = fullfile(log_dir, sprintf('drone%d_log.txt', i));
+    if isfile(filename)
+        data = readtable(filename, 'VariableNamingRule', 'preserve');
+        time = data{:, "time"} - data{1, "time"};
+        ax = data{:, "a_acc.x"};
+        axr = data{:, "r_acc.x"};
+        plot(time, ax, '-', 'Color', colors(i,:), 'LineWidth', 1.2, ...
+             'DisplayName', sprintf('Quadcopter %d', i));
+        if i == 1
+            plot(time, axr, ':k', 'LineWidth', 1.0, 'DisplayName', 'Reference');
+        else
+            plot(time, axr, ':k', 'LineWidth', 1.0, 'HandleVisibility', 'off');
+        end
+    end
+end
+ylabel('$a_x$ (m/s$^2$)', 'Interpreter','latex'); grid on;
+legend('show', 'FontSize', 5, 'Location', 'northeast', 'Box', 'off');
+
+% === ay ===
+subplot(3,1,2); hold on;
+for i = 1:num_drones
+    filename = fullfile(log_dir, sprintf('drone%d_log.txt', i));
+    if isfile(filename)
+        data = readtable(filename, 'VariableNamingRule', 'preserve');
+        time = data{:, "time"} - data{1, "time"};
+        ay = data{:, "a_acc.y"};
+        ayr = data{:, "r_acc.y"};
+        plot(time, ay, '-', 'Color', colors(i,:), 'LineWidth', 1.2, ...
+             'DisplayName', sprintf('Quadcopter %d', i));
+        if i == 1
+            plot(time, ayr, ':k', 'LineWidth', 1.0, 'DisplayName', 'Reference');
+        else
+            plot(time, ayr, ':k', 'LineWidth', 1.0, 'HandleVisibility', 'off');
+        end
+    end
+end
+ylabel('$a_y$ (m/s$^2$)', 'Interpreter','latex'); grid on;
+legend('show', 'FontSize', 5, 'Location', 'northeast', 'Box', 'off');
+
+% === az ===
+subplot(3,1,3); hold on;
+for i = 1:num_drones
+    filename = fullfile(log_dir, sprintf('drone%d_log.txt', i));
+    if isfile(filename)
+        data = readtable(filename, 'VariableNamingRule', 'preserve');
+        time = data{:, "time"} - data{1, "time"};
+        az = data{:, "a_acc.z"};
+        azr = data{:, "r_acc.z"};
+        plot(time, az, '-', 'Color', colors(i,:), 'LineWidth', 1.2, ...
+             'DisplayName', sprintf('Quadcopter %d', i));
+        if i == 1
+            plot(time, azr, ':k', 'LineWidth', 1.0, 'DisplayName', 'Reference');
+        else
+            plot(time, azr, ':k', 'LineWidth', 1.0, 'HandleVisibility', 'off');
+        end
+    end
+end
+ylabel('$a_z$ (m/s$^2$)', 'Interpreter','latex');
+xlabel('$t$ (s)', 'Interpreter','latex'); grid on;
+legend('show', 'FontSize', 5, 'Location', 'northeast', 'Box', 'off');
+
+% === Çıktı ===
+exportgraphics(fig, 'all_drones_acceleration.eps', 'ContentType', 'vector');
+exportgraphics(fig, output_pdf, 'Append', true);
+close(fig);
+
+
+%% === TÜM DRONE'LAR - EULER AÇILARI (Actual vs Reference) ===
+fig = figure;
+sgtitle('All Drones - Euler Angles (Actual vs Reference) vs Time', 'Interpreter','latex');
+
+% === Roll (phi) ===
+subplot(3,1,1); hold on;
+for i = 1:num_drones
+    filename = fullfile(log_dir, sprintf('drone%d_log.txt', i));
+    if isfile(filename)
+        data = readtable(filename, 'VariableNamingRule', 'preserve');
+        time = data{:, "time"} - data{1, "time"};
+        roll_a = data{:, "a_eul_ang.x"};
+        roll_r = data{:, "r_eul_ang.x"};
+        plot(time, roll_a, '-', 'Color', colors(i,:), 'LineWidth', 1.2, ...
+             'DisplayName', sprintf('Quadcopter %d', i));
+        if i == 1
+            plot(time, roll_r, ':k', 'LineWidth', 1.0, 'DisplayName', 'Reference');
+        else
+            plot(time, roll_r, ':k', 'LineWidth', 1.0, 'HandleVisibility', 'off');
+        end
+    end
+end
+ylabel('$\phi$ (rad)', 'Interpreter','latex'); grid on;
+legend('show', 'FontSize', 5, 'Location', 'northeast', 'Box', 'off');
+
+% === Pitch (theta) ===
+subplot(3,1,2); hold on;
+for i = 1:num_drones
+    filename = fullfile(log_dir, sprintf('drone%d_log.txt', i));
+    if isfile(filename)
+        data = readtable(filename, 'VariableNamingRule', 'preserve');
+        time = data{:, "time"} - data{1, "time"};
+        pitch_a = data{:, "a_eul_ang.y"};
+        pitch_r = data{:, "r_eul_ang.y"};
+        plot(time, pitch_a, '-', 'Color', colors(i,:), 'LineWidth', 1.2, ...
+             'DisplayName', sprintf('Quadcopter %d', i));
+        if i == 1
+            plot(time, pitch_r, ':k', 'LineWidth', 1.0, 'DisplayName', 'Reference');
+        else
+            plot(time, pitch_r, ':k', 'LineWidth', 1.0, 'HandleVisibility', 'off');
+        end
+    end
+end
+ylabel('$\theta$ (rad)', 'Interpreter','latex'); grid on;
+legend('show', 'FontSize', 5, 'Location', 'northeast', 'Box', 'off');
+
+% === Yaw (psi) ===
+subplot(3,1,3); hold on;
+for i = 1:num_drones
+    filename = fullfile(log_dir, sprintf('drone%d_log.txt', i));
+    if isfile(filename)
+        data = readtable(filename, 'VariableNamingRule', 'preserve');
+        time = data{:, "time"} - data{1, "time"};
+        yaw_a = data{:, "a_eul_ang.z"};
+        yaw_r = data{:, "r_eul_ang.z"};
+        plot(time, yaw_a, '-', 'Color', colors(i,:), 'LineWidth', 1.2, ...
+             'DisplayName', sprintf('Quadcopter %d', i));
+        if i == 1
+            plot(time, yaw_r, ':k', 'LineWidth', 1.0, 'DisplayName', 'Reference');
+        else
+            plot(time, yaw_r, ':k', 'LineWidth', 1.0, 'HandleVisibility', 'off');
+        end
+    end
+end
+ylabel('$\psi$ (rad)', 'Interpreter','latex');
+xlabel('$t$ (s)', 'Interpreter','latex'); grid on;
+legend('show', 'FontSize', 5, 'Location', 'northeast', 'Box', 'off');
+
+exportgraphics(fig, 'all_drones_euler.eps', 'ContentType', 'vector');
+exportgraphics(fig, output_pdf, 'Append', true);
+close(fig);
+
+
+%% === TÜM DRONE'LAR - 3D POZİSYON HATASI ===
+fig = figure;
+hold on;
+sgtitle('All Drones - 3D Position Error vs Time', 'Interpreter','latex');
+
+for i = 1:num_drones
+    filename = fullfile(log_dir, sprintf('drone%d_log.txt', i));
+    if isfile(filename)
+        data = readtable(filename, 'VariableNamingRule', 'preserve');
+        time = data{:, "time"} - data{1, "time"};
+        x = data{:, "a_pos.x"};  y = data{:, "a_pos.y"};  z = data{:, "a_pos.z"};
+        xr = data{:, "r_pos.x"}; yr = data{:, "r_pos.y"}; zr = data{:, "r_pos.z"};
+        pos_error = sqrt((x - xr).^2 + (y - yr).^2 + (z - zr).^2);
+        plot(time, pos_error, 'LineWidth', 1.5, 'Color', colors(i,:), ...
+            'DisplayName', sprintf('Quadcopter %d', i));
+    end
+end
+
+xlabel('$t$ (s)', 'Interpreter','latex');
+ylabel('$\left\|\textbf{e}_{p}\right\|$ (m)', 'Interpreter', 'latex');
+legend('show', 'Location', 'northeast', 'FontSize', 6, 'Box','off');
+grid on;
+
+
+% Grafik çıktısı
+exportgraphics(fig, 'all_drones_position_error.eps', 'ContentType', 'vector');
+exportgraphics(fig, output_pdf, 'Append', true);
+close(fig);
