@@ -401,7 +401,7 @@ void TrajectoryGenerator::solveCubicSpline() {
         m_acceleration_pub.publish(m_acceleration);
         
         // 3. segmente ulaşıldığında yeni waypoint seti iste
-        if (i == 5 && getTrajectoryFromServer()) {
+        if (i == 3 && getTrajectoryFromServer()) {
             ROS_INFO("New waypoint set received. The trajectory will be generated again.");
             generateTrajectory();  // Yeni verilerle yörüngeyi yeniden başlat
             return;
@@ -921,7 +921,7 @@ void TrajectoryGenerator::solveMinimumSnap() {
     bool asd = true;
     // Çözülen katsayıları kullanarak konumları ve psi'yi zaman adımlarıyla yayınla
     ros::Rate loop_rate(m_ros_rate); // Config dosyasından alınan ROS rate
-    for (double t = times_mod[0]; t <= times_mod[n]; t += 0.075) {  // Zaman adımlarıyla ilerle
+    for (double t = times_mod[0]; t <= times_mod[n]; t += 0.05) {  // Zaman adımlarıyla ilerle
         
         // Hangi segmentte olduğumuzu bulalım
         int i = 0;
@@ -975,7 +975,7 @@ void TrajectoryGenerator::solveMinimumSnap() {
         m_jerk.z = jerk_z;
 
         // 3. segmente ulaşıldığında yeni waypoint seti iste
-        if (i == 3 && getTrajectoryFromServer()) {
+        if (i == 5 && getTrajectoryFromServer()) {
             ROS_INFO("New waypoint set received. The trajectory will be generated again.");
             generateTrajectory();  // Yeni verilerle yörüngeyi yeniden başlat
             return;

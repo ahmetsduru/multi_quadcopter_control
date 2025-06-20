@@ -344,7 +344,7 @@ for i = 1:num_drones
             [0.0, 0.5, 2.5, 4.0, 7.0, 8.5, 10.0], ...
             [0.0, 1.5, 2.0, 2.0, 3.0, 2.0, 2.0];
 
-            [-1.0, -4.0, -6.5, -12.0, -10.5, -3.0, -2.0], ...
+            [-1.0, -6.0, -10.0, -7.0, -4.5, -2.8, -2.0], ...
             [3.0, 0.0, -5.2, -6.3, -7.0, -9.5, -10.0], ...
             [2.5, 2.0, 2.2, 2.2, 2.3, 2.4, 2.7];
 
@@ -368,17 +368,18 @@ for i = 1:num_drones
         end
     end
 
-    xlabel('$X$ (m)', 'Interpreter','latex');
-    ylabel('$Y$ (m)', 'Interpreter','latex');
-    zlabel('$Z$ (m)', 'Interpreter','latex');
-    title(sprintf('Drone %d - 3D Position + Waypoints', i), 'Interpreter','latex');
+    xlabel('$x$ (m)', 'Interpreter','latex');
+    ylabel('$y$ (m)', 'Interpreter','latex');
+    zlabel('$z$ (m)', 'Interpreter','latex');
+    title(sprintf('Quadcopter %d - 3D Position + Waypoints', i), 'Interpreter','latex');
     legend('show', 'FontSize', 6, 'Box', 'off', 'Location', 'best');
     view(45, 25);
 
     % === Grafik çıktıları ===
-    %if i == 1
+    if i == 1
+        exportgraphics(fig, 'd1.eps', 'ContentType', 'vector');
         savefig(fig, sprintf('drone%d_3d_position_with_waypoints.fig', i));
-    %end
+    end
 
     exportgraphics(gcf, output_pdf, 'Append', true);
     close(fig);

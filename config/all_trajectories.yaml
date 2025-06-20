@@ -5,15 +5,15 @@ trajectories:
     points_z: [0.0, 1.5, 2.0, 2.0, 3.0, 2.0, 2.0]
     times: [0.0, 4.0, 6.0, 8.0, 10.0, 14.0, 18.0]
     ros_rate: 20.0
-    method: "minimum_snap"
+    method: "cubic_spline"
 
   trajectory_random_1: 
-    points_x: [-1.0, -4.0, -6.5, -12.0, -10.5, -3.0, -2.0]
+    points_x: [-1.0, -6.0, -10.0, -7.0, -4.5, -2.8, -2.0]
     points_y: [3.0, 0.0, -5.2, -6.3, -7.0, -9.5, -10.0]
     points_z: [2.5, 2.0, 2.2, 2.2, 2.3, 2.4, 2.7]
     times: [0.0, 3.0, 6.0, 9.0, 11.0, 13.0, 15.0]
     ros_rate: 20.0
-    method: "minimum_jerk"
+    method: "minimum_snap"
 
   trajectory_random_2:
     points_x: [-2.5, -1.0, 0.0, 0.0, 0.0, 0.0, 1.0]
@@ -21,7 +21,7 @@ trajectories:
     points_z: [2.5, 2.0, 2.0, 2.0, 3.0, 3.0, 3.0]
     times: [0.0, 3.0, 5.0, 7.0, 9.0, 11.5, 13.5]
     ros_rate: 20.0
-    method: "minimum_jerk"
+    method: "minimum_snap"
 
   trajectory_random_2_4:
     points_x: [-4.5, -3.0, -2.0, -2.0, -2.0, -2.0, -1.0]
@@ -29,7 +29,7 @@ trajectories:
     points_z: [2.8, 2.3, 2.3, 2.3, 3.3, 3.3, 3.3]
     times: [0.0, 3.0, 5.0, 7.0, 9.0, 11.5, 13.5]
     ros_rate: 20.0
-    method: "minimum_jerk"
+    method: "minimum_snap"
 
   trajectory_random_2_5:
     points_x: [-0.5, 1.0, 2.0, 2.0, 2.0, 2.0, 3.0]
@@ -37,7 +37,7 @@ trajectories:
     points_z: [2.8, 2.3, 2.3, 2.3, 3.3, 3.3, 3.3]
     times: [0.0, 3.0, 5.0, 7.0, 9.0, 11.5, 13.5]
     ros_rate: 20.0
-    method: "minimum_jerk"
+    method: "minimum_snap"
 
   trajectory_random_3:
     points_x: [1.0, 0.0, 0.0, -1.0, 1.0, 1.0, 0.0]
@@ -45,7 +45,7 @@ trajectories:
     points_z: [2.0, 3.0, 3.0, 3.0, 3.0, 2.5, 0.0]
     times: [0.0, 3.0, 5.0, 7.0, 9.0, 12.0, 15.0]
     ros_rate: 20.0
-    method: "cubic_spline"
+    method: "minimum_jerk"
 
   trajectory_random_3_2:
     points_x: [3.0, 2.0, 2.0, 1.0, 3.0, 3.0, 2.0]
@@ -53,7 +53,7 @@ trajectories:
     points_z: [2.0, 3.0, 3.0, 3.0, 3.0, 2.5, 0.0]
     times: [0.0, 3.0, 5.0, 7.0, 9.0, 12.0, 15.0]
     ros_rate: 20.0
-    method: "cubic_spline"
+    method: "minimum_jerk"
 
   trajectory_random_3_3:
     points_x: [-1.0, -2.0, -2.0, -3.0, -1.0, -1.0, -2.0]
@@ -61,7 +61,7 @@ trajectories:
     points_z: [2.0, 3.0, 3.0, 3.0, 3.0, 2.5, 0.0]
     times: [0.0, 3.0, 5.0, 7.0, 9.0, 12.0, 15.0]
     ros_rate: 20.0
-    method: "cubic_spline"
+    method: "minimum_jerk"
 
   trajectory_random_3_4:
     points_x: [-2.6, -3.6, -3.6, -4.6, -2.6, -2.6, -3.7]
@@ -69,7 +69,7 @@ trajectories:
     points_z: [2.3, 3.3, 3.3, 3.3, 3.3, 2.8, 0.3]
     times: [0.0, 3.0, 5.0, 7.0, 9.0, 12.0, 15.0]
     ros_rate: 20.0
-    method: "cubic_spline"
+    method: "minimum_jerk"
 
   trajectory_random_3_5:
     points_x: [4.6, 3.6, 3.6, 2.6, 4.6, 4.6, 3.7]
@@ -77,4 +77,4 @@ trajectories:
     points_z: [2.3, 3.3, 3.3, 3.3, 3.3, 2.8, 0.3]
     times: [0.0, 3.0, 5.0, 7.0, 9.0, 12.0, 15.0]
     ros_rate: 20.0
-    method: "cubic_spline"
+    method: "minimum_jerk"
