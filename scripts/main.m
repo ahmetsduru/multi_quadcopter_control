@@ -278,40 +278,42 @@ close(fig);
 %end
 
 %% === TÜM DRONE'LAR - 3D KONUM (ACTUAL + REFERENCE) ===
-%fig = figure;
-%hold on;
-%grid on;
-%axis equal;
-%
-%for i = 1:num_drones
-%    filename = fullfile(log_dir, sprintf('drone%d_log.txt', i));
-%    if ~isfile(filename)
-%        warning('File not found: %s', filename);
-%        continue;
-%    end
-%
-%    data = readtable(filename, 'VariableNamingRule', 'preserve');
-%    x  = data{:, "a_pos.x"};  y  = data{:, "a_pos.y"};  z  = data{:, "a_pos.z"};
-%    xr = data{:, "r_pos.x"};  yr = data{:, "r_pos.y"};  zr = data{:, "r_pos.z"};
-%
-%    % Gerçek ve referans yolları çiz
-%    plot3(x, y, z, '-', 'Color', colors(i,:), 'LineWidth', 1.5, ...
-%        'DisplayName', sprintf('Drone %d Actual', i));
-%    plot3(xr, yr, zr, ':', 'Color', colors(i,:), 'LineWidth', 1.2, ...
-%        'HandleVisibility', 'off');
-%end
-%
-%xlabel('$X$ (m)', 'Interpreter','latex');
-%ylabel('$Y$ (m)', 'Interpreter','latex');
-%zlabel('$Z$ (m)', 'Interpreter','latex');
-%title('All Drones - 3D Position (Actual Trajectories)', 'Interpreter','latex');
-%legend('show', 'Location','bestoutside', 'FontSize', 6, 'Box','off');
-%view(45, 25);  % Görüntüleme açısı
-%
-%% Kaydet
-%%exportgraphics(fig, 'all_drones_3d_position.eps', 'ContentType', 'vector');
-%exportgraphics(gcf, output_pdf, 'Append', true);
-%close(fig);
+fig = figure;
+hold on;
+grid on;
+axis equal;
+axis tight;
+zlim([0 5]);
+
+for i = 1:num_drones
+    filename = fullfile(log_dir, sprintf('drone%d_log.txt', i));
+    if ~isfile(filename)
+        warning('File not found: %s', filename);
+        continue;
+    end
+
+    data = readtable(filename, 'VariableNamingRule', 'preserve');
+    x  = data{:, "a_pos.x"};  y  = data{:, "a_pos.y"};  z  = data{:, "a_pos.z"};
+    xr = data{:, "r_pos.x"};  yr = data{:, "r_pos.y"};  zr = data{:, "r_pos.z"};
+
+    % Gerçek ve referans yolları çiz
+    plot3(x, y, z, '-', 'Color', colors(i,:), 'LineWidth', 1.5, ...
+        'DisplayName', sprintf('Quadcopter %d', i));
+    plot3(xr, yr, zr, ':', 'Color', colors(i,:), 'LineWidth', 1.2, ...
+        'HandleVisibility', 'off');
+end
+
+xlabel('$x$ (m)', 'Interpreter','latex');
+ylabel('$y$ (m)', 'Interpreter','latex');
+zlabel('$z$ (m)', 'Interpreter','latex');
+title('All Drones - 3D Position (Actual Trajectories)', 'Interpreter','latex');
+legend('show', 'Location','bestoutside', 'FontSize', 6, 'Box','off');
+view(45, 25);  % Görüntüleme açısı
+
+% Kaydet
+exportgraphics(fig, 'all_drones_3d_position.eps', 'ContentType', 'vector');
+exportgraphics(gcf, output_pdf, 'Append', true);
+close(fig);
 
 %% === HER DRONE İÇİN 3D KONUM GRAFİĞİ ===
 for i = 1:num_drones

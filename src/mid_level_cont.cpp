@@ -62,7 +62,7 @@ MidLevelController::MidLevelController()
     m_desired_velocity_sub = m_nh.subscribe("reference_velocity", 10, &MidLevelController::desiredVelocityCallback, this);
     m_current_velocity_sub = m_nh.subscribe("actual_velocity", 10, &MidLevelController::currentVelocityCallback, this);
     m_desired_psi_sub = m_nh.subscribe("reference_psi", 10, &MidLevelController::desiredPsiCallback, this);
-    m_disturbance_sub = m_nh.subscribe("disturbance_force", 10, &MidLevelController::disturbanceCallback, this);
+    m_disturbance_sub = m_nh.subscribe("disturbance_static", 10, &MidLevelController::disturbanceCallback, this);
 
     m_desired_thrust_pub = m_nh.advertise<std_msgs::Float64>("reference_thrust", 10);
     m_desired_angles_pub = m_nh.advertise<geometry_msgs::Vector3>("reference_euler_angles", 10);
