@@ -11,21 +11,48 @@
 class DroneDisturbanceManager {
 public:
     DroneDisturbanceManager() : rate_(500.0), topic_check_interval_(1.0), drone_count_logged_(false) {
-        // --- 1. Model Parametreleri ---
-        k_matrix_ << 0.01, 0.0, 0.0,
-                     0.0, 0.01, 0.0,
-                     0.0, 0.0, 0.4;
+        
+        // --- 1. Model Parametreleri (Dinamik Hesaplama) ---
+        double m_drone;
+        if (nh_.getParam("/state_derivative_solver_node/mass", m_drone)) {
+            ROS_INFO("Disturbance Manager: Mass loaded from config: %.4f kg", m_drone);
+        } else {
+            m_drone = 0.382; 
+            ROS_WARN("Disturbance Manager: Mass parameter not found, using default: %.4f kg", m_drone);
+        }
 
-        z0_ = 0.2;              // Sanal orijin
-        sigma_ = 0.3;           // Gaussian akış genişliği
-        turb_intensity_ = 0.2;  // Türbülans şiddeti
+        double g = 9.81;
+        double c_coup = 0.045; 
+        double r_lat = 0.005;  
+
+        // Fiziksel Hesaplama
+        double thrust_total = m_drone * g;
+        double thrust_per_rotor = thrust_total / 4.0;
+
+        double k_z = thrust_per_rotor * c_coup; 
+        double k_x = k_z * r_lat;           
+        double k_y = k_z * r_lat;
+
+        k_matrix_ << k_x, 0.0, 0.0,
+                     0.0, k_y, 0.0,
+                     0.0, 0.0, k_z;
+
+        ROS_INFO("Calculated K Matrix -> K_z: %.6f, K_x/y: %.6f", k_z, k_x);
+
+        // --- SABİTLER ---
+        z0_ = 0.1;              
+        sigma_ = 0.15;           
+        turb_intensity_ = 0.2;  
+        
+        // Bu değerden uzaktaki dronelar birbirini etkilemez kabul edilir (Communication Limit).
+        max_effect_radius_ = 1.0; 
 
         // Random Number Generator
         std::random_device rd;
         gen_ = std::mt19937(rd());
-        dist_ = std::uniform_real_distribution<double>(-2.0, 2.0);
+        dist_ = std::uniform_real_distribution<double>(-1.0, 1.0); 
 
-        // Parametrelerden offsetleri al
+        // Offsetleri al
         for (int i = 1; i <= 20; ++i) { 
             std::string drone_name = "drone" + std::to_string(i);
             std::string ns = "/" + drone_name + "/";
@@ -65,6 +92,9 @@ private:
     double z0_;
     double sigma_;
     double turb_intensity_;
+    
+    // [EKLEME 2] Member variable tanımı
+    double max_effect_radius_;
 
     std::mt19937 gen_;
     std::uniform_real_distribution<double> dist_;
@@ -73,9 +103,8 @@ private:
     std::map<std::string, ros::Subscriber> subscribers_;
     std::map<std::string, geometry_msgs::Vector3> drone_initial_offsets_;
     
-    // İki ayrı Publisher haritası tutuyoruz
-    std::map<std::string, ros::Publisher> pub_total_;  // Türbülanslı
-    std::map<std::string, ros::Publisher> pub_static_; // Türbülanssız
+    std::map<std::string, ros::Publisher> pub_total_;  
+    std::map<std::string, ros::Publisher> pub_static_; 
 
     std::vector<std::string> getDronePositionTopics() {
         ros::master::V_TopicInfo master_topics;
@@ -125,15 +154,12 @@ private:
                 if (subscribers_.find(topic) == subscribers_.end()) {
                     subscribers_[topic] = nh_.subscribe<geometry_msgs::Vector3>(
                         topic, 10, boost::bind(&DroneDisturbanceManager::positionCallback, this, _1, topic));
-                    ROS_INFO("Subscribed to topic: %s", topic.c_str());
-
+                    
                     std::string drone_name = extractDroneName(topic);
 
-                    // 1. TOPLAM KUVVET (Türbülanslı)
                     std::string topic_total = "/" + drone_name + "/disturbance_force";
                     pub_total_[drone_name] = nh_.advertise<geometry_msgs::Vector3>(topic_total, 10);
 
-                    // 2. STATİK KUVVET (Türbülanssız)
                     std::string topic_static = "/" + drone_name + "/disturbance_static";
                     pub_static_[drone_name] = nh_.advertise<geometry_msgs::Vector3>(topic_static, 10);
                 }
@@ -150,22 +176,18 @@ private:
     }
 
     void computeAndPublishDisturbances() {
-        // İki ayrı akümülatör oluştur: Biri toplam, biri sadece statik için
         std::map<std::string, Eigen::Vector3d> acc_total;
         std::map<std::string, Eigen::Vector3d> acc_static;
 
-        // Başlangıçta sıfırla
         for (const auto& pair : drone_positions_) {
             acc_total[pair.first] = Eigen::Vector3d::Zero();
             acc_static[pair.first] = Eigen::Vector3d::Zero();
         }
 
-        // Çiftler arası etkileşim
         for (const auto& drone1 : drone_positions_) {
             for (const auto& drone2 : drone_positions_) {
                 if (drone1.first == drone2.first) continue;
 
-                // Kim üstte kim altta belirle
                 std::string top_name, bottom_name;
                 Eigen::Vector3d p_top, p_bottom;
 
@@ -181,7 +203,10 @@ private:
                 Eigen::Vector3d p_bt = p_top - p_bottom;
                 double dist = p_bt.norm();
 
-                if (dist > 0.05) {
+                // dist > 0.05 (Çakışma önleme)
+                // dist < max_effect_radius_ (Ölçeklenebilirlik / Sınırlı İletişim)
+                if (dist > 0.05 && dist < max_effect_radius_) {
+                    
                     Eigen::Vector3d n_vec = p_bt.normalized();
                     double d_z = std::abs(p_bt.z());
                     double d_xy = std::sqrt(std::pow(p_bt.x(), 2) + std::pow(p_bt.y(), 2));
@@ -194,11 +219,11 @@ private:
                     Eigen::Vector3d random_vec(dist_(gen_), dist_(gen_), dist_(gen_));
                     Eigen::Vector3d f_turb = f_static.cwiseAbs().cwiseProduct(random_vec * turb_intensity_);
 
-                    // 1. Toplam Kuvvet Akümülatörü (Static + Turbulence)
-                    acc_total[bottom_name] += (f_static + f_turb);
+                    // 1. Toplam Kuvvet Akümülatörü
+                    acc_total[bottom_name] += (f_static + f_turb) * 4.0;
 
-                    // 2. Statik Kuvvet Akümülatörü (Only Static)
-                    acc_static[bottom_name] += f_static;
+                    // 2. Statik Kuvvet Akümülatörü
+                    acc_static[bottom_name] += f_static * 4.0;
                 }
             }
         }
@@ -207,7 +232,6 @@ private:
         for (const auto& pair : acc_total) {
             std::string d_name = pair.first;
 
-            // --- Publish Total (Main Topic) ---
             geometry_msgs::Vector3 msg_total;
             msg_total.x = pair.second.x();
             msg_total.y = pair.second.y();
@@ -217,7 +241,6 @@ private:
                 pub_total_[d_name].publish(msg_total);
             }
 
-            // --- Publish Static (Debug Topic) ---
             geometry_msgs::Vector3 msg_static;
             msg_static.x = acc_static[d_name].x();
             msg_static.y = acc_static[d_name].y();
