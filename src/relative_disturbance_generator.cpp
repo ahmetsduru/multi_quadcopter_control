@@ -23,7 +23,7 @@ public:
 
         double g = 9.81;
         double c_coup = 0.045; 
-        double r_lat = 0.005;  
+        double r_lat = 0.05;  
 
         // Fiziksel Hesaplama
         double thrust_total = m_drone * g;
