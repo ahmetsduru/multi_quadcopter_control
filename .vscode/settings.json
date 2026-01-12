@@ -23,5 +23,6 @@
         "initializer_list": "cpp",
         "ranges": "cpp",
         "iterator": "cpp"
-    }
+    },
+    "ROS2.distro": "noetic"
 }
