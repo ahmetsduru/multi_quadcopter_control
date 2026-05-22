@@ -116,7 +116,7 @@ public:
         // Downwash Model Parametreleri
         z0_ = 0.05;            
         sigma_ = 0.15;         
-        turb_intensity_ = 0.40; 
+        turb_intensity_ = 0.70; 
         
         // --- 3.2. Dinamik Grid Boyutu (Sigma Kuralı) ---
         // 2*Sigma mesafesi, etkinin %99.99'unu kapsar. 

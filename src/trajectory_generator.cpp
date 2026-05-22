@@ -997,7 +997,7 @@ void TrajectoryGenerator::solveMinimumSnap() {
 }
 
 void TrajectoryGenerator::generatePsi() {
-    const double alpha = 1.0; // Filtre katsayısı (0 < alpha < 1)
+    const double alpha = 0.05; // Filtre katsayısı (0 < alpha < 1)
 
     if (m_is_psi_active) {
         if (std::isfinite(m_velocity.x) && std::isfinite(m_velocity.y)) {

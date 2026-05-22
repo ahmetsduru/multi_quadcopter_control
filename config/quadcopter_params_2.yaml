@@ -1,25 +1,31 @@
 mid_level_controller:
   # PID gains for thrust, phi, theta
   kp_thrust_x: 1.0
-  ki_thrust_x: 0.02
+  ki_thrust_x: 0.0
   kd_thrust_x: 0.2
 
   kp_thrust_y: 1.0
-  ki_thrust_y: 0.02
+  ki_thrust_y: 0.0
   kd_thrust_y: 0.2
 
   kp_thrust_z: 4.5
-  ki_thrust_z: 0.02
+  ki_thrust_z: 0.0
   kd_thrust_z: 2.0
 
   integral_min: 0.0
   integral_max: 0.5
 
   min_thrust: 0.0
-  max_thrust: 7.848
+  max_thrust: 17.848
 
   dt: 0.01            # Time step for 20 Hz
   
+  # --- Yeni Eklenen Bozulma Gözlemleyicisi (NDOB) Kazançları ---
+  # Güvenli test için 0.0 ile başlıyoruz. Havada duruşunu gördükçe yavaş yavaş artırabilirsin.
+  lv_x: 2.0           # X ekseni düzeltme hızı (Önerilen nominal değer: 2.0)
+  lv_y: 2.0           # Y ekseni düzeltme hızı (Önerilen nominal değer: 2.0)
+  lv_z: 2.0           # Z ekseni (Yükseklik) düzeltme hızı (Önerilen nominal değer: 2.5)
+
 low_level_controller:
   # PID gains for torques
   kp_torque1: 0.02
@@ -37,14 +43,14 @@ low_level_controller:
   integral_min: 0.0
   integral_max: 0.01
 
-  dt: 0.004            # Time step for 100 Hz
+  dt: 0.002            # Time step for 100 Hz
 
 state_derivative_solver_node:
   # Quadcopter parameters and settings
   mass: 0.450            # Mass of the quadcopter (kg)
   I: [0.00062, 0.0, 0.0, 0.0, 0.00062, 0.0, 0.0, 0.0, 0.00124] # Inertia matrix (flattened row-wise)
   g: [0.0, 0.0, -9.81] # Gravity vector (m/s^2)
-  dt: 0.002           # Time step for 500 Hz
+  dt: 0.001           # Time step for 500 Hz
 
   tau_thrust: 0.1
   tau_torque: 0.1

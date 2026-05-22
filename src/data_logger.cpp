@@ -1,7 +1,6 @@
 #include <ros/ros.h>
 #include <geometry_msgs/Vector3.h>
 #include <std_msgs/Float64.h>
-#include <std_msgs/Float64MultiArray.h> // EKLENDİ: RPM dizisi için
 #include <fstream>
 #include <string>
 #include <vector>
@@ -16,9 +15,9 @@ struct DroneData {
     geometry_msgs::Vector3 reference_position, reference_velocity, reference_acceleration;
     geometry_msgs::Vector3 reference_euler_angles, reference_torques;
     geometry_msgs::Vector3 disturbance_force;
+    geometry_msgs::Vector3 ndob_estimated_disturbance; 
     double reference_thrust = 0.0;
     double reference_psi = 0.0;
-    std::vector<double> rotor_rpms; // EKLENDİ: RPM verisi
 };
 
 class DroneLogger {
@@ -45,12 +44,10 @@ public:
         subscribeVector(ns + "reference_euler_angles", &DroneData::reference_euler_angles);
         subscribeVector(ns + "reference_torques", &DroneData::reference_torques);
         subscribeVector(ns + "disturbance_force", &DroneData::disturbance_force);
+        subscribeVector(ns + "ndob_estimated_disturbance", &DroneData::ndob_estimated_disturbance);
 
         subscribeFloat(ns + "reference_thrust", &DroneData::reference_thrust);
         subscribeFloat(ns + "reference_psi", &DroneData::reference_psi);
-        
-        // EKLENDİ: RPM topic aboneliği
-        subscribeMultiArray(ns + "rotor_rpms", &DroneData::rotor_rpms);
 
         std::string log_folder = ros::package::getPath("multi_quadcopter_control") + "/log/";
         std::string cmd = "mkdir -p " + log_folder;
@@ -88,17 +85,14 @@ private:
             "a_pos", "a_vel", "a_acc",
             "a_ang_vel", "a_eul_ang",
             "r_pos", "r_vel", "r_acc",
-            "r_eul_ang", "r_torq", "dist_f"
+            "r_eul_ang", "r_torq", "dist_f", "ndob_f"
         }) {
             m_log_file << ", " << name << ".x"
                        << ", " << name << ".y"
                        << ", " << name << ".z";
         }
         m_log_file << ", r_thr"
-                   << ", r_psi";
-        
-        // EKLENDİ: RPM başlıkları (Standart Quadcopter için 4 motor)
-        m_log_file << ", rpm_1, rpm_2, rpm_3, rpm_4" << "\n";
+                   << ", r_psi" << "\n";
     }
 
     void writeDataRow() {
@@ -124,21 +118,10 @@ private:
         writeVec(m_data.reference_euler_angles);
         writeVec(m_data.reference_torques);
         writeVec(m_data.disturbance_force);
+        writeVec(m_data.ndob_estimated_disturbance);
 
         m_log_file << ", " << m_data.reference_thrust
-                   << ", " << m_data.reference_psi;
-        
-        // EKLENDİ: RPM verilerini yazdır
-        // Veri gelmediyse veya eksikse 0.0 yazarak CSV formatını koru
-        for(int i = 0; i < 4; ++i) {
-            if(i < m_data.rotor_rpms.size()) {
-                m_log_file << ", " << m_data.rotor_rpms[i];
-            } else {
-                m_log_file << ", 0.0";
-            }
-        }
-
-        m_log_file << "\n";
+                   << ", " << m_data.reference_psi << "\n";
     }
 
     void timerCallback(const ros::TimerEvent&) {
@@ -162,15 +145,6 @@ private:
     void subscribeFloat(const std::string& topic, double DroneData::*field) {
         ros::Subscriber sub = m_nh.subscribe<std_msgs::Float64>(topic, 10,
             [this, field](const std_msgs::Float64::ConstPtr& msg) {
-                m_data.*field = msg->data;
-            });
-        m_subscribers.push_back(sub);
-    }
-
-    // EKLENDİ: Float64MultiArray için subscriber helper
-    void subscribeMultiArray(const std::string& topic, std::vector<double> DroneData::*field) {
-        ros::Subscriber sub = m_nh.subscribe<std_msgs::Float64MultiArray>(topic, 10,
-            [this, field](const std_msgs::Float64MultiArray::ConstPtr& msg) {
                 m_data.*field = msg->data;
             });
         m_subscribers.push_back(sub);

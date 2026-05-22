@@ -34,6 +34,7 @@ private:
     ros::Publisher m_desired_thrust_pub;
     ros::Publisher m_desired_angles_pub;
     ros::Publisher m_thrust_components_pub;
+    ros::Publisher m_ndob_disturbance_pub; // TALEBİNİZ: NDOB tahminlerini yayınlayacak yeni publisher nesnesi
 
     // Target and current positions
     double m_des_x, m_des_y, m_des_z, m_des_psi;
@@ -43,7 +44,7 @@ private:
     double m_current_phi, m_current_theta, m_current_psi;
     double m_desired_acceleration_x, m_desired_acceleration_y, m_desired_acceleration_z;
     double m_disturbance_x, m_disturbance_y, m_disturbance_z;
-    
+    double m_filtered_thrust; // Motor aktüatör gecikmesini simüle eden filtre değişkeni
     // PID gains and parameters
     double m_kp_thrust_x, m_ki_thrust_x, m_kd_thrust_x;
     double m_kp_thrust_y, m_ki_thrust_y, m_kd_thrust_y;
@@ -54,6 +55,20 @@ private:
     double m_integral_min, m_integral_max;
     double m_dt;
     double m_mass;
+
+    // ---- KADEMELİ DOĞRUSAL OLMAYAN GÖZLEMLEYİCİ (NDOB) DEĞİŞKENLERİ ----
+    // Gözlemleyici kazançları (Bant genişliği)
+    double m_lv_x, m_lv_y, m_lv_z;
+
+    // Yardımcı durum değişkenleri (z vektörü)
+    double m_zv_x, m_zv_y, m_zv_z;
+
+    // Kestirilen model dışı kalan kuvvetler (Delta_f vektörü)
+    double m_delta_f_x, m_delta_f_y, m_delta_f_z;
+
+    // Bir önceki döngüde üretilen motor itki hafızası (Kilitlenme önleyici)
+    double m_last_thrust;
+    // -------------------------------------------------------------------
 
     // PID state variables
     double m_prev_error_thrust_x, m_integral_thrust_x;
