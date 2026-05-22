@@ -1,12 +1,13 @@
 #ifndef MID_LEVEL_CONTROLLER_H
 #define MID_LEVEL_CONTROLLER_H
 
-#include <std_msgs/Float64.h>
-#include <Eigen/Geometry>
 #include <ros/ros.h>
+#include <std_msgs/Float64.h>
 #include <geometry_msgs/Vector3.h>
 #include <cmath>
+#include <algorithm>
 #include <Eigen/Dense>
+#include <Eigen/Geometry>
 #include <iostream>
 
 namespace MidLevelNS {
@@ -20,7 +21,7 @@ public:
     void spin();
 
 private:
-    // ROS node handle, publishers, and subscribers
+    // ROS Altyapısı (Node Handle, Publisher ve Subscriber Değişkenleri)
     ros::NodeHandle m_nh;
     ros::Subscriber m_desired_position_sub;
     ros::Subscriber m_current_position_sub;
@@ -34,9 +35,9 @@ private:
     ros::Publisher m_desired_thrust_pub;
     ros::Publisher m_desired_angles_pub;
     ros::Publisher m_thrust_components_pub;
-    ros::Publisher m_ndob_disturbance_pub; // TALEBİNİZ: NDOB tahminlerini yayınlayacak yeni publisher nesnesi
+    ros::Publisher m_ndob_disturbance_pub; // LESO/MFO kestirimlerini yayınlayan publisher
 
-    // Target and current positions
+    // Durum ve Referans Değişkenleri (Kinematik ve Dinamik Seviye)
     double m_des_x, m_des_y, m_des_z, m_des_psi;
     double m_current_x, m_current_y, m_current_z;
     double m_desired_velocity_x, m_desired_velocity_y, m_desired_velocity_z;
@@ -44,8 +45,9 @@ private:
     double m_current_phi, m_current_theta, m_current_psi;
     double m_desired_acceleration_x, m_desired_acceleration_y, m_desired_acceleration_z;
     double m_disturbance_x, m_disturbance_y, m_disturbance_z;
-    double m_filtered_thrust; // Motor aktüatör gecikmesini simüle eden filtre değişkeni
-    // PID gains and parameters
+    double m_filtered_thrust; // Aktüatör dinamik filtresi için durum değişkeni
+    
+    // PID Kazançları ve Sınırlandırma Parametreleri
     double m_kp_thrust_x, m_ki_thrust_x, m_kd_thrust_x;
     double m_kp_thrust_y, m_ki_thrust_y, m_kd_thrust_y;
     double m_kp_thrust_z, m_ki_thrust_z, m_kd_thrust_z;
@@ -54,41 +56,47 @@ private:
     double m_min_thrust, m_max_thrust;
     double m_integral_min, m_integral_max;
     double m_dt;
-    double m_mass;
+    double m_mass; // Nominal kütle parametresi (b0 hesabı ve nihai ivme-kuvvet dönüşümü için)
 
-    // ---- KADEMELİ DOĞRUSAL OLMAYAN GÖZLEMLEYİCİ (NDOB) DEĞİŞKENLERİ ----
-    // Gözlemleyici kazançları (Bant genişliği)
+    // ---- MODEL-FREE LINEAR EXTENDED STATE OBSERVER (LESO) DEĞİŞKENLERİ ----
+    // Gözlemci bant genişliği kazançları (omega_o rad/s)
     double m_lv_x, m_lv_y, m_lv_z;
 
-    // Yardımcı durum değişkenleri (z vektörü)
+    // LESO Birinci Durum Kestirimleri: Hız değerleri (\hat{v}_x, \hat{v}_y, \hat{v}_z)
     double m_zv_x, m_zv_y, m_zv_z;
 
-    // Kestirilen model dışı kalan kuvvetler (Delta_f vektörü)
+    // LESO Genişletilmiş Durum Kestirimleri: Toplam bozucu ivmeler (\hat{a}_{dist} -> m/s^2)
+    // Model belirsizlikleri, yerçekimi sapmaları ve dış aerodinamik yüklerin tümünü kapsar.
     double m_delta_f_x, m_delta_f_y, m_delta_f_z;
 
-    // Bir önceki döngüde üretilen motor itki hafızası (Kilitlenme önleyici)
-    double m_last_thrust;
-    // -------------------------------------------------------------------
+    // Aktüatör gecikme modeli ve sanal kontrol girdisi (u) geçmiş hafızası
+    double m_last_cmd_x, m_last_cmd_y, m_last_cmd_z;
+    double m_filtered_cmd_x, m_filtered_cmd_y, m_filtered_cmd_z;
 
-    // PID state variables
+    // Sistem koruması için bir önceki iterasyona ait toplam itki kuvveti
+    double m_last_thrust;
+    // -----------------------------------------------------------------------
+
+    // Kontrolör Dahili Durum Değişkenleri (Hata Entegratörleri)
     double m_prev_error_thrust_x, m_integral_thrust_x;
     double m_prev_error_thrust_y, m_integral_thrust_y;
     double m_prev_error_thrust_z, m_integral_thrust_z;
     double m_prev_error_ref_phi, m_integral_ref_phi;
     double m_prev_error_ref_theta, m_integral_ref_theta;
 
+    // Dünya eksen takımındaki sanal kontrol kuvvetleri (Sanal İvme Girdileri)
     double m_thrust_x;
     double m_thrust_y;
     double m_thrust_z;
 
-    // Core functions
+    // Çekirdek Fonksiyonlar (Matematiksel ve Algoritmik Süreçler)
     double computeThrust();
     geometry_msgs::Vector3 computeReferenceAngles();
     geometry_msgs::Vector3 computeThrustInBodyFrame(double thrust_x, double thrust_y, double thrust_z);
     void publishControlSignals(double thrust, const geometry_msgs::Vector3& ref_angles);
     double applyThrustSaturation(double thrust, double min_thrust, double max_thrust);
 
-    // Callbacks
+    // ROS Mesaj Arayüzleri (Callback Fonksiyonları)
     void positionCallback(const geometry_msgs::Vector3::ConstPtr& msg);
     void currentPositionCallback(const geometry_msgs::Vector3::ConstPtr& msg);
     void currentEulerCallback(const geometry_msgs::Vector3::ConstPtr& msg);

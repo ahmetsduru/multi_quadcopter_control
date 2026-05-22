@@ -176,7 +176,7 @@ for i = 1:num_drones
 end
 
 % Kıyaslamayı kusursuzlaştırmak için Bölüm 2 rüzgar grafiğindeki Z limitlerinin aynısı kilitlendi
-ylim([-2.5, 0.1]);
+ylim([-2.5, 1.0]);
 yl = ylim;         
 p1 = patch(t_green, [yl(1) yl(1) yl(2) yl(2)], color_green, 'EdgeColor', 'none', 'HandleVisibility', 'off');
 p2 = patch(t_yellow, [yl(1) yl(1) yl(2) yl(2)], color_yellow, 'EdgeColor', 'none', 'HandleVisibility', 'off');
