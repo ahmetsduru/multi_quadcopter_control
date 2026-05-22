@@ -15,7 +15,6 @@ struct DroneData {
     geometry_msgs::Vector3 reference_position, reference_velocity, reference_acceleration;
     geometry_msgs::Vector3 reference_euler_angles, reference_torques;
     geometry_msgs::Vector3 disturbance_force;
-    geometry_msgs::Vector3 ndob_estimated_disturbance; 
     double reference_thrust = 0.0;
     double reference_psi = 0.0;
 };
@@ -44,7 +43,6 @@ public:
         subscribeVector(ns + "reference_euler_angles", &DroneData::reference_euler_angles);
         subscribeVector(ns + "reference_torques", &DroneData::reference_torques);
         subscribeVector(ns + "disturbance_force", &DroneData::disturbance_force);
-        subscribeVector(ns + "ndob_estimated_disturbance", &DroneData::ndob_estimated_disturbance);
 
         subscribeFloat(ns + "reference_thrust", &DroneData::reference_thrust);
         subscribeFloat(ns + "reference_psi", &DroneData::reference_psi);
@@ -85,14 +83,15 @@ private:
             "a_pos", "a_vel", "a_acc",
             "a_ang_vel", "a_eul_ang",
             "r_pos", "r_vel", "r_acc",
-            "r_eul_ang", "r_torq", "dist_f", "ndob_f"
+            "r_eul_ang", "r_torq", "dist_f"
         }) {
             m_log_file << ", " << name << ".x"
                        << ", " << name << ".y"
                        << ", " << name << ".z";
         }
         m_log_file << ", r_thr"
-                   << ", r_psi" << "\n";
+                   << ", r_psi"
+                   << "\n";
     }
 
     void writeDataRow() {
@@ -118,10 +117,10 @@ private:
         writeVec(m_data.reference_euler_angles);
         writeVec(m_data.reference_torques);
         writeVec(m_data.disturbance_force);
-        writeVec(m_data.ndob_estimated_disturbance);
 
         m_log_file << ", " << m_data.reference_thrust
-                   << ", " << m_data.reference_psi << "\n";
+                   << ", " << m_data.reference_psi
+                   << "\n";
     }
 
     void timerCallback(const ros::TimerEvent&) {

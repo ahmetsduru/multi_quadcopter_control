@@ -97,7 +97,7 @@ public:
         }
 
         double g = 9.81;
-        double c_coup = 0.065; // Eşleşme katsayısı
+        double c_coup = 0.09; // Eşleşme katsayısı
         double r_lat = 0.05;   // Yanal etki katsayısı
         
         double thrust_total = m_drone * g;
