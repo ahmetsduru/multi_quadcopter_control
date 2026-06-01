@@ -22,9 +22,9 @@ mid_level_controller:
 
   # --- Yeni Eklenen Bozulma Gözlemleyicisi (NDOB) Kazançları ---
   # Güvenli test için 0.0 ile başlıyoruz. Havada duruşunu gördükçe yavaş yavaş artırabilirsin.
-  lv_x: 1.0           # X ekseni düzeltme hızı (Önerilen nominal değer: 2.0)
-  lv_y: 1.0           # Y ekseni düzeltme hızı (Önerilen nominal değer: 2.0)
-  lv_z: 2.8           # Z ekseni (Yükseklik) düzeltme hızı (Önerilen nominal değer: 2.5)
+  lv_x: 5.0           # X ekseni düzeltme hızı (Önerilen nominal değer: 2.0)
+  lv_y: 5.0           # Y ekseni düzeltme hızı (Önerilen nominal değer: 2.0)
+  lv_z: 8.0           # Z ekseni (Yükseklik) düzeltme hızı (Önerilen nominal değer: 2.5)
   
 low_level_controller:
   # Dönme momentleri (Tork) için PID kazançları (Dokunulmadı, orijinal hali)

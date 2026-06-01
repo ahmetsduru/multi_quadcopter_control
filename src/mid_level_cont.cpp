@@ -1,12 +1,8 @@
 #include "../include/multi_quadcopter_control/mid_level_cont.h"
 #include <cmath>
 #include <algorithm>
-#include <Eigen/Dense> 
-
-// Not:
-// Bu kontrolcü downwash/bozucu kuvvet topic'ine abone değildir.
-// Downwash kuvveti kontrolcüye feedforward olarak verilmez.
-// LESO yalnızca ölçülen hız cevabından toplam bozucu ivme etkisini kestirir.
+// Eğer Eigen başlığı .h dosyanızda yoksa buraya eklemeniz gerekebilir:
+// #include <Eigen/Dense> 
 
 namespace MidLevelNS {
 
@@ -24,27 +20,24 @@ double computePID(double des_pos, double a_pos, double des_vel, double a_vel, do
 
     return kp * pos_error + ki * integral + kd * vel_error;
 }
-} // namespace MidLevelNS
+}
 
 MidLevelController::MidLevelController() 
     : m_des_x(0.0), m_des_y(0.0), m_des_z(0.0), m_des_psi(0.0),
       m_current_x(0.0), m_current_y(0.0), m_current_z(0.0),
       m_current_phi(0.0), m_current_theta(0.0), m_current_psi(0.0),
-      m_current_velocity_x(0.0), m_current_velocity_y(0.0), m_current_velocity_z(0.0),
-      m_desired_velocity_x(0.0), m_desired_velocity_y(0.0), m_desired_velocity_z(0.0),
       m_prev_error_thrust_x(0.0), m_integral_thrust_x(0.0),
       m_prev_error_thrust_y(0.0), m_integral_thrust_y(0.0),
       m_prev_error_thrust_z(0.0), m_integral_thrust_z(0.0),
       m_prev_error_ref_phi(0.0), m_integral_ref_phi(0.0),
       m_prev_error_ref_theta(0.0), m_integral_ref_theta(0.0),
-      m_desired_acceleration_x(0.0), m_desired_acceleration_y(0.0), m_desired_acceleration_z(0.0),
+      m_desired_acceleration_x(0.0), m_desired_acceleration_y(0.0), m_desired_acceleration_z(0.0), 
       m_zv_x(0.0), m_zv_y(0.0), m_zv_z(0.0),
       m_delta_f_x(0.0), m_delta_f_y(0.0), m_delta_f_z(0.0),
-      m_last_thrust(0.0), m_filtered_thrust(0.0),
-      m_last_cmd_x(0.0), m_last_cmd_y(0.0), m_last_cmd_z(0.0),
-      m_filtered_cmd_x(0.0), m_filtered_cmd_y(0.0), m_filtered_cmd_z(0.0)
-{
-    // ROS Parametre sunucusundan parametrelerin çekilmesi
+      m_last_thrust(0.0), m_filtered_thrust(0.0) 
+      {
+
+    // Parametrelerin çekilmesi
     m_nh.getParam("mid_level_controller/kp_thrust_x", m_kp_thrust_x);
     m_nh.getParam("mid_level_controller/ki_thrust_x", m_ki_thrust_x);
     m_nh.getParam("mid_level_controller/kd_thrust_x", m_kd_thrust_x);
@@ -67,19 +60,16 @@ MidLevelController::MidLevelController()
     m_nh.getParam("mid_level_controller/integral_max", m_integral_max);
     m_nh.getParam("state_derivative_solver_node/mass", m_mass);
 
-    // KADEMELİ GÜVENLİ BAŞLANGIÇ: İlk saniyede motor kapanmasını engellemek
+    // KADEMELİ GÜVENLİ BAŞLANGIÇ: İlk saniyede NDOB'un motor kapatmasını engellemek için hover dengesine eşitliyoruz
     m_last_thrust = m_mass * 9.81;
     m_filtered_thrust = m_mass * 9.81; 
-    
-    m_last_cmd_z = m_mass * 9.81;
-    m_filtered_cmd_z = m_mass * 9.81;
 
-    // LESO Kazanç Parametreleri (Bant genişliği rad/s cinsinden)
+    // NDOB Kazanç Parametreleri (Bant genişliği rad/s cinsinden)
     m_nh.param("mid_level_controller/lv_x", m_lv_x, 2.0);
     m_nh.param("mid_level_controller/lv_y", m_lv_y, 2.0);
     m_nh.param("mid_level_controller/lv_z", m_lv_z, 2.5);
 
-    // Subscriber / Publisher Tanımlamaları
+    // Sub / Pub Tanımlamaları
     m_desired_position_sub = m_nh.subscribe("reference_position", 10, &MidLevelController::positionCallback, this);
     m_current_position_sub = m_nh.subscribe("actual_position", 10, &MidLevelController::currentPositionCallback, this);
     m_current_euler_sub = m_nh.subscribe("actual_euler_angles", 10, &MidLevelController::currentEulerCallback, this);
@@ -87,6 +77,7 @@ MidLevelController::MidLevelController()
     m_desired_velocity_sub = m_nh.subscribe("reference_velocity", 10, &MidLevelController::desiredVelocityCallback, this);
     m_current_velocity_sub = m_nh.subscribe("actual_velocity", 10, &MidLevelController::currentVelocityCallback, this);
     m_desired_psi_sub = m_nh.subscribe("reference_psi", 10, &MidLevelController::desiredPsiCallback, this);
+
     m_desired_thrust_pub = m_nh.advertise<std_msgs::Float64>("reference_thrust", 10);
     m_desired_angles_pub = m_nh.advertise<geometry_msgs::Vector3>("reference_euler_angles", 10);
     m_ndob_disturbance_pub = m_nh.advertise<geometry_msgs::Vector3>("ndob_estimated_disturbance", 10);
@@ -107,88 +98,74 @@ void MidLevelController::spin() {
 
 double MidLevelController::computeThrust() {
     // ------------------------------------------------------------------------
-    // SANAL KONTROL KOMUTU FİLTRESİ (Aktüatör Gecikmesini Taklit Etme)
+    // MOTOR DİNAMİĞİ FİLTRESİ (Aktüatör Gecikmesini Taklit Etme)
     // ------------------------------------------------------------------------
-    double tau_motor = 0.1; 
+    double tau_motor = 0.05; 
     double alpha = m_dt / (tau_motor + m_dt);
-    
-    m_filtered_cmd_x = (1.0 - alpha) * m_filtered_cmd_x + alpha * m_last_cmd_x;
-    m_filtered_cmd_y = (1.0 - alpha) * m_filtered_cmd_y + alpha * m_last_cmd_y;
-    m_filtered_cmd_z = (1.0 - alpha) * m_filtered_cmd_z + alpha * m_last_cmd_z;
+    m_filtered_thrust = (1.0 - alpha) * m_filtered_thrust + alpha * m_last_thrust;
+
+    double c_phi   = cos(m_current_phi);
+    double s_phi   = sin(m_current_phi);
+    double c_theta = cos(m_current_theta);
+    double s_theta = sin(m_current_theta);
+    double c_psi   = cos(m_current_psi);
+    double s_psi   = sin(m_current_psi);
+
+    // BODY-Z İTKİSİNİN DÜNYA EKSENİNE İZDÜŞÜMÜ (Observer için zorunludur)
+    double f_thrust_world_x = m_filtered_thrust * (c_psi * s_theta * c_phi + s_psi * s_phi);
+    double f_thrust_world_y = m_filtered_thrust * (s_psi * s_theta * c_phi - c_psi * s_phi);
+    double f_thrust_world_z = m_filtered_thrust * (c_theta * c_phi);
 
     // ------------------------------------------------------------------------
-    // NOMİNAL MODEL DESTEKLİ GENİŞLETİLMİŞ DURUM GÖZLEMCİSİ (LESO) ADIMI
+    // MODEL-DESTEKLİ NDOB ADIMI (Bilinmeyen Bozucuları Kestirir)
     // ------------------------------------------------------------------------
-    // Hız kestirim hatası (Ölçülen Hız - Kestirilen Hız)
-    double v_err_x = m_current_velocity_x - m_zv_x;
-    double v_err_y = m_current_velocity_y - m_zv_y;
-    double v_err_z = m_current_velocity_z - m_zv_z;
+    // KESTİRİM: Entegrasyondan ÖNCE 1 kez hesaplanır
+    m_delta_f_x = m_zv_x + m_lv_x * m_mass * m_current_velocity_x;
+    m_delta_f_y = m_zv_y + m_lv_y * m_mass * m_current_velocity_y;
+    m_delta_f_z = m_zv_z + m_lv_z * m_mass * m_current_velocity_z;
 
-    // LESO Kazançları (LPD Formu: Bant genişliğine bağlı analitik atama)
-    double beta_1_x = 2.0 * m_lv_x;     double beta_2_x = m_lv_x * m_lv_x;
-    double beta_1_y = 2.0 * m_lv_y;     double beta_2_y = m_lv_y * m_lv_y;
-    double beta_1_z = 2.0 * m_lv_z;     double beta_2_z = m_lv_z * m_lv_z;
+    // TÜREV HESAPLAMASI (Gözlemci doğrudan m_filtered_thrust etkisini baz alıyor)
+    double dz_x = - m_lv_x * m_delta_f_x - m_lv_x * f_thrust_world_x;
+    double dz_y = - m_lv_y * m_delta_f_y - m_lv_y * f_thrust_world_y;
+    double dz_z = - m_lv_z * m_delta_f_z - m_lv_z * (f_thrust_world_z - (m_mass * 9.81));
 
-    // Nominal giriş kazancı. Downwash modeli burada kullanılmaz.
-    double b0 = 1.0 / m_mass; 
-
-    // Durum Türevlerinin Hesaplanması (Sistem ivme uzayında modellenmiştir)
-    double dv_est_x = m_delta_f_x + b0 * m_filtered_cmd_x + beta_1_x * v_err_x;
-    double dd_est_x = beta_2_x * v_err_x;
-
-    double dv_est_y = m_delta_f_y + b0 * m_filtered_cmd_y + beta_1_y * v_err_y;
-    double dd_est_y = beta_2_y * v_err_y;
-
-    // Z ekseninde yerçekimi ivmesi (9.81 m/s^2) nominal durum olarak çıkarılır.
-    double dv_est_z = m_delta_f_z + b0 * m_filtered_cmd_z - 9.81 + beta_1_z * v_err_z;
-    double dd_est_z = beta_2_z * v_err_z;
-
-    // Sayısal Entegrasyon (Euler Yöntemi)
-    m_zv_x += dv_est_x * m_dt;
-    m_delta_f_x += dd_est_x * m_dt; // m_delta_f artık dinamik "Bozucu İvme"dir (m/s^2)
-
-    m_zv_y += dv_est_y * m_dt;
-    m_delta_f_y += dd_est_y * m_dt;
-
-    m_zv_z += dv_est_z * m_dt;
-    m_delta_f_z += dd_est_z * m_dt;
+    // ENTEGRASYON (Euler)
+    m_zv_x += dz_x * m_dt;
+    m_zv_y += dz_y * m_dt;
+    m_zv_z += dz_z * m_dt;
 
     // ------------------------------------------------------------------------
-    // KONTROL YASASI (NOMİNAL MODEL DESTEKLİ LESO TABANLI BOZUCU BASTIRMA)
+    // KONTROL YASASI VE NDOB DÜZELTMESİ (PID + İleri Besleme - Kestirilen Hata)
     // ------------------------------------------------------------------------
-    // PID çıktısı kuvvet (N) cinsinden olduğu için ivme birimine indirgenir (1/m).
-    // Kestirilen toplam bozucu ivme döngüden düşülür.
-    // Burada downwash kuvveti feedforward olarak kullanılmaz.
-    
-    double des_acc_x = (MidLevelNS::computePID(m_des_x, m_current_x, m_desired_velocity_x, m_current_velocity_x, m_integral_thrust_x, m_kp_thrust_x, m_ki_thrust_x, m_kd_thrust_x, m_dt, m_integral_min, m_integral_max) / m_mass) 
-                       + m_desired_acceleration_x - m_delta_f_x;
+    m_thrust_x = MidLevelNS::computePID(m_des_x, m_current_x, m_desired_velocity_x, m_current_velocity_x, m_integral_thrust_x, m_kp_thrust_x, m_ki_thrust_x, m_kd_thrust_x, m_dt, m_integral_min, m_integral_max) 
+                 + (m_mass * m_desired_acceleration_x) - m_delta_f_x;
                  
-    double des_acc_y = (MidLevelNS::computePID(m_des_y, m_current_y, m_desired_velocity_y, m_current_velocity_y, m_integral_thrust_y, m_kp_thrust_y, m_ki_thrust_y, m_kd_thrust_y, m_dt, m_integral_min, m_integral_max) / m_mass) 
-                       + m_desired_acceleration_y - m_delta_f_y;
+    m_thrust_y = MidLevelNS::computePID(m_des_y, m_current_y, m_desired_velocity_y, m_current_velocity_y, m_integral_thrust_y, m_kp_thrust_y, m_ki_thrust_y, m_kd_thrust_y, m_dt, m_integral_min, m_integral_max) 
+                 + (m_mass * m_desired_acceleration_y) - m_delta_f_y;
                  
-    double des_acc_z = (MidLevelNS::computePID(m_des_z, m_current_z, m_desired_velocity_z, m_current_velocity_z, m_integral_thrust_z, m_kp_thrust_z, m_ki_thrust_z, m_kd_thrust_z, m_dt, m_integral_min, m_integral_max) / m_mass) 
-                       + m_desired_acceleration_z + 9.81 - m_delta_f_z;
-
-    // Hesaplanan net sanal ivmeler, fiziksel motor komutuna (Newton) geri dönüştürülür.
-    m_thrust_x = m_mass * des_acc_x;
-    m_thrust_y = m_mass * des_acc_y;
-    m_thrust_z = m_mass * des_acc_z;
-
-    // Gelecek iterasyon için komut geçmişi güncellenir
-    m_last_cmd_x = m_thrust_x;
-    m_last_cmd_y = m_thrust_y;
-    m_last_cmd_z = m_thrust_z;
+    m_thrust_z = MidLevelNS::computePID(m_des_z, m_current_z, m_desired_velocity_z, m_current_velocity_z, m_integral_thrust_z, m_kp_thrust_z, m_ki_thrust_z, m_kd_thrust_z, m_dt, m_integral_min, m_integral_max) 
+                 + (m_mass * m_desired_acceleration_z) + (m_mass * 9.81) - m_delta_f_z;
 
     // ------------------------------------------------------------------------
-    // TOPLAM İTKİ MİKTARINI HESAPLAMA
+    // DÜNYA EKSENİ KUVVETLERİNİ BODY EKSENİNE ÇEVİRME
     // ------------------------------------------------------------------------
-    double total_thrust = std::sqrt(m_thrust_x * m_thrust_x + m_thrust_y * m_thrust_y + m_thrust_z * m_thrust_z);
+    geometry_msgs::Vector3 ref_angles = computeReferenceAngles();
+    double phi_ref = ref_angles.x;   
+    double theta_ref = ref_angles.y; 
+    double psi_ref = ref_angles.z;   
+
+    Eigen::Matrix3d rotation_matrix;
+    rotation_matrix << 
+        cos(psi_ref) * cos(theta_ref), sin(psi_ref) * cos(theta_ref), -sin(theta_ref),
+        cos(psi_ref) * sin(theta_ref) * sin(phi_ref) - sin(psi_ref) * cos(phi_ref), sin(psi_ref) * sin(theta_ref) * sin(phi_ref) + cos(psi_ref) * cos(phi_ref), cos(theta_ref) * sin(phi_ref),
+        cos(psi_ref) * sin(theta_ref) * cos(phi_ref) + sin(psi_ref) * sin(phi_ref), sin(psi_ref) * sin(theta_ref) * cos(phi_ref) - cos(psi_ref) * sin(phi_ref), cos(theta_ref) * cos(phi_ref);
+
+    Eigen::Vector3d world_forces(m_thrust_x, m_thrust_y, m_thrust_z);
     
-    if (m_thrust_z < 0.0) {
-        total_thrust = m_min_thrust; 
-    }
-
-    m_last_thrust = applyThrustSaturation(total_thrust, m_min_thrust, m_max_thrust);
+    // Uygulanabilecek tek itki (Z ekseni itkisi) çıkartılıyor
+    Eigen::Vector3d body_forces = rotation_matrix * world_forces;
+    m_last_thrust = applyThrustSaturation(body_forces.z(), m_min_thrust, m_max_thrust);
+    
     return m_last_thrust;
 }
 
@@ -203,10 +180,10 @@ geometry_msgs::Vector3 MidLevelController::computeReferenceAngles() {
         return ref_angles;
     }
 
-    // Doğrusal Olmayan (Exact) Dönüşüm
+    // Doğrusal Olmayan (Exact) Dönüşüm: Küçük açı yaklaşımlarının sebep olduğu izleme hatalarını önler.
     double total_thrust = std::sqrt(m_thrust_x * m_thrust_x + m_thrust_y * m_thrust_y + m_thrust_z * m_thrust_z);
     
-    // Asin argümanının [-1, 1] sınırlarında kalması için doyuma ulaştırma
+    // Asin argümanının [-1, 1] sınırlarında kaldığından emin olmak için koruma (NaN fırlatmasını önler)
     double sin_phi_val = (m_thrust_x * std::sin(m_current_psi) - m_thrust_y * std::cos(m_current_psi)) / total_thrust;
     sin_phi_val = std::max(-1.0, std::min(1.0, sin_phi_val));
 
@@ -223,8 +200,7 @@ void MidLevelController::publishControlSignals(double thrust, const geometry_msg
     m_desired_thrust_pub.publish(thrust_msg);
     m_desired_angles_pub.publish(ref_angles);
 
-    // Kestirilen toplam bozucu ivme değerleri (m/s^2) ROS'a basılıyor.
-    // Bu değer fiziksel downwash kuvveti değil, LESO'nun tahmin ettiği lumped disturbance etkisidir.
+    // Kestirilen Delta_f (Bozucu) değerleri ROS'a basılıyor
     geometry_msgs::Vector3 ndob_msg;
     ndob_msg.x = m_delta_f_x;
     ndob_msg.y = m_delta_f_y;
@@ -236,7 +212,6 @@ double MidLevelController::applyThrustSaturation(double thrust, double min_thrus
     return std::max(min_thrust, std::min(thrust, max_thrust));
 }
 
-// ROS Callback Fonksiyonları
 void MidLevelController::positionCallback(const geometry_msgs::Vector3::ConstPtr& msg) {
     m_des_x = msg->x; m_des_y = msg->y; m_des_z = msg->z;
 }
@@ -264,4 +239,3 @@ void MidLevelController::desiredAccelerationCallback(const geometry_msgs::Vector
 void MidLevelController::desiredPsiCallback(const std_msgs::Float64::ConstPtr& msg) {
     m_des_psi = msg->data;
 }
-
