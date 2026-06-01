@@ -1,39 +1,42 @@
 #include <ros/ros.h>
 #include <ros/master.h>
 #include <geometry_msgs/Vector3.h>
-#include <geometry_msgs/Quaternion.h>
 #include <map>
-#include <unordered_map> 
+#include <unordered_map>
 #include <cmath>
 #include <vector>
 #include <string>
 #include <Eigen/Dense>
 #include <random>
 #include <array>
+#include <algorithm>
+#include <boost/bind.hpp>
 
 // ======================================================================================
 // 1. PINK NOISE GENERATOR (Voss-McCartney Algorithm)
 // ======================================================================================
-// MATLAB'daki spektral yöntemin Real-Time çalışan karşılığıdır.
+// Manuscript Eq. (11): 1/f karakterli colored-noise davranışının gerçek zamanlı karşılığı.
 class PinkNoiseGenerator {
 public:
     PinkNoiseGenerator() : counter_(0) {
         std::random_device rd;
         gen_ = std::mt19937(rd());
         dist_ = std::uniform_real_distribution<double>(-1.0, 1.0);
-        // Başlangıç durumunu rastgele doldur
-        for (int i = 0; i < NUM_ROWS; ++i) rows_[i] = dist_(gen_);
+        for (int i = 0; i < NUM_ROWS; ++i) {
+            rows_[i] = dist_(gen_);
+        }
     }
 
     double next() {
-        int last_counter = counter_;
+        const int last_counter = counter_;
         counter_++;
 
-        // Hangi oktavın güncelleneceğini belirle
         int number_of_changes = counter_ ^ last_counter;
         int row_to_change = 0;
-        while (number_of_changes >>= 1) row_to_change++;
-        
+        while (number_of_changes >>= 1) {
+            row_to_change++;
+        }
+
         if (row_to_change < NUM_ROWS) {
             rows_[row_to_change] = dist_(gen_);
         }
@@ -43,21 +46,21 @@ public:
             sum += rows_[i];
         }
 
-        // Normalizasyon (Ortalama +/- 1.0 aralığına getir)
-        return (sum / 5.0); 
+        // Yaklaşık [-1, 1] bandına ölçekleme.
+        return sum / 5.0;
     }
 
 private:
-    static const int NUM_ROWS = 16; 
+    static const int NUM_ROWS = 16;
     std::array<double, NUM_ROWS> rows_;
     int counter_;
     std::mt19937 gen_;
     std::uniform_real_distribution<double> dist_;
 };
 
-// 3 Eksen (X, Y, Z) için bağımsız gürültü yapısı
 struct PinkNoise3D {
     PinkNoiseGenerator px, py, pz;
+
     Eigen::Vector3d getVector() {
         return Eigen::Vector3d(px.next(), py.next(), pz.next());
     }
@@ -68,6 +71,7 @@ struct PinkNoise3D {
 // ======================================================================================
 struct GridKey {
     int x, y, z;
+
     bool operator==(const GridKey& other) const {
         return x == other.x && y == other.y && z == other.z;
     }
@@ -75,8 +79,9 @@ struct GridKey {
 
 struct GridKeyHash {
     std::size_t operator()(const GridKey& k) const {
-        // Bit kaydırma ile basit ve hızlı bir hash fonksiyonu
-        return std::hash<int>()(k.x) ^ (std::hash<int>()(k.y) << 1) ^ (std::hash<int>()(k.z) << 2);
+        return std::hash<int>()(k.x) ^
+               (std::hash<int>()(k.y) << 1) ^
+               (std::hash<int>()(k.z) << 2);
     }
 };
 
@@ -85,58 +90,32 @@ struct GridKeyHash {
 // ======================================================================================
 class DroneDisturbanceManager {
 public:
-    DroneDisturbanceManager() : rate_(100.0), topic_check_interval_(1.0), drone_count_logged_(false) {
-        
-        // --- 3.1. Model Parametreleri ---
-        double m_drone;
-        if (nh_.getParam("/state_derivative_solver_node/mass", m_drone)) {
-            ROS_INFO("Disturbance Manager: Mass loaded: %.4f kg", m_drone);
-        } else {
-            m_drone = 0.382; // Varsayılan kütle
-            ROS_WARN("Disturbance Manager: Mass parameter not found, using default.");
-        }
+    DroneDisturbanceManager()
+        : rate_(100.0),
+          topic_check_interval_(1.0),
+          drone_count_logged_(false) {
 
-        double g = 9.81;
-        double c_coup = 0.09; // Eşleşme katsayısı
-        double r_lat = 0.05;   // Yanal etki katsayısı
-        
-        double thrust_total = m_drone * g;
-        double thrust_per_rotor = thrust_total / 4.0;
-        
-        // Kuvvet katsayıları
-        double k_z = thrust_per_rotor * c_coup; 
-        double k_x = k_z * r_lat;            
-        double k_y = k_z * r_lat;
+        loadGlobalModelParameters();
+        updateGridParameters();
 
-        // Katsayı matrisi (Diagonal)
-        k_matrix_ << k_x, 0.0, 0.0,
-                     0.0, k_y, 0.0,
-                     0.0, 0.0, k_z;
+        // Başlangıç offset ve orientation yer tutucuları.
+        // Drone sayısı dinamik olarak topic üzerinden bulunuyor; burası sadece olası namespace'ler için offset okur.
+        for (int i = 1; i <= 50; ++i) {
+            const std::string drone_name = "drone" + std::to_string(i);
+            const std::string ns = "/" + drone_name + "/";
 
-        // Downwash Model Parametreleri
-        z0_ = 0.05;            
-        sigma_ = 0.15;         
-        turb_intensity_ = 0.70; 
-        
-        // --- 3.2. Dinamik Grid Boyutu (Sigma Kuralı) ---
-        // 2*Sigma mesafesi, etkinin %99.99'unu kapsar. 
-        max_effect_radius_ = (2.0 * sigma_) + 0.25; 
-        cell_size_ = max_effect_radius_; 
-
-        // --- 3.3. Başlangıç Ayarları ---
-        // 20 Drone için offset ve orientation yer tutucuları
-        for (int i = 1; i <= 20; ++i) { 
-            std::string drone_name = "drone" + std::to_string(i);
-            std::string ns = "/" + drone_name + "/";
             geometry_msgs::Vector3 offset;
             if (nh_.getParam(ns + "initial_x", offset.x)) {
                 nh_.getParam(ns + "initial_y", offset.y);
                 nh_.getParam(ns + "initial_z", offset.z);
             } else {
-                offset.x = 0; offset.y = 0; offset.z = 0;
+                offset.x = 0.0;
+                offset.y = 0.0;
+                offset.z = 0.0;
             }
+
             drone_initial_offsets_[drone_name] = offset;
-            drone_orientations_[drone_name] = Eigen::Quaterniond::Identity(); // Varsayılan: Düz
+            drone_orientations_[drone_name] = Eigen::Quaterniond::Identity();
         }
 
         grid_map_cache_.reserve(1000);
@@ -145,9 +124,9 @@ public:
 
     void run() {
         while (ros::ok()) {
-            checkNewTopics();   // Yeni drone'ları keşfet
-            logDroneCount();    // Bilgi ver
-            computeAndPublishDisturbancesOptimized(); // Ana hesaplama
+            checkNewTopics();
+            logDroneCount();
+            computeAndPublishDisturbancesOptimized();
             ros::spinOnce();
             rate_.sleep();
         }
@@ -159,31 +138,129 @@ private:
     ros::Time last_topic_check_;
     ros::Duration topic_check_interval_;
     bool drone_count_logged_;
-    
-    // Model Değişkenleri
-    Eigen::Matrix3d k_matrix_;
-    double z0_, sigma_, turb_intensity_;
-    double max_effect_radius_, cell_size_;
 
-    // Drone Verileri
+    // -----------------------------
+    // Manuscript model parametreleri
+    // -----------------------------
+    double g_;
+    double aerodynamic_coupling_;      // C_coup, default: 0.065
+    double lateral_force_ratio_;       // kappa_lat, default: 0.05
+    double singularity_eps_;           // z0, default: 0.1
+    double spread_coefficient_;        // S, default: 0.15
+    double virtual_origin_;            // s_v, default: 0.0
+    double sigma_min_;                 // sayısal güvenlik için minimum sigma
+    double turb_intensity_;            // lambda, default: 0.3
+    double sigma_cutoff_multiplier_;   // Algorithm I: |p_xy| < 2 sigma
+    double max_vertical_effect_;       // grid arama sınırı
+    bool body_z_positive_down_;        // false: ROS/Eigen z-up kabulü
+
+    double cell_size_;
+    int neighbor_range_;
+
+    // Drone verileri
     std::map<std::string, geometry_msgs::Vector3> drone_positions_;
     std::map<std::string, Eigen::Quaterniond> drone_orientations_;
+    std::map<std::string, double> drone_masses_;
 
-    // ROS İletişimi
+    // ROS iletişimi
     std::map<std::string, ros::Subscriber> sub_pos_;
-    std::map<std::string, ros::Subscriber> sub_orient_; 
+    std::map<std::string, ros::Subscriber> sub_orient_;
     std::map<std::string, geometry_msgs::Vector3> drone_initial_offsets_;
-    std::map<std::string, ros::Publisher> pub_total_;  
-    std::map<std::string, ros::Publisher> pub_static_; 
+    std::map<std::string, ros::Publisher> pub_total_;
+    std::map<std::string, ros::Publisher> pub_static_;
 
-    // Optimizasyon Yapıları
+    // Optimizasyon yapıları
     std::unordered_map<GridKey, std::vector<std::string>, GridKeyHash> grid_map_cache_;
     std::map<std::string, PinkNoise3D> noise_generators_;
 
-    // --- YARDIMCI FONKSİYONLAR ---
-    
-    // Grid Anahtarı Hesaplama
-    GridKey getGridKey(const geometry_msgs::Vector3& pos) {
+    // ==================================================================================
+    // PARAMETRELER
+    // ==================================================================================
+    void loadGlobalModelParameters() {
+        nh_.param("/disturbance_model/gravity", g_, 9.81);
+        nh_.param("/disturbance_model/aerodynamic_coupling", aerodynamic_coupling_, 0.25);
+        nh_.param("/disturbance_model/lateral_force_ratio", lateral_force_ratio_, 0.05);
+        nh_.param("/disturbance_model/singularity_prevention", singularity_eps_, 0.1);
+        nh_.param("/disturbance_model/spread_coefficient", spread_coefficient_, 0.3);
+        nh_.param("/disturbance_model/virtual_origin", virtual_origin_, 0.0);
+        nh_.param("/disturbance_model/sigma_min", sigma_min_, 0.03);
+        nh_.param("/disturbance_model/turbulence_intensity", turb_intensity_, 0.6);
+        nh_.param("/disturbance_model/sigma_cutoff_multiplier", sigma_cutoff_multiplier_, 2.0);
+        nh_.param("/disturbance_model/max_vertical_effect", max_vertical_effect_, 3.0);
+        nh_.param("/disturbance_model/body_z_positive_down", body_z_positive_down_, false);
+
+        ROS_INFO("Disturbance model parameters loaded: C_coup=%.4f, kappa_lat=%.4f, z0=%.4f, S=%.4f, lambda=%.4f",
+                 aerodynamic_coupling_, lateral_force_ratio_, singularity_eps_, spread_coefficient_, turb_intensity_);
+    }
+
+    void updateGridParameters() {
+        const double sigma_at_max_height = localSigma(max_vertical_effect_);
+        const double lateral_radius = sigma_cutoff_multiplier_ * sigma_at_max_height;
+
+        cell_size_ = std::max(0.25, lateral_radius);
+        neighbor_range_ = std::max(1, static_cast<int>(std::ceil(max_vertical_effect_ / cell_size_)) + 1);
+
+        ROS_INFO("Disturbance grid: cell_size=%.3f m, neighbor_range=%d", cell_size_, neighbor_range_);
+    }
+
+    bool getParamAny(const std::vector<std::string>& names, double& value) {
+        for (const auto& name : names) {
+            if (nh_.getParam(name, value)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    void ensureDroneParameters(const std::string& drone_name) {
+        if (drone_masses_.find(drone_name) != drone_masses_.end()) {
+            return;
+        }
+
+        double mass = 0.382;
+        const std::string ns = "/" + drone_name;
+
+        // Heterogeneous swarm için kaynak UAV'nin kendi kütlesi öncelikli okunur.
+        // Bulunamazsa eski global parametreye, o da yoksa default değere döner.
+        getParamAny({
+            ns + "/state_derivative_solver_node/mass",
+            ns + "/mass",
+            "/state_derivative_solver_node/mass"
+        }, mass);
+
+        drone_masses_[drone_name] = mass;
+        ROS_INFO("Disturbance Manager: %s mass used for W_i matrix: %.4f kg", drone_name.c_str(), mass);
+    }
+
+    Eigen::Matrix3d influenceMatrixForSource(const std::string& source_name) {
+        ensureDroneParameters(source_name);
+
+        // Manuscript Eq. (9): W_i,z = f_thrust * C_coup; W_i,x = W_i,y = W_i,z * kappa_lat.
+        // Burada f_thrust, source UAV için hover thrust olarak alınır: m_i * g.
+        // Gerçek thrust topic'i bağlanacaksa bu satır source thrust ölçümü/komutu ile değiştirilebilir.
+        const double source_hover_thrust = drone_masses_[source_name] * g_;
+        const double w_z = source_hover_thrust * aerodynamic_coupling_;
+        const double w_x = w_z * lateral_force_ratio_;
+        const double w_y = w_z * lateral_force_ratio_;
+
+        Eigen::Matrix3d W = Eigen::Matrix3d::Zero();
+        W(0, 0) = w_x;
+        W(1, 1) = w_y;
+        W(2, 2) = w_z;
+        return W;
+    }
+
+    // Manuscript: sigma(s) = r_1/2(s) / sqrt(2 ln 2), r_1/2(s) = S (s - s_v).
+    double localSigma(double vertical_distance) const {
+        const double r_half = spread_coefficient_ * std::max(0.0, vertical_distance - virtual_origin_);
+        const double sigma = r_half / std::sqrt(2.0 * std::log(2.0));
+        return std::max(sigma, sigma_min_);
+    }
+
+    // ==================================================================================
+    // YARDIMCI FONKSİYONLAR
+    // ==================================================================================
+    GridKey getGridKey(const geometry_msgs::Vector3& pos) const {
         return {
             static_cast<int>(std::floor(pos.x / cell_size_)),
             static_cast<int>(std::floor(pos.y / cell_size_)),
@@ -191,10 +268,10 @@ private:
         };
     }
 
-    // İlgili Topic'leri Bulma
     std::vector<std::string> getTopicsByType(const std::string& key_phrase, const std::string& type) {
         ros::master::V_TopicInfo master_topics;
         ros::master::getTopics(master_topics);
+
         std::vector<std::string> found_topics;
         for (const auto& topic : master_topics) {
             if (topic.name.find(key_phrase) != std::string::npos && topic.datatype == type) {
@@ -204,81 +281,119 @@ private:
         return found_topics;
     }
 
-    // Topic isminden drone ismini ayıklama (/drone1/actual_position -> drone1)
-    std::string extractDroneName(const std::string& topic_name) {
-        size_t first_slash = topic_name.find("/");
-        size_t second_slash = topic_name.find("/", first_slash + 1);
+    std::string extractDroneName(const std::string& topic_name) const {
+        const size_t first_slash = topic_name.find("/");
+        const size_t second_slash = topic_name.find("/", first_slash + 1);
+
         if (first_slash != std::string::npos && second_slash != std::string::npos) {
             return topic_name.substr(first_slash + 1, second_slash - first_slash - 1);
         }
-        return topic_name; // Fallback
+        return topic_name;
     }
 
-    // --- CALLBACK FONKSİYONLARI ---
+    bool isTargetInsideDownwashColumn(const Eigen::Vector3d& p_rel_body) const {
+        // Manuscript formülü p_z > 0 tarafını etkin kabul eder.
+        // Bu kodda default ROS/Eigen z-up kullanıldığı için source UAV'nin altı p_z < 0 kabul edilmiştir.
+        if (body_z_positive_down_) {
+            return p_rel_body.z() > 0.0;
+        }
+        return p_rel_body.z() < 0.0;
+    }
 
+    Eigen::Vector3d signPreservingRSS(const Eigen::Vector3d& linear_sum,
+                                      const Eigen::Vector3d& squared_sum) const {
+        Eigen::Vector3d result = Eigen::Vector3d::Zero();
+
+        for (int axis = 0; axis < 3; ++axis) {
+            if (squared_sum(axis) <= 0.0 || std::abs(linear_sum(axis)) < 1e-12) {
+                result(axis) = 0.0;
+            } else {
+                result(axis) = std::copysign(std::sqrt(squared_sum(axis)), linear_sum(axis));
+            }
+        }
+        return result;
+    }
+
+    void accumulateRSS(std::map<std::string, Eigen::Vector3d>& linear_sum,
+                       std::map<std::string, Eigen::Vector3d>& squared_sum,
+                       const std::string& target_name,
+                       const Eigen::Vector3d& contribution) {
+        linear_sum[target_name] += contribution;
+        squared_sum[target_name] += contribution.cwiseProduct(contribution);
+    }
+
+    // ==================================================================================
+    // CALLBACK FONKSİYONLARI
+    // ==================================================================================
     void positionCallback(const geometry_msgs::Vector3::ConstPtr& msg, const std::string& topic_name) {
-        std::string drone_name = extractDroneName(topic_name);
-        geometry_msgs::Vector3 offset = drone_initial_offsets_[drone_name]; 
-        
+        const std::string drone_name = extractDroneName(topic_name);
+        const geometry_msgs::Vector3 offset = drone_initial_offsets_[drone_name];
+
         geometry_msgs::Vector3 adjusted_position;
         adjusted_position.x = msg->x + offset.x;
         adjusted_position.y = msg->y + offset.y;
         adjusted_position.z = msg->z + offset.z;
-        
+
         drone_positions_[drone_name] = adjusted_position;
     }
 
     void eulerCallback(const geometry_msgs::Vector3::ConstPtr& msg, const std::string& topic_name) {
-        std::string drone_name = extractDroneName(topic_name);
-        
-        double roll = msg->x;
-        double pitch = msg->y;
-        double yaw = msg->z;
+        const std::string drone_name = extractDroneName(topic_name);
 
-        // Euler -> Quaternion (ZYX Sırası: Yaw -> Pitch -> Roll)
+        const double roll = msg->x;
+        const double pitch = msg->y;
+        const double yaw = msg->z;
+
+        // Euler -> Quaternion, ZYX sırası: yaw, pitch, roll.
         Eigen::AngleAxisd rollAngle(roll, Eigen::Vector3d::UnitX());
         Eigen::AngleAxisd pitchAngle(pitch, Eigen::Vector3d::UnitY());
         Eigen::AngleAxisd yawAngle(yaw, Eigen::Vector3d::UnitZ());
 
-        Eigen::Quaterniond q = yawAngle * pitchAngle * rollAngle;
-        drone_orientations_[drone_name] = q;
+        const Eigen::Quaterniond q = yawAngle * pitchAngle * rollAngle;
+        drone_orientations_[drone_name] = q.normalized();
     }
 
-    // --- TOPIC KONTROLÜ ---
+    // ==================================================================================
+    // TOPIC KONTROLÜ
+    // ==================================================================================
     void checkNewTopics() {
-        if ((ros::Time::now() - last_topic_check_) > topic_check_interval_) {
-            
-            // 1. Pozisyon Topic'lerini Tara
-            std::vector<std::string> pos_topics = getTopicsByType("/actual_position", "geometry_msgs/Vector3");
-            for (const auto& topic : pos_topics) {
-                if (sub_pos_.find(topic) == sub_pos_.end()) {
-                    sub_pos_[topic] = nh_.subscribe<geometry_msgs::Vector3>(
-                        topic, 10, boost::bind(&DroneDisturbanceManager::positionCallback, this, _1, topic));
-                    
-                    std::string drone_name = extractDroneName(topic);
-                    
-                    // Publisher'ları oluştur
-                    pub_total_[drone_name] = nh_.advertise<geometry_msgs::Vector3>("/" + drone_name + "/disturbance_force", 10);
-                    pub_static_[drone_name] = nh_.advertise<geometry_msgs::Vector3>("/" + drone_name + "/disturbance_static", 10);
-                    
-                    // Gürültü üretecini başlat
-                    if (noise_generators_.find(drone_name) == noise_generators_.end()) {
-                        noise_generators_[drone_name] = PinkNoise3D();
-                    }
-                }
-            }
-
-            // 2. Oryantasyon Topic'lerini Tara (reference_euler_angles)
-            std::vector<std::string> orient_topics = getTopicsByType("actual_euler_angles", "geometry_msgs/Vector3");
-            for (const auto& topic : orient_topics) {
-                if (sub_orient_.find(topic) == sub_orient_.end()) {
-                    sub_orient_[topic] = nh_.subscribe<geometry_msgs::Vector3>(
-                        topic, 10, boost::bind(&DroneDisturbanceManager::eulerCallback, this, _1, topic));
-                }
-            }
-
-            last_topic_check_ = ros::Time::now();
+        if ((ros::Time::now() - last_topic_check_) <= topic_check_interval_) {
+            return;
         }
+
+        // 1. Pozisyon topic'lerini tara.
+        const std::vector<std::string> pos_topics = getTopicsByType("/actual_position", "geometry_msgs/Vector3");
+        for (const auto& topic : pos_topics) {
+            if (sub_pos_.find(topic) != sub_pos_.end()) {
+                continue;
+            }
+
+            sub_pos_[topic] = nh_.subscribe<geometry_msgs::Vector3>(
+                topic, 10, boost::bind(&DroneDisturbanceManager::positionCallback, this, _1, topic));
+
+            const std::string drone_name = extractDroneName(topic);
+            ensureDroneParameters(drone_name);
+
+            pub_total_[drone_name] = nh_.advertise<geometry_msgs::Vector3>("/" + drone_name + "/disturbance_force", 10);
+            pub_static_[drone_name] = nh_.advertise<geometry_msgs::Vector3>("/" + drone_name + "/disturbance_static", 10);
+
+            if (noise_generators_.find(drone_name) == noise_generators_.end()) {
+                noise_generators_[drone_name] = PinkNoise3D();
+            }
+        }
+
+        // 2. Oryantasyon topic'lerini tara.
+        const std::vector<std::string> orient_topics = getTopicsByType("actual_euler_angles", "geometry_msgs/Vector3");
+        for (const auto& topic : orient_topics) {
+            if (sub_orient_.find(topic) != sub_orient_.end()) {
+                continue;
+            }
+
+            sub_orient_[topic] = nh_.subscribe<geometry_msgs::Vector3>(
+                topic, 10, boost::bind(&DroneDisturbanceManager::eulerCallback, this, _1, topic));
+        }
+
+        last_topic_check_ = ros::Time::now();
     }
 
     void logDroneCount() {
@@ -288,136 +403,142 @@ private:
         }
     }
 
-    // ======================================================================================
-    // 4. HESAPLAMA DÖNGÜSÜ (OPTIMIZED)
-    // ======================================================================================
+    // ==================================================================================
+    // 4. HESAPLAMA DÖNGÜSÜ: MANUSCRIPT MODEL + OPTIMIZED GRID
+    // ==================================================================================
     void computeAndPublishDisturbancesOptimized() {
-        std::map<std::string, Eigen::Vector3d> acc_total_world;
-        std::map<std::string, Eigen::Vector3d> acc_static_world;
-        
-        // --- 4.1. Spatial Hashing (Grid Doldurma) ---
-        grid_map_cache_.clear(); 
+        std::map<std::string, Eigen::Vector3d> total_linear_world;
+        std::map<std::string, Eigen::Vector3d> total_squared_world;
+        std::map<std::string, Eigen::Vector3d> static_linear_world;
+        std::map<std::string, Eigen::Vector3d> static_squared_world;
+
+        // --- 4.1. Spatial hashing ---
+        grid_map_cache_.clear();
         for (const auto& pair : drone_positions_) {
-            // Başlangıçta kuvvetleri sıfırla
-            acc_total_world[pair.first] = Eigen::Vector3d::Zero();
-            acc_static_world[pair.first] = Eigen::Vector3d::Zero();
-            
-            // Grid'e yerleştir
-            GridKey key = getGridKey(pair.second);
-            grid_map_cache_[key].push_back(pair.first);
+            const std::string& drone_name = pair.first;
+
+            total_linear_world[drone_name] = Eigen::Vector3d::Zero();
+            total_squared_world[drone_name] = Eigen::Vector3d::Zero();
+            static_linear_world[drone_name] = Eigen::Vector3d::Zero();
+            static_squared_world[drone_name] = Eigen::Vector3d::Zero();
+
+            const GridKey key = getGridKey(pair.second);
+            grid_map_cache_[key].push_back(drone_name);
         }
 
-        // Ön hesaplama: 2*sigma^2
-        double two_sigma_sq = 2.0 * std::pow(sigma_, 2);
+        // --- 4.2. Pairwise aerodynamic interaction ---
+        for (const auto& source_pair : drone_positions_) {
+            const std::string source_name = source_pair.first;
+            const geometry_msgs::Vector3 source_pos_msg = source_pair.second;
 
-        // --- 4.2. Etkileşim Hesaplama ---
-        for (const auto& pair : drone_positions_) {
-            std::string top_name = pair.first; // Kaynak Drone (Rüzgarı Üreten)
-            geometry_msgs::Vector3 top_pos_msg = pair.second;
-            
-            // Dönüşüm Matrislerini Hazırla
-            Eigen::Vector3d P_top_world(top_pos_msg.x, top_pos_msg.y, top_pos_msg.z);
-            Eigen::Quaterniond Q_top = drone_orientations_[top_name];
-            
-            Eigen::Matrix3d R_top_to_world = Q_top.toRotationMatrix(); // Body -> World
-            Eigen::Matrix3d R_world_to_top = R_top_to_world.transpose(); // World -> Body
+            const Eigen::Vector3d p_source_world(source_pos_msg.x, source_pos_msg.y, source_pos_msg.z);
+            const Eigen::Quaterniond q_source = drone_orientations_[source_name].normalized();
 
-            GridKey current_key = getGridKey(top_pos_msg);
+            const Eigen::Matrix3d R_source_to_world = q_source.toRotationMatrix();
+            const Eigen::Matrix3d R_world_to_source = R_source_to_world.transpose();
+            const Eigen::Matrix3d W_source = influenceMatrixForSource(source_name);
 
-            // Sadece komşu grid hücrelerini tara (27 Hücre)
-            for (int dx = -1; dx <= 1; ++dx) {
-                for (int dy = -1; dy <= 1; ++dy) {
-                    for (int dz = -1; dz <= 1; ++dz) {
-                        GridKey neighbor_key = {current_key.x + dx, current_key.y + dy, current_key.z + dz};
+            const GridKey source_key = getGridKey(source_pos_msg);
 
-                        auto it = grid_map_cache_.find(neighbor_key);
-                        if (it != grid_map_cache_.end()) {
-                            const auto& neighbors = it->second;
-                            for (const auto& bot_name : neighbors) {
-                                if (top_name == bot_name) continue; // Kendisiyle etkileşmez
-                                
-                                geometry_msgs::Vector3 bot_pos_msg = drone_positions_[bot_name]; // Hedef Drone (Etkilenen)
-                                Eigen::Vector3d P_bot_world(bot_pos_msg.x, bot_pos_msg.y, bot_pos_msg.z);
+            for (int dx = -neighbor_range_; dx <= neighbor_range_; ++dx) {
+                for (int dy = -neighbor_range_; dy <= neighbor_range_; ++dy) {
+                    for (int dz = -neighbor_range_; dz <= neighbor_range_; ++dz) {
+                        const GridKey neighbor_key = {
+                            source_key.x + dx,
+                            source_key.y + dy,
+                            source_key.z + dz
+                        };
 
-                                // 1. Bağıl Vektör (World Frame)
-                                Eigen::Vector3d P_rel_world = P_bot_world - P_top_world;
+                        const auto grid_it = grid_map_cache_.find(neighbor_key);
+                        if (grid_it == grid_map_cache_.end()) {
+                            continue;
+                        }
 
-                                // 2. Bağıl Vektör (Body Frame - Üstteki drone'un bakış açısı)
-                                Eigen::Vector3d P_rel_body = R_world_to_top * P_rel_world;
-
-                                // 3. Kontrol: Hedef drone, Kaynak drone'un "altında" mı?
-                                // Body Frame'de Z ekseni yukarı bakar. Alt taraf -Z yönüdür.
-                                if (P_rel_body.z() < 0) { 
-                                    
-                                    // Yatay uzaklık (Body Frame XY düzlemi)
-                                    double dist_xy_sq = (P_rel_body.x() * P_rel_body.x()) + (P_rel_body.y() * P_rel_body.y());
-                                    
-                                    // Exponential Cutoff Kontrolü (Ağır işlemlerden kaçınmak için)
-                                    double exp_power_term = dist_xy_sq / two_sigma_sq;
-
-                                    if (exp_power_term < 5.0) { // Eğer etki çok zayıf değilse
-                                        
-                                        double d_z = std::abs(P_rel_body.z()); 
-                                        
-                                        // Birim Yön Vektörü (Body Frame)
-                                        // Bu vektör aşağı doğru (-Z) bakacaktır.
-                                        Eigen::Vector3d n_vec_body = P_rel_body.normalized();
-
-                                        double decay_factor = (1.0 / (std::pow(d_z, 2) + z0_)) * std::exp(-exp_power_term);
-                                        
-                                        // 4. Statik Kuvvet Hesabı (Body Frame)
-                                        // DÜZELTME: (-) işareti kaldırıldı. n_vec zaten aşağı bakıyor.
-                                        // Kuvvet rüzgar yönündedir (aşağı).
-                                        Eigen::Vector3d f_static_body = k_matrix_ * n_vec_body * decay_factor;
-
-                                        // 5. Pink Noise (Türbülans) Hesabı
-                                        // Türbülans akışla birlikte oluşur, bu yüzden Body Frame'de eklenir.
-                                        if (noise_generators_.find(bot_name) == noise_generators_.end()) {
-                                            noise_generators_[bot_name] = PinkNoise3D();
-                                        }
-
-                                        Eigen::Vector3d noise_vector = noise_generators_[bot_name].getVector();
-                                        Eigen::Vector3d f_static_abs = f_static_body.cwiseAbs();
-                                        Eigen::Vector3d f_turb_body = f_static_abs.cwiseProduct(noise_vector * turb_intensity_);
-                                        
-                                        // Toplam Kuvvet (4 pervane etkisi)
-                                        Eigen::Vector3d f_total_body = (f_static_body + f_turb_body) * 4.0;
-                                        Eigen::Vector3d f_static_only_body = f_static_body * 4.0;
-
-                                        // 6. World Frame'e Dönüş
-                                        // Fizik motoru (Gazebo/ROS) için kuvveti dünya eksenine çeviriyoruz.
-                                        Eigen::Vector3d f_total_world = R_top_to_world * f_total_body;
-                                        Eigen::Vector3d f_static_world_vec = R_top_to_world * f_static_only_body;
-
-                                        // Toplama Ekle
-                                        acc_total_world[bot_name] += f_total_world;
-                                        acc_static_world[bot_name] += f_static_world_vec;
-                                    }
-                                }
+                        const auto& candidate_targets = grid_it->second;
+                        for (const auto& target_name : candidate_targets) {
+                            if (source_name == target_name) {
+                                continue;
                             }
+
+                            const geometry_msgs::Vector3 target_pos_msg = drone_positions_[target_name];
+                            const Eigen::Vector3d p_target_world(target_pos_msg.x, target_pos_msg.y, target_pos_msg.z);
+
+                            // Manuscript Eq. (8): p_j expressed in source UAV body frame B_i.
+                            const Eigen::Vector3d p_rel_world = p_target_world - p_source_world;
+                            const Eigen::Vector3d p_rel_body = R_world_to_source * p_rel_world;
+
+                            if (!isTargetInsideDownwashColumn(p_rel_body)) {
+                                continue;
+                            }
+
+                            const double vertical_distance = std::abs(p_rel_body.z());
+                            if (vertical_distance < 1e-6 || vertical_distance > max_vertical_effect_) {
+                                continue;
+                            }
+
+                            const double sigma_s = localSigma(vertical_distance);
+                            const double lateral_sq = p_rel_body.x() * p_rel_body.x() +
+                                                      p_rel_body.y() * p_rel_body.y();
+                            const double lateral_distance = std::sqrt(lateral_sq);
+
+                            // Algorithm I: expensive exponential öncesi erken eleme.
+                            if (lateral_distance > sigma_cutoff_multiplier_ * sigma_s) {
+                                continue;
+                            }
+
+                            const double gaussian = std::exp(-lateral_sq / (2.0 * sigma_s * sigma_s));
+                            const double axial_decay = 1.0 / (vertical_distance * vertical_distance + singularity_eps_);
+
+                            // Manuscript Eq. (8): -W_i p / (p_z^2 + z0) * Gaussian.
+                            // Default ROS/Eigen z-up kullanımında source altı p_z < 0 olduğu için eşdeğer işaret +W_i p olur.
+                            const double model_sign = body_z_positive_down_ ? -1.0 : 1.0;
+                            const Eigen::Vector3d f_dw_body = model_sign * (W_source * p_rel_body) * axial_decay * gaussian;
+
+                            // Manuscript Eq. (10): f_turb = lambda * f_dw * zeta.
+                            if (noise_generators_.find(target_name) == noise_generators_.end()) {
+                                noise_generators_[target_name] = PinkNoise3D();
+                            }
+
+                            const Eigen::Vector3d zeta = noise_generators_[target_name].getVector();
+                            const Eigen::Vector3d f_turb_body = turb_intensity_ * f_dw_body.cwiseProduct(zeta);
+
+                            // Manuscript Eq. (12): f_dist = f_dw + f_turb.
+                            const Eigen::Vector3d f_dist_body = f_dw_body + f_turb_body;
+
+                            // Source body frame -> world frame.
+                            const Eigen::Vector3d f_dw_world = R_source_to_world * f_dw_body;
+                            const Eigen::Vector3d f_dist_world = R_source_to_world * f_dist_body;
+
+                            // Manuscript Eq. (13): linear summation yerine sign-preserving RSS.
+                            accumulateRSS(static_linear_world, static_squared_world, target_name, f_dw_world);
+                            accumulateRSS(total_linear_world, total_squared_world, target_name, f_dist_world);
                         }
                     }
                 }
             }
         }
 
-        // --- 4.3. Yayınlama (Publish) ---
-        for (const auto& pair : acc_total_world) {
-            std::string d_name = pair.first;
-            
-            // Toplam Kuvvet (Statik + Türbülans) -> World Frame
-            geometry_msgs::Vector3 msg_total;
-            msg_total.x = pair.second.x();
-            msg_total.y = pair.second.y();
-            msg_total.z = pair.second.z();
-            pub_total_[d_name].publish(msg_total);
+        // --- 4.3. Publish ---
+        for (const auto& pair : total_linear_world) {
+            const std::string& drone_name = pair.first;
 
-            // Sadece Statik (Görselleştirme için) -> World Frame
+            const Eigen::Vector3d f_total_world = signPreservingRSS(
+                total_linear_world[drone_name], total_squared_world[drone_name]);
+
+            const Eigen::Vector3d f_static_world = signPreservingRSS(
+                static_linear_world[drone_name], static_squared_world[drone_name]);
+
+            geometry_msgs::Vector3 msg_total;
+            msg_total.x = f_total_world.x();
+            msg_total.y = f_total_world.y();
+            msg_total.z = f_total_world.z();
+            pub_total_[drone_name].publish(msg_total);
+
             geometry_msgs::Vector3 msg_static;
-            msg_static.x = acc_static_world[d_name].x();
-            msg_static.y = acc_static_world[d_name].y();
-            msg_static.z = acc_static_world[d_name].z();
-            pub_static_[d_name].publish(msg_static);
+            msg_static.x = f_static_world.x();
+            msg_static.y = f_static_world.y();
+            msg_static.z = f_static_world.z();
+            pub_static_[drone_name].publish(msg_static);
         }
     }
 };
