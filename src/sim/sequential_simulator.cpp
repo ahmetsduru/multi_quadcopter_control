@@ -109,6 +109,7 @@ void SequentialSimulator::step() {
             d.se3_out = d.se3_pos->compute(toEigen(d.traj->position()), toEigen(d.traj->velocity()),
                                            toEigen(d.traj->acceleration()), toEigen(d.traj->jerk()),
                                            d.traj->psi(), d.dyn->position(), d.dyn->velocity(),
+                                           d.dyn->acceleration(d.disturbance), d.dyn->rotation(),
                                            d.disturbance_static);
             d.mid_out.thrust = d.se3_out.thrust;
             d.mid_out.ref_angles = rotationToEuler(d.se3_out.R_d);  // for logging
@@ -125,8 +126,8 @@ void SequentialSimulator::step() {
     // 4. Low-level controllers
     for (Drone& d : drones_) {
         if (k_ % d.low_div == 0 && d.cfg.use_se3) {
-            d.torques = d.se3_att->compute(d.se3_out.R_d, d.se3_out.omega_d, d.dyn->rotation(),
-                                           d.dyn->angularVelocity());
+            d.torques = d.se3_att->compute(d.se3_out.R_d, d.se3_out.omega_d, d.se3_out.omega_dot_d,
+                                           d.dyn->rotation(), d.dyn->angularVelocity());
             d.dyn->setTorqueCommand(d.torques);
         } else if (k_ % d.low_div == 0) {
             d.torques = d.low->compute(d.mid_out.ref_angles, d.dyn->eulerAngles());
