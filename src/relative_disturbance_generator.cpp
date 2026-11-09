@@ -79,28 +79,41 @@ struct PinkNoise3D {
 // ======================================================================================
 class DroneDisturbanceManager {
 public:
-    DroneDisturbanceManager() : rate_(100.0), topic_check_interval_(1.0), drone_count_logged_(false) {
-        
-        // --- 3.1. Model Parametreleri ---
-        // Kuvvet katsayısı matrisi (k_matrix) artık her drone için KENDİ kütlesinden
+    DroneDisturbanceManager() : topic_check_interval_(1.0), drone_count_logged_(false) {
+        ros::NodeHandle pnh("~");
+
+        // --- 3.1. Model Parametreleri (hepsi ~özel parametre olarak değiştirilebilir) ---
+        // Kuvvet katsayısı matrisi (k_matrix) her drone için KENDİ kütlesinden
         // hesaplanır (bkz. getKMatrix). Kütle /<drone>/state_derivative_solver_node/mass
-        // parametresinden okunur.
-        default_mass_ = 0.382;
-        c_coup_ = 0.09; // Eşleşme katsayısı
-        r_lat_ = 0.05;  // Yanal etki katsayısı
+        // parametresinden okunur; bulunamazsa default_mass kullanılır.
+        pnh.param("default_mass", default_mass_, 0.382);
+        pnh.param("c_coup", c_coup_, 0.09);  // Eşleşme katsayısı
+        pnh.param("r_lat", r_lat_, 0.05);    // Yanal etki katsayısı
 
         // Downwash Model Parametreleri
-        z0_ = 0.05;
-        sigma_ = 0.15;
-        turb_intensity_ = 0.70;
+        // Azalma terimi: 1 / (dz^2 + z0^2). z0 = sqrt(0.05) ~ 0.2236 m seçilerek
+        // z0^2 = 0.05 m^2 olur; yani kuvvet büyüklükleri eski modelle (1 / (dz^2 + 0.05)) aynıdır.
+        pnh.param("z0", z0_, std::sqrt(0.05));
+        pnh.param("sigma", sigma_, 0.15);
+        pnh.param("turb_intensity", turb_intensity_, 0.70);
+
+        // Döngü frekansı (Hz). Varsayılan 500 Hz = eom düğümünün frekansı (dt = 0.002),
+        // böylece bozucu kuvvet eom'un her adımında güncellenir.
+        pnh.param("rate", rate_hz_, 500.0);
+
+        // Bu süreden (s) uzun süredir konum mesajı gelmeyen drone hesaba katılmaz.
+        pnh.param("position_timeout", position_timeout_, 0.5);
+
+        ROS_INFO("Disturbance Manager: c_coup=%.4f r_lat=%.4f z0=%.4f (z0^2=%.4f) sigma=%.4f "
+                 "turb_intensity=%.3f rate=%.1f Hz position_timeout=%.2f s",
+                 c_coup_, r_lat_, z0_, z0_ * z0_, sigma_, turb_intensity_, rate_hz_, position_timeout_);
 
         // --- 3.2. Etki Menzili ---
         // Yatay: exp(-r^2 / 2sigma^2) < exp(-5) olduğunda etki ihmal edilir (r > ~3.16 sigma).
         // Dikey: varsayılan olarak SINIR YOK (1/(dz^2+z0^2) yumuşak şekilde azalır, kesme
         // kaynaklı kuvvet sıçraması olmaz). ~max_vertical_range > 0 verilirse
         // üstteki drone'un gövde ekseninde |dz| > max_vertical_range olan etkileşimler ihmal edilir.
-        ros::NodeHandle pnh_range("~");
-        pnh_range.param("max_vertical_range", max_vertical_range_, -1.0);
+        pnh.param("max_vertical_range", max_vertical_range_, -1.0);
         if (max_vertical_range_ > 0.0) {
             ROS_INFO("Disturbance Manager: max_vertical_range = %.3f m", max_vertical_range_);
         } else {
@@ -127,30 +140,34 @@ public:
         // ~noise_seed >= 0 ise türbülans her çalıştırmada aynı dizi ile üretilir.
         // -1 verilirse eski davranış (rastgele tohum) kullanılır.
         int seed_param = 42;
-        ros::NodeHandle pnh("~");
         pnh.param("noise_seed", seed_param, 42);
         noise_seed_ = seed_param;
         ROS_INFO("Disturbance Manager: noise_seed = %lld%s", noise_seed_,
                  noise_seed_ < 0 ? " (random)" : " (deterministic)");
 
+        // İlk döngüde topic taraması hemen yapılsın (1 s beklemeden)
         last_topic_check_ = ros::Time::now();
+        first_topic_check_ = true;
     }
 
     void run() {
+        ros::Rate rate(rate_hz_);
         while (ros::ok()) {
             checkNewTopics();   // Yeni drone'ları keşfet
             logDroneCount();    // Bilgi ver
             computeAndPublishDisturbancesOptimized(); // Ana hesaplama
             ros::spinOnce();
-            rate_.sleep();
+            rate.sleep();
         }
     }
 
 private:
     ros::NodeHandle nh_;
-    ros::Rate rate_;
+    double rate_hz_;
+    double position_timeout_;
     ros::Time last_topic_check_;
     ros::Duration topic_check_interval_;
+    bool first_topic_check_ = true;
     bool drone_count_logged_;
     
     // Model Değişkenleri
@@ -161,6 +178,7 @@ private:
 
     // Drone Verileri
     std::map<std::string, geometry_msgs::Vector3> drone_positions_;
+    std::map<std::string, ros::Time> drone_last_update_; // Son konum mesajı zamanı
     std::map<std::string, Eigen::Quaterniond> drone_orientations_;
 
     // ROS İletişimi
@@ -214,13 +232,17 @@ private:
         return k_matrices_[drone_name] = k;
     }
 
-    // İlgili Topic'leri Bulma
-    std::vector<std::string> getTopicsByType(const std::string& key_phrase, const std::string& type) {
+    // İlgili Topic'leri Bulma: isim "/<ns>/<suffix>" biçiminde ve tam olarak suffix ile bitmeli
+    // (örn. "/drone1/actual_position" eşleşir, "/drone1/actual_position_filtered" eşleşmez).
+    std::vector<std::string> getTopicsByType(const std::string& suffix, const std::string& type) {
         ros::master::V_TopicInfo master_topics;
         ros::master::getTopics(master_topics);
         std::vector<std::string> found_topics;
         for (const auto& topic : master_topics) {
-            if (topic.name.find(key_phrase) != std::string::npos && topic.datatype == type) {
+            const std::string& name = topic.name;
+            bool ends_with = name.size() > suffix.size() &&
+                             name.compare(name.size() - suffix.size(), suffix.size(), suffix) == 0;
+            if (ends_with && topic.datatype == type) {
                 found_topics.push_back(topic.name);
             }
         }
@@ -249,6 +271,7 @@ private:
         adjusted_position.z = msg->z + offset.z;
         
         drone_positions_[drone_name] = adjusted_position;
+        drone_last_update_[drone_name] = ros::Time::now();
     }
 
     void eulerCallback(const geometry_msgs::Vector3::ConstPtr& msg, const std::string& topic_name) {
@@ -269,7 +292,8 @@ private:
 
     // --- TOPIC KONTROLÜ ---
     void checkNewTopics() {
-        if ((ros::Time::now() - last_topic_check_) > topic_check_interval_) {
+        if (first_topic_check_ || (ros::Time::now() - last_topic_check_) > topic_check_interval_) {
+            first_topic_check_ = false;
             
             // 1. Pozisyon Topic'lerini Tara
             std::vector<std::string> pos_topics = getTopicsByType("/actual_position", "geometry_msgs/Vector3");
@@ -292,7 +316,7 @@ private:
             }
 
             // 2. Oryantasyon Topic'lerini Tara (reference_euler_angles)
-            std::vector<std::string> orient_topics = getTopicsByType("actual_euler_angles", "geometry_msgs/Vector3");
+            std::vector<std::string> orient_topics = getTopicsByType("/actual_euler_angles", "geometry_msgs/Vector3");
             for (const auto& topic : orient_topics) {
                 if (sub_orient_.find(topic) == sub_orient_.end()) {
                     sub_orient_[topic] = nh_.subscribe<geometry_msgs::Vector3>(
@@ -325,9 +349,13 @@ private:
         // Her drone'un gürültü üreteci her döngü adımında TAM BİR KEZ ilerler.
         // Böylece pembe gürültünün zaman ölçeği etkileşim sayısından bağımsız olur.
         std::map<std::string, Eigen::Vector3d> noise_now;
+        std::map<std::string, bool> active; // Konumu güncel olan drone'lar
+        const ros::Time now = ros::Time::now();
         for (const auto& pair : drone_positions_) {
             acc_total_world[pair.first] = Eigen::Vector3d::Zero();
             acc_static_world[pair.first] = Eigen::Vector3d::Zero();
+            active[pair.first] = position_timeout_ <= 0.0 ||
+                !((now - drone_last_update_[pair.first]) > ros::Duration(position_timeout_));
 
             auto it = noise_generators_.find(pair.first);
             if (it == noise_generators_.end()) {
@@ -343,6 +371,7 @@ private:
         // --- 4.2. Etkileşim Hesaplama ---
         for (const auto& top : drone_positions_) {
             const std::string& top_name = top.first; // Kaynak Drone (Rüzgarı Üreten)
+            if (!active[top_name]) continue;          // Eski (bayat) konum
             Eigen::Vector3d P_top_world(top.second.x, top.second.y, top.second.z);
 
             // Dönüşüm Matrisleri
@@ -353,6 +382,7 @@ private:
             for (const auto& bot : drone_positions_) {
                 const std::string& bot_name = bot.first; // Hedef Drone (Etkilenen)
                 if (top_name == bot_name) continue;      // Kendisiyle etkileşmez
+                if (!active[bot_name]) continue;          // Eski (bayat) konum
 
                 Eigen::Vector3d P_bot_world(bot.second.x, bot.second.y, bot.second.z);
 
