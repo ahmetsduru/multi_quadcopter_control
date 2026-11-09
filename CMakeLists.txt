@@ -103,6 +103,23 @@ add_executable(multi_data_logger src/data_logger.cpp)
 target_link_libraries(multi_data_logger ${catkin_LIBRARIES} ${Boost_LIBRARIES})
 add_dependencies(multi_data_logger ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
+## Deterministic sequential simulation (single node, fixed execution order)
+find_package(Eigen3 QUIET)
+add_library(mqc_sim_core STATIC
+  src/sim/quad_dynamics.cpp
+  src/sim/controllers.cpp
+  src/sim/trajectory_sequencer.cpp
+  src/sim/downwash_model.cpp
+  src/sim/drone_log_writer.cpp
+  src/sim/sequential_simulator.cpp
+)
+target_include_directories(mqc_sim_core PUBLIC include ${EIGEN3_INCLUDE_DIRS} ${EIGEN3_INCLUDE_DIR})
+set_target_properties(mqc_sim_core PROPERTIES COMPILE_FLAGS "${CRITICAL_OPT_FLAGS}" POSITION_INDEPENDENT_CODE ON)
+
+add_executable(multi_sequential_sim src/sequential_sim_node.cpp)
+target_link_libraries(multi_sequential_sim mqc_sim_core ${catkin_LIBRARIES} ${Boost_LIBRARIES})
+add_dependencies(multi_sequential_sim ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+
 #############
 ## Install ##
 #############
@@ -116,6 +133,7 @@ install(TARGETS
   multi_rviz_data_handler
   relative_disturbance_generator
   multi_data_logger
+  multi_sequential_sim
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
