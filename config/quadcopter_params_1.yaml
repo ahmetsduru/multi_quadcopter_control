@@ -1,16 +1,16 @@
 mid_level_controller:
   # PID gains for thrust, phi, theta
-  kp_thrust_x: 1.0
+  kp_thrust_x: 2.0
   ki_thrust_x: 0.0
-  kd_thrust_x: 0.2
+  kd_thrust_x: 0.6
 
-  kp_thrust_y: 1.0
+  kp_thrust_y: 2.0
   ki_thrust_y: 0.0
-  kd_thrust_y: 0.2
+  kd_thrust_y: 0.6
 
-  kp_thrust_z: 4.5
+  kp_thrust_z: 15.0
   ki_thrust_z: 0.0
-  kd_thrust_z: 2.0
+  kd_thrust_z: 5.0
 
   integral_min: 0.0
   integral_max: 0.5
