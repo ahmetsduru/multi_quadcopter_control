@@ -17,7 +17,9 @@
 %   Table 2 RMSE/ISE: feedforward aktif vs pasif           -> log_dir + ablation_log_dir
 %   (Fig. S2 için: fig_S2_downwash_field.m)
 %
-% Gerekli simülasyon koşuları (her biri ayrı log klasörüne yazar):
+% Gerekli simülasyon koşularının hepsi tek komutla çalıştırılabilir (her biri ayrı log klasörüne yazar):
+%   rosrun multi_quadcopter_control run_paper_sims.sh
+% veya tek tek:
 %   1) Önerilen kontrolcü (controller:=pid_ff, varsayılan; beta = 0.05) -> log/
 %      roslaunch multi_quadcopter_control sequential_sim.launch rviz:=false real_time_factor:=0 shutdown_on_finish:=true
 %   2) Ablasyon (controller:=pid, feedforward yok) -> log_no_feedforward/
@@ -28,6 +30,7 @@
 % Eksik klasörlere bağlı grafikler uyarı verilerek atlanır.
 
 clear; clc; close all;
+warning('off', 'MATLAB:print:ContentTypeImageSuggested');   % vektör EPS isteniyor
 
 %% === AYARLAR ===
 num_drones = 5;
@@ -70,6 +73,10 @@ zoom_zlim    = [1.9 3.0];
 % Çubuk grafikleri (Fig. 2, 8, S6): her sparse_factor örnekten biri (500 Hz log -> 0.6 s)
 sparse_factor = 300;
 
+% Çizgi grafikleri her plot_step örnekten birini çizer (500 Hz log -> 100 Hz). Vektör EPS dosyalarını
+% küçültür ve hızlandırır; metrikler (RMSE, ISE) ve çubuk grafikleri her zaman tam veriyi kullanır.
+plot_step = 5;
+
 % Grafik stili
 font_name = 'Times New Roman';
 font_size = 20;
@@ -93,16 +100,16 @@ axis_names     = ["x", "y", "z"];
 S = struct('font_name', font_name, 'font_size', font_size, 'line_w', line_w, 't_max', t_axis_max);
 
 %% === VERİ OKUMA (her dosya bir kez) ===
-D = readLogs(log_dir, num_drones);
+D = readLogs(log_dir, num_drones, plot_step);
 valid = find([D.ok]);
 if isempty(valid)
     error('Hiç log dosyası okunamadı. log_dir = %s', log_dir);
 end
 fprintf('Ana koşu: %d drone logu okundu (%s)\n', numel(valid), log_dir);
 
-D_abl  = readLogs(ablation_log_dir, num_drones);
-D_beta = readLogs(beta_log_dir, num_drones);
-D_geo  = readLogs(geo_log_dir, num_drones);
+D_abl  = readLogs(ablation_log_dir, num_drones, plot_step);
+D_beta = readLogs(beta_log_dir, num_drones, plot_step);
+D_geo  = readLogs(geo_log_dir, num_drones, plot_step);
 
 %% === Fig. 1 - POZİSYON + Z ZOOM ===
 fig = figure;
@@ -113,10 +120,10 @@ for a = 1:3
         lgd_handles(end+1) = plot(ax, NaN, NaN, ':k', 'LineWidth', line_w, 'DisplayName', 'Desired'); %#ok<SAGROW>
     end
     for i = valid
-        h = plot(ax, D(i).t, D(i).T{:, "a_pos." + axis_names(a)}, '-', 'Color', colors(i,:), ...
+        h = plot(ax, D(i).tp, D(i).Tp{:, "a_pos." + axis_names(a)}, '-', 'Color', colors(i,:), ...
                  'LineWidth', line_w, 'DisplayName', sprintf('Q %d', i));
         if a == 1, lgd_handles(end+1) = h; else, h.HandleVisibility = 'off'; end %#ok<SAGROW>
-        plot(ax, D(i).t, D(i).T{:, "r_pos." + axis_names(a)}, ':k', 'LineWidth', line_w, ...
+        plot(ax, D(i).tp, D(i).Tp{:, "r_pos." + axis_names(a)}, ':k', 'LineWidth', line_w, ...
              'HandleVisibility', 'off');
     end
     yl = ylim(ax);
@@ -146,8 +153,8 @@ for w = 1:size(zoom_windows, 1)
     ax_zoom = axes(fig, 'Position', [main_pos(1) + inset_x(w), inset_y, main_pos(3) * 0.25, inset_height]);
     box(ax_zoom, 'on'); hold(ax_zoom, 'on');
     for i = valid
-        plot(ax_zoom, D(i).t, D(i).T{:, "a_pos.z"}, 'Color', colors(i,:), 'LineWidth', line_w);
-        plot(ax_zoom, D(i).t, D(i).T{:, "r_pos.z"}, ':k', 'LineWidth', line_w);
+        plot(ax_zoom, D(i).tp, D(i).Tp{:, "a_pos.z"}, 'Color', colors(i,:), 'LineWidth', line_w);
+        plot(ax_zoom, D(i).tp, D(i).Tp{:, "r_pos.z"}, ':k', 'LineWidth', line_w);
     end
     xlim(ax_zoom, zoom_windows(w, :));
     ylim(ax_zoom, zoom_zlim);
@@ -194,9 +201,9 @@ for a = 1:3
     ax = subplot(3, 1, a); hold(ax, 'on');
     all_vals = [];
     for i = valid
-        v = D(i).T{:, "dist_f." + axis_names(a)};
+        v = D(i).Tp{:, "dist_f." + axis_names(a)};
         all_vals = [all_vals; v]; %#ok<AGROW>
-        h = plot(ax, D(i).t, v, 'LineWidth', line_w, 'Color', colors(i,:), 'DisplayName', sprintf('Q %d', i));
+        h = plot(ax, D(i).tp, v, 'LineWidth', line_w, 'Color', colors(i,:), 'DisplayName', sprintf('Q %d', i));
         if a == 1, lgd_handles(end+1) = h; else, h.HandleVisibility = 'off'; end %#ok<SAGROW>
     end
     ylim(ax, padLimits(all_vals, 0.1));
@@ -219,9 +226,9 @@ if ismember("ndob_f.x", D(valid(1)).T.Properties.VariableNames)
         ax = subplot(3, 1, a); hold(ax, 'on');
         all_vals = [];
         for i = valid
-            v = D(i).T{:, "ndob_f." + axis_names(a)};
+            v = D(i).Tp{:, "ndob_f." + axis_names(a)};
             all_vals = [all_vals; v]; %#ok<AGROW>
-            h = plot(ax, D(i).t, v, 'LineWidth', line_w, 'Color', colors(i,:), 'DisplayName', sprintf('Q %d', i));
+            h = plot(ax, D(i).tp, v, 'LineWidth', line_w, 'Color', colors(i,:), 'DisplayName', sprintf('Q %d', i));
             if a == 1, lgd_handles(end+1) = h; else, h.HandleVisibility = 'off'; end %#ok<SAGROW>
         end
         ylim(ax, padLimits(all_vals, 0.1));
@@ -243,9 +250,9 @@ ax = axes(fig); hold(ax, 'on');
 lgd_handles = gobjects(0);
 all_vals = [];
 for i = valid
-    v = D(i).T{:, "r_thr"};
+    v = D(i).Tp{:, "r_thr"};
     all_vals = [all_vals; v]; %#ok<AGROW>
-    lgd_handles(end+1) = plot(ax, D(i).t, v, 'LineWidth', line_w, 'Color', colors(i,:), ...
+    lgd_handles(end+1) = plot(ax, D(i).tp, v, 'LineWidth', line_w, 'Color', colors(i,:), ...
                               'DisplayName', sprintf('Q %d', i)); %#ok<SAGROW>
 end
 ylim(ax, padLimits(all_vals, 0.1));
@@ -342,9 +349,10 @@ fprintf('Grafikler "%s" klasörüne ve "%s" dosyasına kaydedildi.\n', eps_folde
 %% =====================================================================
 %% YARDIMCI FONKSİYONLAR
 %% =====================================================================
-function D = readLogs(dir_path, num_drones)
-    % droneN_log.txt dosyalarını okur; bulunamayanlar ok = false
-    D = repmat(struct('ok', false, 't', [], 'T', []), num_drones, 1);
+function D = readLogs(dir_path, num_drones, plot_step)
+    % droneN_log.txt dosyalarını okur; bulunamayanlar ok = false.
+    % T/t: tam veri (metrikler, çubuklar), Tp/tp: çizgi grafikleri için seyreltilmiş veri
+    D = repmat(struct('ok', false, 't', [], 'T', [], 'tp', [], 'Tp', []), num_drones, 1);
     if isempty(dir_path) || ~isfolder(dir_path), return; end
     for i = 1:num_drones
         filename = fullfile(dir_path, sprintf('drone%d_log.txt', i));
@@ -353,6 +361,8 @@ function D = readLogs(dir_path, num_drones)
         D(i).ok = true;
         D(i).T  = T;
         D(i).t  = T{:, "time"} - T{1, "time"};
+        D(i).Tp = T(1:plot_step:end, :);
+        D(i).tp = D(i).t(1:plot_step:end);
     end
 end
 
@@ -445,13 +455,13 @@ function plotStateFigure(D, valid, act_prefix, ref_prefix, ylabels, zones, zone_
         end
         all_vals = [];
         for i = valid
-            v = D(i).T{:, act_prefix + axis_names(a)};
-            r = D(i).T{:, ref_prefix + axis_names(a)};
+            v = D(i).Tp{:, act_prefix + axis_names(a)};
+            r = D(i).Tp{:, ref_prefix + axis_names(a)};
             all_vals = [all_vals; v; r]; %#ok<AGROW>
-            h = plot(ax, D(i).t, v, '-', 'Color', colors(i,:), 'LineWidth', S.line_w, ...
+            h = plot(ax, D(i).tp, v, '-', 'Color', colors(i,:), 'LineWidth', S.line_w, ...
                      'DisplayName', sprintf('Q %d', i));
             if a == 1, lgd_handles(end+1) = h; else, h.HandleVisibility = 'off'; end %#ok<AGROW>
-            plot(ax, D(i).t, r, ':k', 'LineWidth', S.line_w, 'HandleVisibility', 'off');
+            plot(ax, D(i).tp, r, ':k', 'LineWidth', S.line_w, 'HandleVisibility', 'off');
         end
         ylim(ax, padLimits(all_vals, 0.1));
         addZones(ax, zones, zone_cols);
@@ -494,7 +504,7 @@ end
 function plotFigS5(Dd, wp, path_color, font_name, eps_folder, output_pdf)
     % Hibrit yörünge: 3B ve XY görünüm, waypoint setleri ve atlanan ara noktalar (numaralı)
     wp_colors = {[1 0.2 0.2], [0.2 0.6 1], [0.2 0.8 0.2], [0.9 0.8 0]};
-    T = Dd.T;
+    T = Dd.Tp;
     px = T{:, "a_pos.x"}; py = T{:, "a_pos.y"}; pz = T{:, "a_pos.z"};
 
     % Atlanan waypointler: yeni set geçiş segmentinin başında alındığı için sonraki noktalara

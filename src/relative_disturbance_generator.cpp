@@ -87,7 +87,7 @@ public:
         // hesaplanır (bkz. getKMatrix). Kütle /<drone>/state_derivative_solver_node/mass
         // parametresinden okunur; bulunamazsa default_mass kullanılır.
         pnh.param("default_mass", default_mass_, 0.382);
-        pnh.param("c_coup", c_coup_, 0.09);  // Eşleşme katsayısı
+        pnh.param("c_coup", c_coup_, 0.065);  // Eşleşme katsayısı (Tablo S2)
         pnh.param("r_lat", r_lat_, 0.05);    // Yanal etki katsayısı
 
         // Downwash Model Parametreleri

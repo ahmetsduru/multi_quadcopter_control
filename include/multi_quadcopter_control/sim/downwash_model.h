@@ -34,7 +34,7 @@ struct PinkNoise3D {
 };
 
 struct DownwashParams {
-    double c_coup = 0.09;
+    double c_coup = 0.065;            // Table S2
     double r_lat = 0.05;
     double z0 = 0.22360679774997896;  // sqrt(0.05) -> z0^2 = 0.05
     double sigma = 0.15;

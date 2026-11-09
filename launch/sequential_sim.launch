@@ -86,7 +86,8 @@
 
     <node if="$(arg rviz)" name="rviz" pkg="rviz" type="rviz" args="-d $(find multi_quadcopter_control)/rviz/quad_rviz.rviz" output="screen"/>
 
-    <node name="sequential_sim" pkg="multi_quadcopter_control" type="multi_sequential_sim" output="screen">
+    <!-- required: shutdown_on_finish:=true olduğunda roslaunch da kapanır -->
+    <node name="sequential_sim" pkg="multi_quadcopter_control" type="multi_sequential_sim" output="screen" required="true">
         <param name="real_time_factor" value="$(arg real_time_factor)"/>
         <param name="sim_duration" value="$(arg sim_duration)"/>
         <param name="end_hold_time" value="$(arg end_hold_time)"/>
@@ -108,7 +109,7 @@
         <param name="noise_seed" value="$(arg noise_seed)"/>
         <param name="max_vertical_range" value="$(arg max_vertical_range)"/>
         <param name="z0" value="0.22360679774997896"/>
-        <param name="c_coup" value="0.09"/>
+        <param name="c_coup" value="0.065"/>
         <param name="r_lat" value="0.05"/>
         <param name="sigma" value="0.15"/>
         <param name="turb_intensity" value="0.30"/>

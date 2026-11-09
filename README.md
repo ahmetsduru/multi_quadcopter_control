@@ -143,7 +143,13 @@ r_pos.xyz, r_vel.xyz, r_acc.xyz, r_eul_ang.xyz, r_torq.xyz, dist_f.xyz, [ndob_f.
 
 ## Reproducing the figures
 
-1. Run the simulations (each writes to its own folder):
+1. Run the simulations (each writes to its own folder). All three in one go:
+
+   ```bash
+   rosrun multi_quadcopter_control run_paper_sims.sh
+   ```
+
+   or one by one:
 
    ```bash
    roscd multi_quadcopter_control
@@ -159,6 +165,8 @@ r_pos.xyz, r_vel.xyz, r_acc.xyz, r_eul_ang.xyz, r_torq.xyz, dist_f.xyz, [ndob_f.
    `scripts/EPS_Results/` and all figures to `scripts/all_drones_plots_fixed.pdf`.
    Fig. 2 and Table 1 also need the logs of the SE(3) geometric controller: set `geo_log_dir` at
    the top of `main.m`. Figures whose input folder is missing are skipped with a warning.
+   Line plots use every 5th sample (100 Hz) to keep the vector EPS files small; metrics and bar
+   plots use the full 500 Hz data.
 
 3. Fig. S2 (downwash force and velocity field) is computed from the model by
    `scripts/fig_S2_downwash_field.m`.
