@@ -111,6 +111,6 @@
         <param name="c_coup" value="0.09"/>
         <param name="r_lat" value="0.05"/>
         <param name="sigma" value="0.15"/>
-        <param name="turb_intensity" value="0.70"/>
+        <param name="turb_intensity" value="0.30"/>
     </node>
 </launch>

@@ -95,7 +95,7 @@ public:
         // z0^2 = 0.05 m^2 olur; yani kuvvet büyüklükleri eski modelle (1 / (dz^2 + 0.05)) aynıdır.
         pnh.param("z0", z0_, std::sqrt(0.05));
         pnh.param("sigma", sigma_, 0.15);
-        pnh.param("turb_intensity", turb_intensity_, 0.70);
+        pnh.param("turb_intensity", turb_intensity_, 0.30);
 
         // Döngü frekansı (Hz). Varsayılan 500 Hz = eom düğümünün frekansı (dt = 0.002),
         // böylece bozucu kuvvet eom'un her adımında güncellenir.

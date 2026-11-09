@@ -185,7 +185,7 @@ int main(int argc, char** argv) {
     pnh.param("r_lat", cfg.downwash.r_lat, 0.05);
     pnh.param("z0", cfg.downwash.z0, std::sqrt(0.05));
     pnh.param("sigma", cfg.downwash.sigma, 0.15);
-    pnh.param("turb_intensity", cfg.downwash.turb_intensity, 0.70);
+    pnh.param("turb_intensity", cfg.downwash.turb_intensity, 0.30);
     pnh.param("max_vertical_range", cfg.downwash.max_vertical_range, -1.0);
     cfg.downwash.noise_seed = noise_seed;
     cfg.disturbance_enabled = disturbance_enabled;

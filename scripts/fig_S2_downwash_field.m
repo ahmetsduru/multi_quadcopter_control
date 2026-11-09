@@ -15,7 +15,7 @@ C_coup         = 0.09;           % c_coup
 r_lat          = 0.05;           % r_lat
 z0             = sqrt(0.05);     % z0 (z0^2 = 0.05)
 sigma          = 0.15;           % sigma (m)
-turb_intensity = 0.70;           % turb_intensity
+turb_intensity = 0.30;           % turb_intensity (lambda)
 rho_air        = 1.225;
 noise_seed     = 42;             % gürültü haritası tekrarlanabilir olsun
 

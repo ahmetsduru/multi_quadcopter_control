@@ -98,7 +98,7 @@
         <param name="c_coup" value="0.09"/>
         <param name="r_lat" value="0.05"/>
         <param name="sigma" value="0.15"/>
-        <param name="turb_intensity" value="0.70"/>
+        <param name="turb_intensity" value="0.30"/>
         <!-- Döngü frekansı (Hz): eom ile aynı (500 Hz). Eski davranış için 100 -->
         <param name="rate" value="500.0"/>
         <!-- Bu süreden uzun konum mesajı gelmeyen drone hesaba katılmaz (s), 0: kapalı -->
