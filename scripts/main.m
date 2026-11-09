@@ -18,12 +18,12 @@
 %   (Fig. S2 için: fig_S2_downwash_field.m)
 %
 % Gerekli simülasyon koşuları (her biri ayrı log klasörüne yazar):
-%   1) Önerilen kontrolcü (feedforward aktif, beta = 0.05) -> log/
-%      roslaunch multi_quadcopter_control sequential_sim.launch rviz:=false real_time_factor:=0 shutdown_on_finish:=true disturbance_feedforward:=true
+%   1) Önerilen kontrolcü (PID, feedforward aktif - varsayılan, beta = 0.05) -> log/
+%      roslaunch multi_quadcopter_control sequential_sim.launch rviz:=false real_time_factor:=0 shutdown_on_finish:=true
 %   2) Ablasyon (feedforward pasif) -> log_no_feedforward/
 %      roslaunch multi_quadcopter_control sequential_sim.launch rviz:=false real_time_factor:=0 shutdown_on_finish:=true disturbance_feedforward:=false log_dir:=$(rospack find multi_quadcopter_control)/log_no_feedforward
 %   3) Yaw filtresi beta = 0.1 -> log_beta_0.1/
-%      roslaunch multi_quadcopter_control sequential_sim.launch rviz:=false real_time_factor:=0 shutdown_on_finish:=true disturbance_feedforward:=true psi_filter_beta:=0.1 log_dir:=$(rospack find multi_quadcopter_control)/log_beta_0.1
+%      roslaunch multi_quadcopter_control sequential_sim.launch rviz:=false real_time_factor:=0 shutdown_on_finish:=true psi_filter_beta:=0.1 log_dir:=$(rospack find multi_quadcopter_control)/log_beta_0.1
 %   4) SE(3) geometrik kontrolcü logları: ayrı depodan (geo_log_dir)
 % Eksik klasörlere bağlı grafikler uyarı verilerek atlanır.
 

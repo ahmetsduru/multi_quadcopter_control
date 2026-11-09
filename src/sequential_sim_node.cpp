@@ -191,7 +191,6 @@ int main(int argc, char** argv) {
     cfg.disturbance_enabled = disturbance_enabled;
     cfg.disturbance_rate = disturbance_rate;
     // Controller / trajectory options (same for every drone)
-    pnh.param("disturbance_feedforward", disturbance_feedforward, false);  // f_des -= f_dw (Eq. 21)
     pnh.param("psi_filter_beta", psi_filter_beta, 0.05);                   // yaw low-pass beta (Eq. 19)
     // Mid-level controller: "pid" (hierarchical PID) or "ndob" (PID + nonlinear disturbance observer)
     pnh.param("controller_type", controller_type, std::string("pid"));
@@ -205,6 +204,12 @@ int main(int argc, char** argv) {
         return 1;
     }
     const bool ndob_mode = (mid_mode == MidLevelMode::NDOB);
+    // Modelled-downwash feedforward f_des -= f_dw (Eq. 21). If not set explicitly:
+    // ON for PID (the disturbance-aware controller), OFF for NDOB (the observer already
+    // estimates the disturbance; enabling both would compensate it twice).
+    if (!pnh.getParam("disturbance_feedforward", disturbance_feedforward)) {
+        disturbance_feedforward = !ndob_mode;
+    }
     if (log_decimation < 1) log_decimation = 1;
 
     // ---------------- Drones
