@@ -86,7 +86,11 @@
     
     <!-- Rviz and data node -->
     <node name="rviz" pkg="rviz" type="rviz" args="-d $(find multi_quadcopter_control)/rviz/quad_rviz.rviz" output="screen"/>
-    <node name="relative_disturbance_generator" pkg="multi_quadcopter_control" type="relative_disturbance_generator" output="screen" launch-prefix="nice -n -5"/>
+    <!-- noise_seed >= 0: tekrarlanabilir türbülans, -1: her çalıştırmada rastgele -->
+    <arg name="noise_seed" default="42"/>
+    <node name="relative_disturbance_generator" pkg="multi_quadcopter_control" type="relative_disturbance_generator" output="screen" launch-prefix="nice -n -5">
+        <param name="noise_seed" value="$(arg noise_seed)"/>
+    </node>
     <param name="num_drones" value="5" />
     <node name="data_logger" pkg="multi_quadcopter_control" type="multi_data_logger" output="screen" launch-prefix="nice -n -5"/>
 </launch>

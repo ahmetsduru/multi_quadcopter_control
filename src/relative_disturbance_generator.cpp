@@ -17,9 +17,15 @@
 // MATLAB'daki spektral yöntemin Real-Time çalışan karşılığıdır.
 class PinkNoiseGenerator {
 public:
-    PinkNoiseGenerator() : counter_(0) {
-        std::random_device rd;
-        gen_ = std::mt19937(rd());
+    // seed < 0  -> her çalıştırmada farklı (std::random_device)
+    // seed >= 0 -> tekrarlanabilir (deterministik) gürültü dizisi
+    explicit PinkNoiseGenerator(long long seed = -1) : counter_(0) {
+        if (seed < 0) {
+            std::random_device rd;
+            gen_ = std::mt19937(rd());
+        } else {
+            gen_ = std::mt19937(static_cast<std::mt19937::result_type>(seed));
+        }
         dist_ = std::uniform_real_distribution<double>(-1.0, 1.0);
         // Başlangıç durumunu rastgele doldur
         for (int i = 0; i < NUM_ROWS; ++i) rows_[i] = dist_(gen_);
@@ -58,6 +64,12 @@ private:
 // 3 Eksen (X, Y, Z) için bağımsız gürültü yapısı
 struct PinkNoise3D {
     PinkNoiseGenerator px, py, pz;
+    PinkNoise3D() = default;
+    // Her eksen için farklı ama base_seed'den türetilmiş tohum
+    explicit PinkNoise3D(long long base_seed)
+        : px(base_seed < 0 ? -1 : base_seed * 3 + 0),
+          py(base_seed < 0 ? -1 : base_seed * 3 + 1),
+          pz(base_seed < 0 ? -1 : base_seed * 3 + 2) {}
     Eigen::Vector3d getVector() {
         return Eigen::Vector3d(px.next(), py.next(), pz.next());
     }
@@ -139,6 +151,16 @@ public:
             drone_orientations_[drone_name] = Eigen::Quaterniond::Identity(); // Varsayılan: Düz
         }
 
+        // --- 3.4. Gürültü Tohumu (Tekrarlanabilirlik) ---
+        // ~noise_seed >= 0 ise türbülans her çalıştırmada aynı dizi ile üretilir.
+        // -1 verilirse eski davranış (rastgele tohum) kullanılır.
+        int seed_param = 42;
+        ros::NodeHandle pnh("~");
+        pnh.param("noise_seed", seed_param, 42);
+        noise_seed_ = seed_param;
+        ROS_INFO("Disturbance Manager: noise_seed = %lld%s", noise_seed_,
+                 noise_seed_ < 0 ? " (random)" : " (deterministic)");
+
         grid_map_cache_.reserve(1000);
         last_topic_check_ = ros::Time::now();
     }
@@ -179,6 +201,17 @@ private:
     // Optimizasyon Yapıları
     std::unordered_map<GridKey, std::vector<std::string>, GridKeyHash> grid_map_cache_;
     std::map<std::string, PinkNoise3D> noise_generators_;
+    long long noise_seed_ = 42;
+
+    // Drone ismine bağlı tohum: keşfedilme sırasından bağımsız olsun diye
+    // (master topic listesi her çalıştırmada farklı sırada gelebilir).
+    PinkNoise3D makeNoiseFor(const std::string& drone_name) {
+        if (noise_seed_ < 0) return PinkNoise3D(-1);
+        long long id = 0;
+        for (char c : drone_name) id = id * 131 + static_cast<unsigned char>(c);
+        id &= 0x3FFFFFFF;
+        return PinkNoise3D((noise_seed_ * 1000003LL + id) & 0x3FFFFFFFFFFFLL);
+    }
 
     // --- YARDIMCI FONKSİYONLAR ---
     
@@ -263,7 +296,7 @@ private:
                     
                     // Gürültü üretecini başlat
                     if (noise_generators_.find(drone_name) == noise_generators_.end()) {
-                        noise_generators_[drone_name] = PinkNoise3D();
+                        noise_generators_[drone_name] = makeNoiseFor(drone_name);
                     }
                 }
             }
@@ -373,7 +406,7 @@ private:
                                         // 5. Pink Noise (Türbülans) Hesabı
                                         // Türbülans akışla birlikte oluşur, bu yüzden Body Frame'de eklenir.
                                         if (noise_generators_.find(bot_name) == noise_generators_.end()) {
-                                            noise_generators_[bot_name] = PinkNoise3D();
+                                            noise_generators_[bot_name] = makeNoiseFor(bot_name);
                                         }
 
                                         Eigen::Vector3d noise_vector = noise_generators_[bot_name].getVector();
