@@ -54,7 +54,8 @@ SequentialSimulator::SequentialSimulator(const SimConfig& config, const std::vec
             d.se3_att.reset(new Se3AttitudeController(sa));
             d.se3_out.thrust = dc.quad.mass * 9.81;
         }
-        d.traj.reset(new TrajectorySequencer(dc.trajectories, dc.is_psi_active, dc.psi_filter_beta));
+        d.traj.reset(new TrajectorySequencer(dc.trajectories, dc.is_psi_active, dc.psi_filter_beta,
+                                             dc.trajectory_time_scale));
         d.mid_div = divisor(dc.mid.dt, dc.name + " mid_level_controller/dt");
         d.low_div = divisor(dc.low.dt, dc.name + " low_level_controller/dt");
         d.next_traj_step = 0;

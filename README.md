@@ -66,9 +66,10 @@ f_des = Kp e_p + Ki ∫e_p + Kd e_v + m a_des + m g - f_comp
 | `pid` | `0` | No disturbance compensation (ablation) |
 | `ndob` | `Δf` | Disturbance estimated by a nonlinear disturbance observer |
 
-A fourth option, `controller:=se3`, runs the geometric SE(3) controller of Lee et al., ported from
+`controller:=se3_ff` runs the geometric SE(3) controller of Lee et al., ported from
 [multi_quadcopter_geometric_control](https://github.com/ahmetsduru/multi_quadcopter_geometric_control),
-with the same downwash feedforward `f_dw` as `pid_ff`, the same rates and thrust limits. Its gains are
+with the same downwash feedforward `f_dw` as `pid_ff`, the same rates and thrust limits;
+`controller:=se3` is the same controller without feedforward. Its gains are
 in the `se3_mid_level_controller` / `se3_low_level_controller` sections of the parameter files.
 
 Gain tuning (PID and SE(3), same procedure): the position gains `(kp_xy, kd_xy)` were selected on a
@@ -83,6 +84,7 @@ roslaunch multi_quadcopter_control sequential_sim.launch controller:=pid_ff
 roslaunch multi_quadcopter_control sequential_sim.launch controller:=pid
 roslaunch multi_quadcopter_control sequential_sim.launch controller:=ndob
 roslaunch multi_quadcopter_control sequential_sim.launch controller:=se3
+roslaunch multi_quadcopter_control sequential_sim.launch controller:=se3_ff
 ```
 
 Without disturbance (`disturbance_enabled:=false`) `pid_ff` and `pid` give identical results.
@@ -119,6 +121,7 @@ mid-level rate this discretization error grows: at 20 Hz it increases the tracki
 | `noise_seed` | `42` | Turbulence noise seed; `-1` = random seed on every run |
 | `max_vertical_range` | `-1.0` | Ignore downwash interactions farther than this vertical distance (m); `-1` = no limit |
 | `psi_filter_beta` | `0.05` | Low-pass coefficient β of the trajectory-aligned yaw angle |
+| `trajectory_time_scale` | `1.0` | Multiplies all waypoint times; < 1 gives faster, more aggressive trajectories (0.5 = twice as fast) |
 | `log_dir` | `<package>/log` | Folder for the log files |
 
 Downwash model parameters (`c_coup`, `r_lat`, `z0`, `sigma`, `turb_intensity`, `disturbance_rate`)

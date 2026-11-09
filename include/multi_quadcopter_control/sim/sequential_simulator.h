@@ -33,6 +33,7 @@ struct DroneConfig {
     std::vector<TrajectorySpec> trajectories;
     bool is_psi_active = true;
     double psi_filter_beta = 0.05;
+    double trajectory_time_scale = 1.0;  // < 1: faster trajectories
 
     // Geometric SE(3) controller instead of the PID family (mid/low params then only give the rates)
     bool use_se3 = false;

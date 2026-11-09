@@ -22,10 +22,13 @@ double midPID(double des_pos, double a_pos, double des_vel, double a_vel, double
     return kp * pos_error + ki * integral + kd * vel_error;
 }
 
-// Same as LowLevelNS::computePID
+// Same as LowLevelNS::computePID. wrap_angle: wrap the error to [-pi, pi] (yaw), otherwise a reference
+// near -pi and a measurement near +pi give a ~2 pi error and the controller turns the wrong way.
 double lowPID(double setpoint, double measured_value, double& prev_error, double& integral,
-              double kp, double ki, double kd, double dt, double integral_min, double integral_max) {
+              double kp, double ki, double kd, double dt, double integral_min, double integral_max,
+              bool wrap_angle = false) {
     double error = setpoint - measured_value;
+    if (wrap_angle) error = std::remainder(error, 2.0 * M_PI);  // unchanged when |error| < pi
 
     integral += error * dt;
     if (integral > integral_max) {
@@ -159,7 +162,7 @@ Eigen::Vector3d LowLevelController::compute(const Eigen::Vector3d& ref_angles, c
     double t2 = lowPID(ref_angles.y(), euler.y(), prev_error_.y(), integral_.y(),
                        p_.kp2, p_.ki2, p_.kd2, p_.dt, p_.integral_min, p_.integral_max);
     double t3 = lowPID(ref_angles.z(), euler.z(), prev_error_.z(), integral_.z(),
-                       p_.kp3, p_.ki3, p_.kd3, p_.dt, p_.integral_min, p_.integral_max);
+                       p_.kp3, p_.ki3, p_.kd3, p_.dt, p_.integral_min, p_.integral_max, true);
     return Eigen::Vector3d(t1, t2, t3);
 }
 

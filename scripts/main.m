@@ -29,7 +29,7 @@
 %   3) Yaw filtresi beta = 0.1 -> log_beta_0.1/
 %      roslaunch multi_quadcopter_control sequential_sim.launch rviz:=false real_time_factor:=0 shutdown_on_finish:=true psi_filter_beta:=0.1 log_dir:=$(rospack find multi_quadcopter_control)/log_beta_0.1
 %   4) Geometrik SE(3) kontrolcü -> log_se3/
-%      roslaunch multi_quadcopter_control sequential_sim.launch rviz:=false real_time_factor:=0 shutdown_on_finish:=true controller:=se3 log_dir:=$(rospack find multi_quadcopter_control)/log_se3
+%      roslaunch multi_quadcopter_control sequential_sim.launch rviz:=false real_time_factor:=0 shutdown_on_finish:=true controller:=se3_ff log_dir:=$(rospack find multi_quadcopter_control)/log_se3
 % Eksik klasörlere bağlı grafikler uyarı verilerek atlanır.
 
 clear; clc; close all;
@@ -45,7 +45,7 @@ pkg_dir    = fullfile(script_dir, '..');
 log_dir          = fullfile(pkg_dir, 'log');                  % önerilen kontrolcü (ana koşu)
 ablation_log_dir = fullfile(pkg_dir, 'log_no_feedforward');   % Fig. 8 / Table 2
 beta_log_dir     = fullfile(pkg_dir, 'log_beta_0.1');         % Fig. S6
-geo_log_dir      = fullfile(pkg_dir, 'log_se3');              % Fig. 2 / Table 1: SE(3) kontrolcü (controller:=se3)
+geo_log_dir      = fullfile(pkg_dir, 'log_se3');              % Fig. 2 / Table 1: SE(3) kontrolcü (controller:=se3_ff)
 config_dir       = fullfile(pkg_dir, 'config');               % Fig. S5 waypointleri
 
 beta_main   = 0.05;   % log_dir koşusundaki psi_filter_beta
@@ -524,6 +524,11 @@ function plotStateFigure(D, valid, act_prefix, ref_prefix, ylabels, zones, zone_
         for i = valid
             v = D(i).Tp{:, act_prefix + axis_names(a)};
             r = D(i).Tp{:, ref_prefix + axis_names(a)};
+            if act_prefix == "a_eul_ang." && a == 3
+                % yaw: gerçek açı +/-pi'ye sarılı, referans sürekli -> ikisini de sürekli çiz
+                v = unwrap(v); r = unwrap(r);
+                k0 = round((r(1) - v(1)) / (2 * pi)); v = v + 2 * pi * k0;
+            end
             all_vals = [all_vals; v; r]; %#ok<AGROW>
             h = plot(ax, D(i).tp, v, '-', 'Color', colors(i,:), 'LineWidth', S.line_w, ...
                      'DisplayName', sprintf('Q %d', i));

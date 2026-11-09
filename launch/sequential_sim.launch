@@ -21,10 +21,13 @@
          pid_ff : hiyerarşik PID + downwash ileri beslemesi f_des = ... - f_dw (makale Denk. 21)  [varsayılan]
          pid    : hiyerarşik PID, ileri besleme yok (ablasyon)
          ndob   : PID + doğrusal olmayan bozucu gözlemcisi (NDOB)
-         se3    : geometrik SE(3) kontrolcü (Lee ve ark.) + downwash ileri beslemesi -->
+         se3    : geometrik SE(3) kontrolcü (Lee ve ark.), ileri besleme yok
+         se3_ff : geometrik SE(3) kontrolcü + downwash ileri beslemesi -->
     <arg name="controller" default="pid_ff"/>
     <!-- Yörünge yönlü yaw açısı alçak geçiren filtre katsayısı beta (makale Denk. 19) -->
     <arg name="psi_filter_beta" default="0.05"/>
+    <!-- Yörünge zaman ölçeği: 1 = normal, < 1 = daha hızlı / agresif (0.5 = iki kat hızlı) -->
+    <arg name="trajectory_time_scale" default="1.0"/>
     <!-- Log klasörü (karşılaştırma koşuları için farklı klasör verilebilir) -->
     <arg name="log_dir" default="$(find multi_quadcopter_control)/log"/>
 
@@ -95,6 +98,7 @@
         <param name="shutdown_on_finish" value="$(arg shutdown_on_finish)"/>
         <param name="controller_type" value="$(arg controller)"/>
         <param name="psi_filter_beta" value="$(arg psi_filter_beta)"/>
+        <param name="trajectory_time_scale" value="$(arg trajectory_time_scale)"/>
         <!-- RViz / topic yayın frekansları (simülasyon zamanında, Hz) -->
         <param name="viz_rate" value="30.0"/>
         <param name="path_rate" value="10.0"/>

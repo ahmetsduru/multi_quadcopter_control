@@ -226,7 +226,8 @@ int main(int argc, char** argv) {
     // Mid-level controller:
     //   pid_ff : hierarchical PID + modelled-downwash feedforward f_des -= f_dw (Eq. 21)  [default]
     //   pid    : hierarchical PID without feedforward (ablation)
-    //   se3    : geometric SE(3) controller (Lee et al.) with the same downwash feedforward as pid_ff
+    //   se3    : geometric SE(3) controller (Lee et al.) without feedforward
+    //   se3_ff : geometric SE(3) controller with the same downwash feedforward as pid_ff
     //   ndob   : PID + nonlinear disturbance observer (no model feedforward; the observer
     //            estimates the disturbance, enabling both would compensate it twice)
     pnh.param("controller_type", controller_type, std::string("pid_ff"));
@@ -240,16 +241,25 @@ int main(int argc, char** argv) {
     } else if (controller_type == "ndob") {
         mid_mode = MidLevelMode::NDOB;
         disturbance_feedforward = false;
-    } else if (controller_type == "se3") {
-        mid_mode = MidLevelMode::PID;  // unused
-        disturbance_feedforward = true;
+    } else if (controller_type == "se3" || controller_type == "se3_ff") {
+        mid_mode = MidLevelMode::PID;  // unused by SE(3)
+        disturbance_feedforward = (controller_type == "se3_ff");
     } else {
-        ROS_FATAL("Sequential sim: unknown controller_type '%s' (use 'pid_ff', 'pid', 'ndob' or 'se3')",
+        ROS_FATAL("Sequential sim: unknown controller_type '%s' (use 'pid_ff', 'pid', 'ndob', 'se3' or 'se3_ff')",
                   controller_type.c_str());
         return 1;
     }
     const bool ndob_mode = (mid_mode == MidLevelMode::NDOB);
+    const bool se3_mode = (controller_type == "se3" || controller_type == "se3_ff");
     if (log_decimation < 1) log_decimation = 1;
+
+    // Time scaling of all trajectories (< 1: faster / more aggressive, e.g. 0.5 = twice as fast)
+    double trajectory_time_scale;
+    pnh.param("trajectory_time_scale", trajectory_time_scale, 1.0);
+    if (!(trajectory_time_scale > 0.0)) {
+        ROS_FATAL("Sequential sim: trajectory_time_scale must be > 0");
+        return 1;
+    }
 
     // ---------------- Drones
     int num_drones = 1;
@@ -262,19 +272,20 @@ int main(int argc, char** argv) {
             DroneConfig dc = loadDrone(nh, "drone" + std::to_string(i));
             dc.mid.disturbance_feedforward = disturbance_feedforward;
             dc.mid.mode = mid_mode;
-            if (controller_type == "se3") {
+            if (se3_mode) {
                 if (!nh.hasParam("/" + dc.name + "/se3_mid_level_controller/kp_thrust_x")) {
                     throw std::runtime_error(dc.name + ": se3_mid_level_controller / se3_low_level_controller "
                                              "parameters are missing");
                 }
                 dc.use_se3 = true;
-                dc.se3_pos.disturbance_feedforward = true;
+                dc.se3_pos.disturbance_feedforward = disturbance_feedforward;
             }
             if (ndob_mode) {
                 ROS_INFO("Sequential sim: %s NDOB gains lv = [%.3f %.3f %.3f]", dc.name.c_str(),
                          dc.mid.lv_x, dc.mid.lv_y, dc.mid.lv_z);
             }
             dc.psi_filter_beta = psi_filter_beta;
+            dc.trajectory_time_scale = trajectory_time_scale;
             drones.push_back(dc);
         }
         if (drones.empty()) throw std::runtime_error("num_drones must be >= 1");
@@ -285,10 +296,11 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    ROS_INFO("Sequential sim: controller '%s' (%s), psi_filter_beta=%.3f", controller_type.c_str(),
-             controller_type == "se3" ? "geometric SE(3) + downwash feedforward"
-             : ndob_mode ? "PID + NDOB" : (disturbance_feedforward ? "PID + downwash feedforward" : "PID, no feedforward"),
-             psi_filter_beta);
+    ROS_INFO("Sequential sim: controller '%s' (%s%s), psi_filter_beta=%.3f, trajectory_time_scale=%.3f",
+             controller_type.c_str(),
+             se3_mode ? "geometric SE(3)" : (ndob_mode ? "PID + NDOB" : "PID"),
+             ndob_mode ? "" : (disturbance_feedforward ? " + downwash feedforward" : ", no feedforward"),
+             psi_filter_beta, trajectory_time_scale);
     ROS_INFO("Sequential sim: %d drones, dt=%.4f s, disturbance %s (%.0f Hz, noise_seed=%d, z0=%.4f), "
              "real_time_factor=%.2f",
              num_drones, cfg.dt, disturbance_enabled ? "on" : "off", disturbance_rate, noise_seed,
