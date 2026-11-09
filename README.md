@@ -168,15 +168,10 @@ r_pos.xyz, r_vel.xyz, r_acc.xyz, r_eul_ang.xyz, r_torq.xyz, dist_f.xyz, [ndob_f.
    Line plots use every 5th sample (100 Hz) to keep the vector EPS files small; metrics and bar
    plots use the full 500 Hz data.
 
-   `main.m` also computes formation performance indices (Fig. F1-F3, `Table3_formation.csv`,
-   `Table4_neighbor_pairs.csv`). Neighbours are time-varying: drones whose desired (reference)
-   distance is below `neighbor_radius` (3 m). For a neighbour pair (i, j):
-
-   - relative position (formation) error `e_ij = (p_i - p_j) - (p_i^ref - p_j^ref)`
-   - relative distance error `e_d,ij = ||p_i - p_j|| - ||p_i^ref - p_j^ref||` (negative: closer than desired)
-   - swarm formation error `E_F = sqrt(mean over neighbour pairs of ||e_ij||^2)`
-   - per-UAV formation error `e_F,i = mean over neighbours j of ||e_ij||`
-   - minimum inter-UAV distance (actual and desired)
+   `main.m` also computes formation indices (Fig. F1, `Table3_formation.csv`) for neighbouring
+   UAVs (desired distance below `neighbor_radius` = 3 m): the relative distance error
+   `e_d,ij = ||p_i - p_j|| - ||p_i^ref - p_j^ref||` and the formation error
+   `e_ij = (p_i - p_j) - (p_i^ref - p_j^ref)`, each as an RMS over the neighbour pairs (`E_d`, `E_F`).
 
 3. Fig. S2 (downwash force and velocity field) is computed from the model by
    `scripts/fig_S2_downwash_field.m`.

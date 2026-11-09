@@ -15,11 +15,8 @@
 %   Fig. S6 Drone 2 yönelim hatası, beta karşılaştırması   -> log_dir + beta_log_dir
 %   Table 1 RMSE/ISE: önerilen vs SE(3)                    -> log_dir + geo_log_dir
 %   Table 2 RMSE/ISE: feedforward aktif vs pasif           -> log_dir + ablation_log_dir
-%   Fig. F1 Sürü formasyon hatası (kontrolcü karşılaştırması) -> log_dir (+ ablation_log_dir, geo_log_dir)
-%   Fig. F2 Komşu çiftlerin bağıl mesafe hatası ve İHA başına formasyon hatası -> log_dir
-%   Fig. F3 En küçük İHA'lar arası mesafe (gerçek / istenen)  -> log_dir (+ ablation_log_dir)
-%   Table 3 Formasyon hatası metrikleri (kontrolcü karşılaştırması)
-%   Table 4 Komşu çiftlerin bağıl mesafe / bağıl konum hataları (önerilen kontrolcü)
+%   Fig. F1 Komşu İHA'lar arası bağıl mesafe hatası ve formasyon hatası -> log_dir (+ ablation_log_dir, geo_log_dir)
+%   Table 3 Bağıl mesafe ve formasyon hatası (RMS, maks.)
 %   (Fig. S2 için: fig_S2_downwash_field.m)
 %
 % Gerekli simülasyon koşularının hepsi tek komutla çalıştırılabilir (her biri ayrı log klasörüne yazar):
@@ -56,7 +53,7 @@ s6_drone    = 2;      % Fig. S6 drone'u
 fig8_drones = [2 3];  % Fig. 8 drone'ları
 s5_drone    = 1;      % Fig. S5 drone'u
 
-% Formasyon ölçütleri (Fig. F1-F3, Table 3-4)
+% Formasyon ölçütleri (Fig. F1, Table 3)
 % Komşuluk zamana bağlıdır: referans (istenen) mesafesi neighbor_radius'tan küçük olan çiftler
 % o anda komşudur (formasyon uçuş boyunca değiştiği için sabit bir graf kullanılmaz).
 neighbor_radius = 3.0;   % m
@@ -327,125 +324,54 @@ else
     warning('Fig. S6 atlandı: beta logları bulunamadı (%s).', beta_log_dir);
 end
 
-%% === FORMASYON ÖLÇÜTLERİ (Fig. F1-F3, Table 3-4) ===
-% Her İHA kendi referansını izler: p_i^ref(t) = p_c(t) + Delta_i(t). Formasyon, referanslar
-% arasındaki bağıl konumlarla tanımlıdır. Komşu çift (i,j) için:
-%   bağıl konum hatası    e_ij  = (p_i - p_j) - (p_i^ref - p_j^ref)
-%   bağıl mesafe hatası   e_d,ij = ||p_i - p_j|| - ||p_i^ref - p_j^ref||   (< 0: istenenden yakın)
-%   sürü formasyon hatası E_F   = sqrt( mean_{(i,j) komşu} ||e_ij||^2 )
-%   İHA formasyon hatası  e_F,i = mean_{j komşu} ||e_ij||
+%% === FORMASYON ÖLÇÜTLERİ (Fig. F1, Table 3) ===
+% Komşu çift (i,j) için (komşu: istenen mesafe <= neighbor_radius):
+%   bağıl mesafe hatası  e_d,ij = ||p_i - p_j|| - ||p_i^ref - p_j^ref||
+%   formasyon hatası     e_ij   = (p_i - p_j) - (p_i^ref - p_j^ref)
+% Her an komşu çiftler üzerinden RMS alınır: E_d(t), E_F(t).
 runs_F   = {D, D_abl, D_geo};
 labels_F = {'Proposed (PID + FF)', 'Without feedforward', 'SE(3) Controller'};
 cols_F   = {[0 0.4470 0.7410], [0.8500 0.3250 0.0980], dark_gray};
 F = cell(1, 3);
 for r = 1:3
-    if any([runs_F{r}.ok]) && all([runs_F{r}.ok])
+    if all([runs_F{r}.ok])
         F{r} = formationMetrics(runs_F{r}, neighbor_radius);
     end
 end
 avail_F = find(~cellfun(@isempty, F));
 
-% --- Fig. F1: sürü formasyon hatası ---
 fig = figure;
-ax = axes(fig); hold(ax, 'on');
+fields_F  = {'Ed', 'EF'};
+ylabels_F = {'E_d (m)', 'E_F (m)'};
 hs = gobjects(0);
-for r = avail_F
-    idx = 1:plot_step:numel(F{r}.t);
-    hs(end+1) = plot(ax, F{r}.t(idx), F{r}.eF(idx), 'LineWidth', line_w, 'Color', cols_F{r}, ...
-                     'DisplayName', labels_F{r}); %#ok<SAGROW>
+for a = 1:2
+    ax = subplot(2, 1, a); hold(ax, 'on');
+    for r = avail_F
+        idx = 1:plot_step:numel(F{r}.t);
+        h = plot(ax, F{r}.t(idx), F{r}.(fields_F{a})(idx), 'LineWidth', line_w, 'Color', cols_F{r}, ...
+                 'DisplayName', labels_F{r});
+        if a == 1, hs(end+1) = h; end %#ok<SAGROW>
+    end
+    yl = ylim(ax); ylim(ax, [0 yl(2) * 1.05]);
+    addZones(ax, phase_zones, c_phase);
+    styleAxes(ax, S);
+    ylabel(ax, ylabels_F{a}, 'FontWeight', 'bold', 'FontSize', font_size, 'FontName', font_name);
+    if a == 2
+        xlabel(ax, 't (s)', 'FontWeight', 'bold', 'FontSize', font_size, 'FontName', font_name);
+    end
 end
-yl = ylim(ax); ylim(ax, [0 yl(2) * 1.05]);
-addZones(ax, phase_zones, c_phase);
-styleAxes(ax, S);
-xlabel(ax, 't (s)', 'FontWeight', 'bold', 'FontSize', font_size, 'FontName', font_name);
-ylabel(ax, '||e_F|| (m)', 'FontWeight', 'bold', 'FontSize', font_size, 'FontName', font_name);
 addTopLegend(hs, [0.1 0.94 0.8 0.05], S);
 saveFigure(fig, eps_folder, 'FigF1_formation_error.eps', output_pdf);
 
-% --- Fig. F2: komşu çiftlerin bağıl mesafe hatası + İHA formasyon hatası (önerilen) ---
-Fp = F{1};
-pair_ids = find(any(Fp.nb, 1));
-pair_cols = [lines(7); 0 0 0; 0.5 0.5 0.5; 0.6 0.4 0.2];
-pair_styles = {'-', '-', '-', '-', '-', '-', '-', '--', '--', '--'};
-fig = figure('Position', [100, 100, 1000, 750]);
-ax = subplot(2, 1, 1); hold(ax, 'on');
-hs = gobjects(0);
-idx = 1:plot_step:numel(Fp.t);
-for k = pair_ids
-    v = Fp.e_dist(:, k); v(~Fp.nb(:, k)) = NaN;   % yalnızca komşu oldukları sürede
-    hs(end+1) = plot(ax, Fp.t(idx), v(idx), pair_styles{k}, 'LineWidth', 1.5, 'Color', pair_cols(k,:), ...
-                     'DisplayName', sprintf('Q%d-Q%d', Fp.pairs(k,1), Fp.pairs(k,2))); %#ok<SAGROW>
-end
-ylim(ax, padLimits(Fp.e_dist(Fp.nb), 0.1));
-addZones(ax, phase_zones, c_phase);
-styleAxes(ax, setfield(S, 'font_size', 16)); %#ok<SFLD>
-ylabel(ax, 'e_{d,ij} (m)', 'FontWeight', 'bold', 'FontSize', 16, 'FontName', font_name);
-legend(ax, hs, 'Location', 'eastoutside', 'FontSize', 11, 'FontName', font_name, 'Box', 'off');
-ax2 = subplot(2, 1, 2); hold(ax2, 'on');
-for i = 1:num_drones
-    plot(ax2, Fp.t(idx), Fp.eA(idx, i), 'LineWidth', 1.5, 'Color', colors(i,:), 'DisplayName', sprintf('Q %d', i));
-end
-yl = ylim(ax2); ylim(ax2, [0 yl(2) * 1.05]);
-addZones(ax2, phase_zones, c_phase);
-styleAxes(ax2, setfield(S, 'font_size', 16)); %#ok<SFLD>
-xlabel(ax2, 't (s)', 'FontWeight', 'bold', 'FontSize', 16, 'FontName', font_name);
-ylabel(ax2, 'e_{F,i} (m)', 'FontWeight', 'bold', 'FontSize', 16, 'FontName', font_name);
-legend(ax2, 'Location', 'eastoutside', 'FontSize', 11, 'FontName', font_name, 'Box', 'off');
-% iki eksenin genişliğini eşitle (legend'lar farklı genişlikte olabilir)
-p1 = get(ax, 'Position'); p2 = get(ax2, 'Position');
-w = min(p1(3), p2(3)); set(ax, 'Position', [p1(1) p1(2) w p1(4)]); set(ax2, 'Position', [p2(1) p2(2) w p2(4)]);
-saveFigure(fig, eps_folder, 'FigF2_relative_distance_error.eps', output_pdf);
-
-% --- Fig. F3: en küçük İHA'lar arası mesafe ---
-fig = figure;
-ax = axes(fig); hold(ax, 'on');
-hs = gobjects(0);
-hs(end+1) = plot(ax, Fp.t(idx), Fp.dmin_ref(idx), ':k', 'LineWidth', line_w, 'DisplayName', 'Desired');
-for r = avail_F
-    idx_r = 1:plot_step:numel(F{r}.t);
-    hs(end+1) = plot(ax, F{r}.t(idx_r), F{r}.dmin_act(idx_r), 'LineWidth', line_w, 'Color', cols_F{r}, ...
-                     'DisplayName', labels_F{r}); %#ok<SAGROW>
-end
-yl = ylim(ax); ylim(ax, [0 yl(2) * 1.05]);
-addZones(ax, phase_zones, c_phase);
-styleAxes(ax, S);
-xlabel(ax, 't (s)', 'FontWeight', 'bold', 'FontSize', font_size, 'FontName', font_name);
-ylabel(ax, 'min_{i\neq j} ||p_i - p_j|| (m)', 'FontWeight', 'bold', 'FontSize', font_size, 'FontName', font_name);
-addTopLegend(hs, [0.1 0.94 0.8 0.05], S);
-saveFigure(fig, eps_folder, 'FigF3_min_distance.eps', output_pdf);
-
-% --- Table 3: formasyon metrikleri (kontrolcü karşılaştırması) ---
-Controller = string(labels_F(avail_F))';
-RMS_eF_m  = cellfun(@(f) f.rms_eF, F(avail_F))';
-Max_eF_m  = cellfun(@(f) f.max_eF, F(avail_F))';
-ISE_eF    = cellfun(@(f) f.ise_eF, F(avail_F))';
-RMS_ed_m  = cellfun(@(f) f.rms_ed_all, F(avail_F))';
-Max_ed_m  = cellfun(@(f) f.max_ed_all, F(avail_F))';
-Min_dist_m = cellfun(@(f) min(f.dmin_act), F(avail_F))';
-tbl3 = table(Controller, RMS_eF_m, Max_eF_m, ISE_eF, RMS_ed_m, Max_ed_m, Min_dist_m);
-fprintf('\nTable 3: Formasyon hatası (komşu çiftler, r_N = %.1f m)\n', neighbor_radius);
+Controller   = string(labels_F(avail_F))';
+RMS_E_d_m    = cellfun(@(f) f.rms_Ed, F(avail_F))';
+Max_E_d_m    = cellfun(@(f) f.max_Ed, F(avail_F))';
+RMS_E_F_m    = cellfun(@(f) f.rms_EF, F(avail_F))';
+Max_E_F_m    = cellfun(@(f) f.max_EF, F(avail_F))';
+tbl3 = table(Controller, RMS_E_d_m, Max_E_d_m, RMS_E_F_m, Max_E_F_m);
+fprintf('\nTable 3: Bağıl mesafe ve formasyon hatası (komşu İHA çiftleri, r_N = %.1f m)\n', neighbor_radius);
 disp(tbl3);
 writetable(tbl3, fullfile(eps_folder, 'Table3_formation.csv'));
-
-% --- Table 4: komşu çiftler (önerilen kontrolcü) ---
-Pair = strings(numel(pair_ids), 1);
-Neighbor_time_pct = zeros(numel(pair_ids), 1);
-RMS_e_rel_m = Neighbor_time_pct; Max_e_rel_m = Neighbor_time_pct;
-RMS_e_d_m = Neighbor_time_pct; Max_abs_e_d_m = Neighbor_time_pct; Min_e_d_m = Neighbor_time_pct;
-for n = 1:numel(pair_ids)
-    k = pair_ids(n); m = Fp.nb(:, k);
-    Pair(n) = sprintf('Q%d-Q%d', Fp.pairs(k,1), Fp.pairs(k,2));
-    Neighbor_time_pct(n) = 100 * mean(m);
-    RMS_e_rel_m(n) = sqrt(mean(Fp.e_rel(m, k).^2));
-    Max_e_rel_m(n) = max(Fp.e_rel(m, k));
-    RMS_e_d_m(n) = sqrt(mean(Fp.e_dist(m, k).^2));
-    Max_abs_e_d_m(n) = max(abs(Fp.e_dist(m, k)));
-    Min_e_d_m(n) = min(Fp.e_dist(m, k));
-end
-tbl4 = table(Pair, Neighbor_time_pct, RMS_e_rel_m, Max_e_rel_m, RMS_e_d_m, Max_abs_e_d_m, Min_e_d_m);
-fprintf('\nTable 4: Komşu çiftler - bağıl konum ve bağıl mesafe hataları (önerilen kontrolcü)\n');
-disp(tbl4);
-writetable(tbl4, fullfile(eps_folder, 'Table4_neighbor_pairs.csv'));
 
 %% === Table 1 / Table 2 - PERFORMANS METRİKLERİ ===
 M = metrics(D);
@@ -714,42 +640,25 @@ end
 
 function F = formationCore(t, Pa, Pr, r_N)
     % Pa, Pr: T x 3 x N gerçek / referans konumlar (dünya ekseni, başlangıç ofsetleri dahil)
-    [T, ~, N] = size(Pa);
+    N = size(Pa, 3);
     pairs = nchoosek(1:N, 2);
-    P = size(pairs, 1);
-    e_rel = nan(T, P); e_dist = nan(T, P); d_act = nan(T, P); d_ref = nan(T, P);
-    for k = 1:P
-        i = pairs(k, 1); j = pairs(k, 2);
-        da = Pa(:, :, i) - Pa(:, :, j);
-        dr = Pr(:, :, i) - Pr(:, :, j);
-        d_act(:, k) = sqrt(sum(da.^2, 2));
-        d_ref(:, k) = sqrt(sum(dr.^2, 2));
-        e_rel(:, k) = sqrt(sum((da - dr).^2, 2));
-        e_dist(:, k) = d_act(:, k) - d_ref(:, k);
+    sq_d = 0; sq_f = 0; cnt = 0;
+    for k = 1:size(pairs, 1)
+        da = Pa(:, :, pairs(k, 1)) - Pa(:, :, pairs(k, 2));
+        dr = Pr(:, :, pairs(k, 1)) - Pr(:, :, pairs(k, 2));
+        nb = sqrt(sum(dr.^2, 2)) <= r_N;                       % zamana bağlı komşuluk
+        e_d = sqrt(sum(da.^2, 2)) - sqrt(sum(dr.^2, 2));       % bağıl mesafe hatası
+        e_f = sqrt(sum((da - dr).^2, 2));                      % formasyon (bağıl konum) hatası
+        sq_d = sq_d + nb .* e_d.^2;
+        sq_f = sq_f + nb .* e_f.^2;
+        cnt  = cnt + nb;
     end
-    nb = d_ref <= r_N;                               % zamana bağlı komşuluk
-
-    sq = e_rel.^2; sq(~nb) = 0;
-    cnt = sum(nb, 2);
-    eF = sqrt(sum(sq, 2) ./ max(cnt, 1)); eF(cnt == 0) = NaN;
-
-    eA = nan(T, N);
-    for i = 1:N
-        ks = find(pairs(:, 1) == i | pairs(:, 2) == i);
-        m = nb(:, ks); v = e_rel(:, ks); v(~m) = 0; c = sum(m, 2);
-        eA(:, i) = sum(v, 2) ./ max(c, 1); eA(c == 0, i) = NaN;
-    end
-
-    ok = ~isnan(eF);
-    dt = [0; diff(t(:))];
-    F.t = t(:); F.pairs = pairs; F.nb = nb;
-    F.e_rel = e_rel; F.e_dist = e_dist; F.eF = eF; F.eA = eA;
-    F.dmin_act = min(d_act, [], 2); F.dmin_ref = min(d_ref, [], 2);
-    F.rms_eF = sqrt(mean(eF(ok).^2));
-    F.max_eF = max(eF(ok));
-    F.ise_eF = sum(eF(ok).^2 .* dt(ok));
-    F.rms_ed_all = sqrt(mean(e_dist(nb).^2));
-    F.max_ed_all = max(abs(e_dist(nb)));
+    ok = cnt > 0;
+    F.t  = t(:);
+    F.Ed = nan(size(cnt)); F.Ed(ok) = sqrt(sq_d(ok) ./ cnt(ok));
+    F.EF = nan(size(cnt)); F.EF(ok) = sqrt(sq_f(ok) ./ cnt(ok));
+    F.rms_Ed = sqrt(mean(F.Ed(ok).^2)); F.max_Ed = max(F.Ed(ok));
+    F.rms_EF = sqrt(mean(F.EF(ok).^2)); F.max_EF = max(F.EF(ok));
 end
 
 function lim = padLimits(vals, frac)
