@@ -1,12 +1,12 @@
 mid_level_controller:
   # PID gains for thrust, phi, theta
-  kp_thrust_x: 2.0
+  kp_thrust_x: 3.0
   ki_thrust_x: 0.0
-  kd_thrust_x: 0.6
+  kd_thrust_x: 0.4
 
-  kp_thrust_y: 2.0
+  kp_thrust_y: 3.0
   ki_thrust_y: 0.0
-  kd_thrust_y: 0.6
+  kd_thrust_y: 0.4
 
   kp_thrust_z: 15.0
   ki_thrust_z: 0.0
@@ -38,6 +38,41 @@ low_level_controller:
   integral_max: 0.01
 
   dt: 0.004           # Time step for 250 Hz (attitude control)
+
+se3_mid_level_controller:
+  # Geometric SE(3) controller (controller:=se3). Rates (dt) and thrust limits
+  # are taken from mid_level_controller / low_level_controller.
+  # Gains tuned with the same procedure as the PID (integral terms 0, as in the PID).
+  kp_thrust_x: 1.5
+  ki_thrust_x: 0.0
+  kd_thrust_x: 1.2
+
+  kp_thrust_y: 1.5
+  ki_thrust_y: 0.0
+  kd_thrust_y: 1.2
+
+  kp_thrust_z: 15.0
+  ki_thrust_z: 0.0
+  kd_thrust_z: 5.0
+
+  integral_min: 0.0
+  integral_max: 5.0
+
+se3_low_level_controller:
+  kp_torque1: 0.02
+  ki_torque1: 0.0
+  kd_torque1: 0.01
+
+  kp_torque2: 0.02
+  ki_torque2: 0.0
+  kd_torque2: 0.01
+
+  kp_torque3: 0.02
+  ki_torque3: 0.0
+  kd_torque3: 0.01
+
+  integral_min: 0.0
+  integral_max: 1.0
 
 state_derivative_solver_node:
   # Quadcopter parameters and settings

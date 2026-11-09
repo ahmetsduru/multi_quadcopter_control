@@ -71,8 +71,10 @@ Eigen::Vector3d QuadDynamics::eulerAngles() const {
                            std::atan2(R(1, 0), R(0, 0)));
 }
 
+// f_drag = -1/2 rho C_d A ||v|| v (Eq. 14). The previous form -1/2 rho C_d A (v.*v) always pointed in
+// the negative axis directions, regardless of the direction of motion.
 Eigen::Vector3d QuadDynamics::drag(const Eigen::Vector3d& V) const {
-    return -0.5 * p_.rho * (p_.Cd_trans * p_.A_trans * V.array().square().matrix());
+    return -0.5 * p_.rho * (p_.Cd_trans * p_.A_trans * V) * V.norm();
 }
 
 Eigen::Vector3d QuadDynamics::acceleration(const Eigen::Vector3d& disturbance_force) const {

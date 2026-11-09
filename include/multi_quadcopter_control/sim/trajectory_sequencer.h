@@ -43,6 +43,7 @@ public:
     const Vec3& position() const { return m_position; }
     const Vec3& velocity() const { return m_velocity; }
     const Vec3& acceleration() const { return m_acceleration; }
+    const Vec3& jerk() const { return m_jerk; }
     double psi() const { return m_des_psi; }
 
 private:

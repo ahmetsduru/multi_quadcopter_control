@@ -19,6 +19,7 @@
 #include "multi_quadcopter_control/sim/downwash_model.h"
 #include "multi_quadcopter_control/sim/drone_log_writer.h"
 #include "multi_quadcopter_control/sim/quad_dynamics.h"
+#include "multi_quadcopter_control/sim/se3_controller.h"
 #include "multi_quadcopter_control/sim/trajectory_sequencer.h"
 
 namespace mqc_sim {
@@ -32,6 +33,11 @@ struct DroneConfig {
     std::vector<TrajectorySpec> trajectories;
     bool is_psi_active = true;
     double psi_filter_beta = 0.05;
+
+    // Geometric SE(3) controller instead of the PID family (mid/low params then only give the rates)
+    bool use_se3 = false;
+    Se3PositionParams se3_pos;
+    Se3AttitudeParams se3_att;
 };
 
 struct SimConfig {
@@ -67,6 +73,9 @@ private:
         std::unique_ptr<QuadDynamics> dyn;
         std::unique_ptr<MidLevelController> mid;
         std::unique_ptr<LowLevelController> low;
+        std::unique_ptr<Se3PositionController> se3_pos;
+        std::unique_ptr<Se3AttitudeController> se3_att;
+        Se3PositionOutput se3_out;
         std::unique_ptr<TrajectorySequencer> traj;
         long long mid_div = 1, low_div = 1;
         long long next_traj_step = 0;

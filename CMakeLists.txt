@@ -108,6 +108,7 @@ find_package(Eigen3 QUIET)
 add_library(mqc_sim_core STATIC
   src/sim/quad_dynamics.cpp
   src/sim/controllers.cpp
+  src/sim/se3_controller.cpp
   src/sim/trajectory_sequencer.cpp
   src/sim/downwash_model.cpp
   src/sim/drone_log_writer.cpp

@@ -20,7 +20,8 @@
     <!-- Orta seviye kontrolcü:
          pid_ff : hiyerarşik PID + downwash ileri beslemesi f_des = ... - f_dw (makale Denk. 21)  [varsayılan]
          pid    : hiyerarşik PID, ileri besleme yok (ablasyon)
-         ndob   : PID + doğrusal olmayan bozucu gözlemcisi (NDOB) -->
+         ndob   : PID + doğrusal olmayan bozucu gözlemcisi (NDOB)
+         se3    : geometrik SE(3) kontrolcü (Lee ve ark.) + downwash ileri beslemesi -->
     <arg name="controller" default="pid_ff"/>
     <!-- Yörünge yönlü yaw açısı alçak geçiren filtre katsayısı beta (makale Denk. 19) -->
     <arg name="psi_filter_beta" default="0.05"/>

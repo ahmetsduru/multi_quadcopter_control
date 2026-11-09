@@ -43,6 +43,17 @@ SequentialSimulator::SequentialSimulator(const SimConfig& config, const std::vec
         mid.ndob_tau_motor = dc.quad.tau_thrust;  // NDOB thrust model uses the actual actuator time constant
         d.mid.reset(new MidLevelController(mid));
         d.low.reset(new LowLevelController(dc.low));
+        if (dc.use_se3) {
+            Se3PositionParams sp = dc.se3_pos;
+            sp.dt = dc.mid.dt;
+            sp.mass = dc.quad.mass;
+            Se3AttitudeParams sa = dc.se3_att;
+            sa.dt = dc.low.dt;
+            sa.J = dc.quad.I;
+            d.se3_pos.reset(new Se3PositionController(sp));
+            d.se3_att.reset(new Se3AttitudeController(sa));
+            d.se3_out.thrust = dc.quad.mass * 9.81;
+        }
         d.traj.reset(new TrajectorySequencer(dc.trajectories, dc.is_psi_active, dc.psi_filter_beta));
         d.mid_div = divisor(dc.mid.dt, dc.name + " mid_level_controller/dt");
         d.low_div = divisor(dc.low.dt, dc.name + " low_level_controller/dt");
@@ -93,7 +104,15 @@ void SequentialSimulator::step() {
 
     // 3. Mid-level controllers
     for (Drone& d : drones_) {
-        if (k_ % d.mid_div == 0) {
+        if (k_ % d.mid_div == 0 && d.cfg.use_se3) {
+            d.se3_out = d.se3_pos->compute(toEigen(d.traj->position()), toEigen(d.traj->velocity()),
+                                           toEigen(d.traj->acceleration()), toEigen(d.traj->jerk()),
+                                           d.traj->psi(), d.dyn->position(), d.dyn->velocity(),
+                                           d.disturbance_static);
+            d.mid_out.thrust = d.se3_out.thrust;
+            d.mid_out.ref_angles = rotationToEuler(d.se3_out.R_d);  // for logging
+            d.dyn->setThrustCommand(d.se3_out.thrust);
+        } else if (k_ % d.mid_div == 0) {
             d.mid_out = d.mid->compute(toEigen(d.traj->position()), toEigen(d.traj->velocity()),
                                        toEigen(d.traj->acceleration()), d.traj->psi(),
                                        d.dyn->position(), d.dyn->velocity(), d.dyn->eulerAngles(),
@@ -104,7 +123,11 @@ void SequentialSimulator::step() {
 
     // 4. Low-level controllers
     for (Drone& d : drones_) {
-        if (k_ % d.low_div == 0) {
+        if (k_ % d.low_div == 0 && d.cfg.use_se3) {
+            d.torques = d.se3_att->compute(d.se3_out.R_d, d.se3_out.omega_d, d.dyn->rotation(),
+                                           d.dyn->angularVelocity());
+            d.dyn->setTorqueCommand(d.torques);
+        } else if (k_ % d.low_div == 0) {
             d.torques = d.low->compute(d.mid_out.ref_angles, d.dyn->eulerAngles());
             d.dyn->setTorqueCommand(d.torques);
         }

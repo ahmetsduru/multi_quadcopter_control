@@ -18,10 +18,10 @@ run() {
     fi
 }
 
-run "[1/3] Proposed controller (PID + downwash feedforward)" "${PKG}/log"                controller:=pid_ff
-run "[2/3] Ablation (PID, no feedforward; Fig. 8, Table 2)"  "${PKG}/log_no_feedforward" controller:=pid
-run "[3/3] Yaw filter beta = 0.1 (Fig. S6)"                  "${PKG}/log_beta_0.1"       controller:=pid_ff psi_filter_beta:=0.1
+run "[1/4] Proposed controller (PID + downwash feedforward)" "${PKG}/log"                controller:=pid_ff
+run "[2/4] Ablation (PID, no feedforward; Fig. 8, Table 2)"  "${PKG}/log_no_feedforward" controller:=pid
+run "[3/4] Yaw filter beta = 0.1 (Fig. S6)"                  "${PKG}/log_beta_0.1"       controller:=pid_ff psi_filter_beta:=0.1
+run "[4/4] Geometric SE(3) controller (Fig. 2, Table 1)"    "${PKG}/log_se3"            controller:=se3
 
 echo
 echo "All runs finished. Now run scripts/main.m in MATLAB."
-echo "Fig. 2 / Table 1 additionally need the SE(3) controller logs (geo_log_dir in main.m)."

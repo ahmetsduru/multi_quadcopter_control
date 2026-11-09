@@ -28,7 +28,8 @@
 %      roslaunch multi_quadcopter_control sequential_sim.launch rviz:=false real_time_factor:=0 shutdown_on_finish:=true controller:=pid log_dir:=$(rospack find multi_quadcopter_control)/log_no_feedforward
 %   3) Yaw filtresi beta = 0.1 -> log_beta_0.1/
 %      roslaunch multi_quadcopter_control sequential_sim.launch rviz:=false real_time_factor:=0 shutdown_on_finish:=true psi_filter_beta:=0.1 log_dir:=$(rospack find multi_quadcopter_control)/log_beta_0.1
-%   4) SE(3) geometrik kontrolcü logları: ayrı depodan (geo_log_dir)
+%   4) Geometrik SE(3) kontrolcü -> log_se3/
+%      roslaunch multi_quadcopter_control sequential_sim.launch rviz:=false real_time_factor:=0 shutdown_on_finish:=true controller:=se3 log_dir:=$(rospack find multi_quadcopter_control)/log_se3
 % Eksik klasörlere bağlı grafikler uyarı verilerek atlanır.
 
 clear; clc; close all;
@@ -44,7 +45,7 @@ pkg_dir    = fullfile(script_dir, '..');
 log_dir          = fullfile(pkg_dir, 'log');                  % önerilen kontrolcü (ana koşu)
 ablation_log_dir = fullfile(pkg_dir, 'log_no_feedforward');   % Fig. 8 / Table 2
 beta_log_dir     = fullfile(pkg_dir, 'log_beta_0.1');         % Fig. S6
-geo_log_dir      = '';  % Fig. 2 / Table 1: SE(3) kontrolcü logları, örn. '.../multi_quadcopter_geometric_control/log'
+geo_log_dir      = fullfile(pkg_dir, 'log_se3');              % Fig. 2 / Table 1: SE(3) kontrolcü (controller:=se3)
 config_dir       = fullfile(pkg_dir, 'config');               % Fig. S5 waypointleri
 
 beta_main   = 0.05;   % log_dir koşusundaki psi_filter_beta

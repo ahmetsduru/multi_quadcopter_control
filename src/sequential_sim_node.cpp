@@ -108,6 +108,37 @@ DroneConfig loadDrone(const ros::NodeHandle& nh, const std::string& name) {
     d.low.integral_max = requireParam<double>(nh, l + "integral_max");
     d.low.dt = requireParam<double>(nh, l + "dt");
 
+    // se3_mid_level_controller / se3_low_level_controller (used only with controller_type = se3).
+    // Rates (dt) and thrust limits are shared with mid_level_controller / low_level_controller.
+    const std::string sm = ns + "se3_mid_level_controller/";
+    if (nh.hasParam(sm + "kp_thrust_x")) {
+        d.se3_pos.kp_x = requireParam<double>(nh, sm + "kp_thrust_x");
+        d.se3_pos.ki_x = requireParam<double>(nh, sm + "ki_thrust_x");
+        d.se3_pos.kd_x = requireParam<double>(nh, sm + "kd_thrust_x");
+        d.se3_pos.kp_y = requireParam<double>(nh, sm + "kp_thrust_y");
+        d.se3_pos.ki_y = requireParam<double>(nh, sm + "ki_thrust_y");
+        d.se3_pos.kd_y = requireParam<double>(nh, sm + "kd_thrust_y");
+        d.se3_pos.kp_z = requireParam<double>(nh, sm + "kp_thrust_z");
+        d.se3_pos.ki_z = requireParam<double>(nh, sm + "ki_thrust_z");
+        d.se3_pos.kd_z = requireParam<double>(nh, sm + "kd_thrust_z");
+        d.se3_pos.integral_min = requireParam<double>(nh, sm + "integral_min");
+        d.se3_pos.integral_max = requireParam<double>(nh, sm + "integral_max");
+        const std::string sl = ns + "se3_low_level_controller/";
+        d.se3_att.kp1 = requireParam<double>(nh, sl + "kp_torque1");
+        d.se3_att.ki1 = requireParam<double>(nh, sl + "ki_torque1");
+        d.se3_att.kd1 = requireParam<double>(nh, sl + "kd_torque1");
+        d.se3_att.kp2 = requireParam<double>(nh, sl + "kp_torque2");
+        d.se3_att.ki2 = requireParam<double>(nh, sl + "ki_torque2");
+        d.se3_att.kd2 = requireParam<double>(nh, sl + "kd_torque2");
+        d.se3_att.kp3 = requireParam<double>(nh, sl + "kp_torque3");
+        d.se3_att.ki3 = requireParam<double>(nh, sl + "ki_torque3");
+        d.se3_att.kd3 = requireParam<double>(nh, sl + "kd_torque3");
+        d.se3_att.integral_min = requireParam<double>(nh, sl + "integral_min");
+        d.se3_att.integral_max = requireParam<double>(nh, sl + "integral_max");
+    }
+    d.se3_pos.min_thrust = d.mid.min_thrust;
+    d.se3_pos.max_thrust = d.mid.max_thrust;
+
     // trajectory_manager + /trajectories/<name>
     nh.param(ns + "trajectory_manager/is_psi_active", d.is_psi_active, true);
     std::vector<std::string> active =
@@ -195,6 +226,7 @@ int main(int argc, char** argv) {
     // Mid-level controller:
     //   pid_ff : hierarchical PID + modelled-downwash feedforward f_des -= f_dw (Eq. 21)  [default]
     //   pid    : hierarchical PID without feedforward (ablation)
+    //   se3    : geometric SE(3) controller (Lee et al.) with the same downwash feedforward as pid_ff
     //   ndob   : PID + nonlinear disturbance observer (no model feedforward; the observer
     //            estimates the disturbance, enabling both would compensate it twice)
     pnh.param("controller_type", controller_type, std::string("pid_ff"));
@@ -208,8 +240,11 @@ int main(int argc, char** argv) {
     } else if (controller_type == "ndob") {
         mid_mode = MidLevelMode::NDOB;
         disturbance_feedforward = false;
+    } else if (controller_type == "se3") {
+        mid_mode = MidLevelMode::PID;  // unused
+        disturbance_feedforward = true;
     } else {
-        ROS_FATAL("Sequential sim: unknown controller_type '%s' (use 'pid_ff', 'pid' or 'ndob')",
+        ROS_FATAL("Sequential sim: unknown controller_type '%s' (use 'pid_ff', 'pid', 'ndob' or 'se3')",
                   controller_type.c_str());
         return 1;
     }
@@ -227,6 +262,14 @@ int main(int argc, char** argv) {
             DroneConfig dc = loadDrone(nh, "drone" + std::to_string(i));
             dc.mid.disturbance_feedforward = disturbance_feedforward;
             dc.mid.mode = mid_mode;
+            if (controller_type == "se3") {
+                if (!nh.hasParam("/" + dc.name + "/se3_mid_level_controller/kp_thrust_x")) {
+                    throw std::runtime_error(dc.name + ": se3_mid_level_controller / se3_low_level_controller "
+                                             "parameters are missing");
+                }
+                dc.use_se3 = true;
+                dc.se3_pos.disturbance_feedforward = true;
+            }
             if (ndob_mode) {
                 ROS_INFO("Sequential sim: %s NDOB gains lv = [%.3f %.3f %.3f]", dc.name.c_str(),
                          dc.mid.lv_x, dc.mid.lv_y, dc.mid.lv_z);
@@ -243,7 +286,8 @@ int main(int argc, char** argv) {
     }
 
     ROS_INFO("Sequential sim: controller '%s' (%s), psi_filter_beta=%.3f", controller_type.c_str(),
-             ndob_mode ? "PID + NDOB" : (disturbance_feedforward ? "PID + downwash feedforward" : "PID, no feedforward"),
+             controller_type == "se3" ? "geometric SE(3) + downwash feedforward"
+             : ndob_mode ? "PID + NDOB" : (disturbance_feedforward ? "PID + downwash feedforward" : "PID, no feedforward"),
              psi_filter_beta);
     ROS_INFO("Sequential sim: %d drones, dt=%.4f s, disturbance %s (%.0f Hz, noise_seed=%d, z0=%.4f), "
              "real_time_factor=%.2f",
