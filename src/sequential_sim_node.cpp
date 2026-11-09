@@ -181,11 +181,11 @@ int main(int argc, char** argv) {
     pnh.param("disturbance_enabled", disturbance_enabled, true);
     pnh.param("disturbance_rate", disturbance_rate, 500.0);
     pnh.param("noise_seed", noise_seed, 42);
-    pnh.param("c_coup", cfg.downwash.c_coup, 0.09);
+    pnh.param("c_coup", cfg.downwash.c_coup, 0.065);
     pnh.param("r_lat", cfg.downwash.r_lat, 0.05);
-    pnh.param("z0", cfg.downwash.z0, std::sqrt(0.05));
+    pnh.param("z0", cfg.downwash.z0, std::sqrt(0.1));
     pnh.param("sigma", cfg.downwash.sigma, 0.15);
-    pnh.param("turb_intensity", cfg.downwash.turb_intensity, 0.70);
+    pnh.param("turb_intensity", cfg.downwash.turb_intensity, 0.30);
     pnh.param("max_vertical_range", cfg.downwash.max_vertical_range, -1.0);
     cfg.downwash.noise_seed = noise_seed;
     cfg.disturbance_enabled = disturbance_enabled;

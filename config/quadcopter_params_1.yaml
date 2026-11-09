@@ -1,24 +1,24 @@
 mid_level_controller:
   # PID gains for thrust, phi, theta
   kp_thrust_x: 1.0
-  ki_thrust_x: 0.0
+  ki_thrust_x: 0.02
   kd_thrust_x: 0.2
 
   kp_thrust_y: 1.0
-  ki_thrust_y: 0.0
+  ki_thrust_y: 0.02
   kd_thrust_y: 0.2
 
   kp_thrust_z: 4.5
-  ki_thrust_z: 0.0
+  ki_thrust_z: 0.02
   kd_thrust_z: 2.0
 
   integral_min: 0.0
   integral_max: 0.5
 
   min_thrust: 0.0
-  max_thrust: 15.905
+  max_thrust: 5.905
 
-  dt: 0.05            # Time step for 20 Hz
+  dt: 0.01            # Time step for 100 Hz (position control, Fig. S4)
   
 low_level_controller:
   # PID gains for torques
@@ -37,7 +37,7 @@ low_level_controller:
   integral_min: 0.0
   integral_max: 0.01
 
-  dt: 0.01            # Time step for 100 Hz
+  dt: 0.004           # Time step for 250 Hz (attitude control, Fig. S4)
 
 state_derivative_solver_node:
   # Quadcopter parameters and settings
@@ -47,7 +47,7 @@ state_derivative_solver_node:
   dt: 0.002           # Time step for 500 Hz
 
   tau_thrust: 0.1
-  tau_torque: 0.2
+  tau_torque: 0.1
 
   rho: 1.225
   A_trans: [0.003, 0, 0, 0, 0.003, 0, 0, 0, 0.03]

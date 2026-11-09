@@ -87,15 +87,15 @@ public:
         // hesaplanır (bkz. getKMatrix). Kütle /<drone>/state_derivative_solver_node/mass
         // parametresinden okunur; bulunamazsa default_mass kullanılır.
         pnh.param("default_mass", default_mass_, 0.382);
-        pnh.param("c_coup", c_coup_, 0.09);  // Eşleşme katsayısı
+        pnh.param("c_coup", c_coup_, 0.065);  // Eşleşme katsayısı (Tablo S2)
         pnh.param("r_lat", r_lat_, 0.05);    // Yanal etki katsayısı
 
         // Downwash Model Parametreleri
-        // Azalma terimi: 1 / (dz^2 + z0^2). z0 = sqrt(0.05) ~ 0.2236 m seçilerek
-        // z0^2 = 0.05 m^2 olur; yani kuvvet büyüklükleri eski modelle (1 / (dz^2 + 0.05)) aynıdır.
-        pnh.param("z0", z0_, std::sqrt(0.05));
+        // Azalma terimi: 1 / (dz^2 + z0^2). z0 = sqrt(0.1) ~ 0.3162 m -> z0^2 = 0.1,
+        // makaledeki Denk. 8 (1 / (p_z^2 + 0.1)) ile aynı büyüklük.
+        pnh.param("z0", z0_, std::sqrt(0.1));
         pnh.param("sigma", sigma_, 0.15);
-        pnh.param("turb_intensity", turb_intensity_, 0.70);
+        pnh.param("turb_intensity", turb_intensity_, 0.30);  // lambda (Tablo S2)
 
         // Döngü frekansı (Hz). Varsayılan 500 Hz = eom düğümünün frekansı (dt = 0.002),
         // böylece bozucu kuvvet eom'un her adımında güncellenir.

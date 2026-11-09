@@ -93,12 +93,12 @@
     <node name="relative_disturbance_generator" pkg="multi_quadcopter_control" type="relative_disturbance_generator" output="screen" launch-prefix="nice -n -5">
         <param name="noise_seed" value="$(arg noise_seed)"/>
         <param name="max_vertical_range" value="$(arg max_vertical_range)"/>
-        <!-- Downwash modeli: 1/(dz^2 + z0^2), z0 = sqrt(0.05) -> z0^2 = 0.05 (eski modelle aynı büyüklük) -->
-        <param name="z0" value="0.22360679774997896"/>
-        <param name="c_coup" value="0.09"/>
+        <!-- Downwash modeli (makale, Tablo S2): 1/(dz^2 + z0^2), z0 = sqrt(0.1) -> z0^2 = 0.1 (Denk. 8) -->
+        <param name="z0" value="0.31622776601683794"/>
+        <param name="c_coup" value="0.065"/>
         <param name="r_lat" value="0.05"/>
         <param name="sigma" value="0.15"/>
-        <param name="turb_intensity" value="0.70"/>
+        <param name="turb_intensity" value="0.30"/>
         <!-- Döngü frekansı (Hz): eom ile aynı (500 Hz). Eski davranış için 100 -->
         <param name="rate" value="500.0"/>
         <!-- Bu süreden uzun konum mesajı gelmeyen drone hesaba katılmaz (s), 0: kapalı -->
