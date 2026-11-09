@@ -29,8 +29,7 @@ MidLevelController::MidLevelController()
       m_prev_error_thrust_z(0.0), m_integral_thrust_z(0.0),
       m_prev_error_ref_phi(0.0), m_integral_ref_phi(0.0),
       m_prev_error_ref_theta(0.0), m_integral_ref_theta(0.0),
-      m_desired_acceleration_x(0.0), m_desired_acceleration_y(0.0), m_desired_acceleration_z(0.0), 
-      m_disturbance_x(0.0), m_disturbance_y(0.0), m_disturbance_z(0.0)
+      m_desired_acceleration_x(0.0), m_desired_acceleration_y(0.0), m_desired_acceleration_z(0.0)
       {
 
     // Parameters loading from the parameter server
@@ -64,7 +63,6 @@ MidLevelController::MidLevelController()
     m_desired_velocity_sub = m_nh.subscribe("reference_velocity", 10, &MidLevelController::desiredVelocityCallback, this);
     m_current_velocity_sub = m_nh.subscribe("actual_velocity", 10, &MidLevelController::currentVelocityCallback, this);
     m_desired_psi_sub = m_nh.subscribe("reference_psi", 10, &MidLevelController::desiredPsiCallback, this);
-    m_disturbance_sub = m_nh.subscribe("disturbance_static", 10, &MidLevelController::disturbanceCallback, this);
 
     m_desired_thrust_pub = m_nh.advertise<std_msgs::Float64>("reference_thrust", 10);
     m_desired_angles_pub = m_nh.advertise<geometry_msgs::Vector3>("reference_euler_angles", 10);
@@ -183,10 +181,4 @@ void MidLevelController::desiredAccelerationCallback(const geometry_msgs::Vector
 
 void MidLevelController::desiredPsiCallback(const std_msgs::Float64::ConstPtr& msg) {
     m_des_psi = msg->data;
-}
-
-void MidLevelController::disturbanceCallback(const geometry_msgs::Vector3::ConstPtr& msg) {
-    m_disturbance_x = msg->x;
-    m_disturbance_y = msg->y;
-    m_disturbance_z = msg->z;
 }
