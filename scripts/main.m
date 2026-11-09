@@ -16,7 +16,7 @@
 %   Table 1 RMSE/ISE: önerilen vs SE(3)                    -> log_dir + geo_log_dir
 %   Table 2 RMSE/ISE: feedforward aktif vs pasif           -> log_dir + ablation_log_dir
 %   Fig. F1 Komşu İHA'lar arası bağıl mesafe hatası ve formasyon hatası -> log_dir (+ ablation_log_dir, geo_log_dir)
-%   Table 3 Bağıl mesafe ve formasyon hatası (RMS, maks.)
+%   Table 3 İHA çiftleri matrisi: üst üçgen formasyon hatası, alt üçgen bağıl mesafe hatası (RMS)
 %   (Fig. S2 için: fig_S2_downwash_field.m)
 %
 % Gerekli simülasyon koşularının hepsi tek komutla çalıştırılabilir (her biri ayrı log klasörüne yazar):
@@ -363,15 +363,25 @@ end
 addTopLegend(hs, [0.1 0.94 0.8 0.05], S);
 saveFigure(fig, eps_folder, 'FigF1_formation_error.eps', output_pdf);
 
-Controller   = string(labels_F(avail_F))';
-RMS_E_d_m    = cellfun(@(f) f.rms_Ed, F(avail_F))';
-Max_E_d_m    = cellfun(@(f) f.max_Ed, F(avail_F))';
-RMS_E_F_m    = cellfun(@(f) f.rms_EF, F(avail_F))';
-Max_E_F_m    = cellfun(@(f) f.max_EF, F(avail_F))';
-tbl3 = table(Controller, RMS_E_d_m, Max_E_d_m, RMS_E_F_m, Max_E_F_m);
-fprintf('\nTable 3: Bağıl mesafe ve formasyon hatası (komşu İHA çiftleri, r_N = %.1f m)\n', neighbor_radius);
-disp(tbl3);
-writetable(tbl3, fullfile(eps_folder, 'Table3_formation.csv'));
+% Table 3: İHA çiftleri matrisi (her kontrolcü için). Satır/sütun Q1..Q5;
+%   köşegenin üstü: formasyon hatası RMS ||e_ij|| (m), köşegenin altı: bağıl mesafe hatası RMS e_d,ij (m).
+% Değerler çiftin komşu olduğu süre boyunca hesaplanır; hiç komşu olmayan çiftler '-' ile gösterilir.
+names_Q = "Q" + string(1:num_drones);
+file_tag = {'proposed', 'without_ff', 'se3'};
+for r = avail_F
+    M = repmat("-", num_drones, num_drones);
+    for k = 1:size(F{r}.pairs, 1)
+        i1 = F{r}.pairs(k, 1); j1 = F{r}.pairs(k, 2);
+        if ~isnan(F{r}.pair_EF(k))
+            M(i1, j1) = sprintf('%.3f', F{r}.pair_EF(k));   % üst üçgen: formasyon hatası
+            M(j1, i1) = sprintf('%.3f', F{r}.pair_Ed(k));   % alt üçgen: bağıl mesafe hatası
+        end
+    end
+    tbl3 = array2table(M, 'RowNames', cellstr(names_Q), 'VariableNames', cellstr(names_Q));
+    fprintf('\nTable 3 (%s): üst üçgen = formasyon hatası, alt üçgen = bağıl mesafe hatası (RMS, m)\n', labels_F{r});
+    disp(tbl3);
+    writetable(tbl3, fullfile(eps_folder, sprintf('Table3_formation_%s.csv', file_tag{r})), 'WriteRowNames', true);
+end
 
 %% === Table 1 / Table 2 - PERFORMANS METRİKLERİ ===
 M = metrics(D);
@@ -643,6 +653,7 @@ function F = formationCore(t, Pa, Pr, r_N)
     N = size(Pa, 3);
     pairs = nchoosek(1:N, 2);
     sq_d = 0; sq_f = 0; cnt = 0;
+    pair_Ed = nan(size(pairs, 1), 1); pair_EF = pair_Ed;
     for k = 1:size(pairs, 1)
         da = Pa(:, :, pairs(k, 1)) - Pa(:, :, pairs(k, 2));
         dr = Pr(:, :, pairs(k, 1)) - Pr(:, :, pairs(k, 2));
@@ -652,6 +663,10 @@ function F = formationCore(t, Pa, Pr, r_N)
         sq_d = sq_d + nb .* e_d.^2;
         sq_f = sq_f + nb .* e_f.^2;
         cnt  = cnt + nb;
+        if any(nb)                                             % çift bazında RMS (komşu oldukları süre)
+            pair_Ed(k) = sqrt(mean(e_d(nb).^2));
+            pair_EF(k) = sqrt(mean(e_f(nb).^2));
+        end
     end
     ok = cnt > 0;
     F.t  = t(:);
@@ -659,6 +674,7 @@ function F = formationCore(t, Pa, Pr, r_N)
     F.EF = nan(size(cnt)); F.EF(ok) = sqrt(sq_f(ok) ./ cnt(ok));
     F.rms_Ed = sqrt(mean(F.Ed(ok).^2)); F.max_Ed = max(F.Ed(ok));
     F.rms_EF = sqrt(mean(F.EF(ok).^2)); F.max_EF = max(F.EF(ok));
+    F.pairs = pairs; F.pair_Ed = pair_Ed; F.pair_EF = pair_EF;
 end
 
 function lim = padLimits(vals, frac)

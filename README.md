@@ -168,10 +168,12 @@ r_pos.xyz, r_vel.xyz, r_acc.xyz, r_eul_ang.xyz, r_torq.xyz, dist_f.xyz, [ndob_f.
    Line plots use every 5th sample (100 Hz) to keep the vector EPS files small; metrics and bar
    plots use the full 500 Hz data.
 
-   `main.m` also computes formation indices (Fig. F1, `Table3_formation.csv`) for neighbouring
+   `main.m` also computes formation indices (Fig. F1, `Table3_formation_<controller>.csv`) for neighbouring
    UAVs (desired distance below `neighbor_radius` = 3 m): the relative distance error
    `e_d,ij = ||p_i - p_j|| - ||p_i^ref - p_j^ref||` and the formation error
    `e_ij = (p_i - p_j) - (p_i^ref - p_j^ref)`, each as an RMS over the neighbour pairs (`E_d`, `E_F`).
+   Table 3 is a Q1-Q5 matrix per controller: upper triangle = RMS formation error of the pair,
+   lower triangle = RMS relative distance error, computed while the pair are neighbours.
 
 3. Fig. S2 (downwash force and velocity field) is computed from the model by
    `scripts/fig_S2_downwash_field.m`.
