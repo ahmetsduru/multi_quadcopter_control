@@ -17,11 +17,11 @@
     <!-- max_vertical_range > 0: bu dikey mesafeden (m) uzak etkileşimler ihmal edilir, -1: sınır yok -->
     <arg name="max_vertical_range" default="-1.0"/>
     <arg name="shutdown_on_finish" default="false"/>
-    <!-- Orta seviye kontrolcü: pid (hiyerarşik PID, mevcut hali) veya ndob (PID + doğrusal olmayan bozucu gözlemcisi) -->
-    <arg name="controller" default="pid"/>
-    <!-- Kontrolcüde bozucu ileri beslemesi: f_des = ... - f_dw (makale Denk. 21).
-         auto: pid için açık, ndob için kapalı (gözlemci bozucuyu zaten kestirir). true / false: zorla -->
-    <arg name="disturbance_feedforward" default="auto"/>
+    <!-- Orta seviye kontrolcü:
+         pid_ff : hiyerarşik PID + downwash ileri beslemesi f_des = ... - f_dw (makale Denk. 21)  [varsayılan]
+         pid    : hiyerarşik PID, ileri besleme yok (ablasyon)
+         ndob   : PID + doğrusal olmayan bozucu gözlemcisi (NDOB) -->
+    <arg name="controller" default="pid_ff"/>
     <!-- Yörünge yönlü yaw açısı alçak geçiren filtre katsayısı beta (makale Denk. 19) -->
     <arg name="psi_filter_beta" default="0.05"/>
     <!-- Log klasörü (karşılaştırma koşuları için farklı klasör verilebilir) -->
@@ -92,8 +92,6 @@
         <param name="end_hold_time" value="$(arg end_hold_time)"/>
         <param name="shutdown_on_finish" value="$(arg shutdown_on_finish)"/>
         <param name="controller_type" value="$(arg controller)"/>
-        <param name="disturbance_feedforward" value="$(arg disturbance_feedforward)"
-               unless="$(eval arg('disturbance_feedforward') == 'auto')"/>
         <param name="psi_filter_beta" value="$(arg psi_filter_beta)"/>
         <!-- RViz / topic yayın frekansları (simülasyon zamanında, Hz) -->
         <param name="viz_rate" value="30.0"/>
