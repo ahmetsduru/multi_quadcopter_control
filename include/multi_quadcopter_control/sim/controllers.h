@@ -16,6 +16,7 @@ struct MidLevelParams {
     double min_thrust = 0, max_thrust = 0;
     double dt = 0.05;
     double mass = 0.382;
+    bool disturbance_feedforward = false;  // f_des -= f_dw (modelled downwash, Eq. 21)
 };
 
 struct MidLevelOutput {
@@ -27,10 +28,13 @@ class MidLevelController {
 public:
     explicit MidLevelController(const MidLevelParams& p) : p_(p) {}
 
+    // f_dw: modelled downwash force on this drone (world frame), used only if
+    // disturbance_feedforward is enabled.
     MidLevelOutput compute(const Eigen::Vector3d& ref_pos, const Eigen::Vector3d& ref_vel,
                            const Eigen::Vector3d& ref_acc, double ref_psi,
                            const Eigen::Vector3d& pos, const Eigen::Vector3d& vel,
-                           const Eigen::Vector3d& euler);
+                           const Eigen::Vector3d& euler,
+                           const Eigen::Vector3d& f_dw = Eigen::Vector3d::Zero());
 
 private:
     MidLevelParams p_;

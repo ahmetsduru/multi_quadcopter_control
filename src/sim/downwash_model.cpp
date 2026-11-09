@@ -66,12 +66,14 @@ void DownwashModel::addDrone(const std::string& name, double mass) {
     noise_.push_back(makeNoiseFor(name));
 }
 
-std::vector<Eigen::Vector3d> DownwashModel::compute(const std::vector<DroneKinematics>& drones) {
+std::vector<Eigen::Vector3d> DownwashModel::compute(const std::vector<DroneKinematics>& drones,
+                                                    std::vector<Eigen::Vector3d>* static_force) {
     if (drones.size() != names_.size()) {
         throw std::runtime_error("DownwashModel::compute: drone count mismatch");
     }
     const size_t N = drones.size();
     std::vector<Eigen::Vector3d> force(N, Eigen::Vector3d::Zero());
+    if (static_force) static_force->assign(N, Eigen::Vector3d::Zero());
 
     // One noise sample per drone per call
     std::vector<Eigen::Vector3d> noise_now(N);
@@ -108,6 +110,7 @@ std::vector<Eigen::Vector3d> DownwashModel::compute(const std::vector<DroneKinem
             const Eigen::Vector3d f_total_body = (f_static_body + f_turb_body) * 4.0;
 
             force[bot] += R_top_to_world * f_total_body;
+            if (static_force) (*static_force)[bot] += R_top_to_world * (f_static_body * 4.0);
         }
     }
     return force;

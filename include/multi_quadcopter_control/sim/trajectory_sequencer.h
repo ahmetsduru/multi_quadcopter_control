@@ -26,7 +26,9 @@ public:
     // Local trajectory time advanced on every tick (hard-coded 0.05 s in trajectory_generator.cpp)
     static constexpr double kSampleStep = 0.05;
 
-    TrajectorySequencer(const std::vector<TrajectorySpec>& specs, bool is_psi_active);
+    // psi_filter_beta: low-pass coefficient of the trajectory-aligned yaw (Eq. 19), 0.05 in the original code
+    TrajectorySequencer(const std::vector<TrajectorySpec>& specs, bool is_psi_active,
+                        double psi_filter_beta = 0.05);
 
     // One iteration of the trajectory loop: evaluate the reference at the current local time,
     // switch to the next trajectory if needed, then advance the local time.
@@ -68,6 +70,7 @@ private:
     // Planner state (same names as in trajectory_generator.cpp)
     bool m_initial_trajectory = true;
     bool m_is_psi_active = true;
+    double psi_filter_beta_ = 0.05;
     Vec3 m_position, m_velocity, m_acceleration, m_jerk;
     double m_des_psi = 0.0;
     double m_last_psi = 0.0;

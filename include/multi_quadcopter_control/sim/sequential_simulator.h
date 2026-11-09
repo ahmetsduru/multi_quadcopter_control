@@ -2,9 +2,9 @@
 //
 // Every time step dt (= eom dt) is executed in a fixed order, like a MATLAB loop:
 //   1. trajectory tick      (every 1/ros_rate s)
-//   2. mid-level controller (every mid_level_controller/dt s)
-//   3. low-level controller (every low_level_controller/dt s)
-//   4. downwash disturbance (every 1/disturbance_rate s)
+//   2. downwash disturbance (every 1/disturbance_rate s; depends only on the state at t_k)
+//   3. mid-level controller (every mid_level_controller/dt s)
+//   4. low-level controller (every low_level_controller/dt s)
 //   5. log row for time t_k (state at t_k, commands computed at t_k)
 //   6. dynamics integration t_k -> t_k + dt
 // Time is a step counter (t_k = k * dt), so results do not depend on CPU load or wall clock.
@@ -31,6 +31,7 @@ struct DroneConfig {
     LowLevelParams low;
     std::vector<TrajectorySpec> trajectories;
     bool is_psi_active = true;
+    double psi_filter_beta = 0.05;
 };
 
 struct SimConfig {
@@ -73,6 +74,7 @@ private:
         MidLevelOutput mid_out;
         Eigen::Vector3d torques = Eigen::Vector3d::Zero();
         Eigen::Vector3d disturbance = Eigen::Vector3d::Zero();
+        Eigen::Vector3d disturbance_static = Eigen::Vector3d::Zero();  // modelled downwash (feedforward)
         LogRow last_row;
     };
 

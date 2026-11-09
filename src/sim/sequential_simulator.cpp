@@ -41,7 +41,7 @@ SequentialSimulator::SequentialSimulator(const SimConfig& config, const std::vec
         d.dyn.reset(new QuadDynamics(dc.quad));
         d.mid.reset(new MidLevelController(dc.mid));
         d.low.reset(new LowLevelController(dc.low));
-        d.traj.reset(new TrajectorySequencer(dc.trajectories, dc.is_psi_active));
+        d.traj.reset(new TrajectorySequencer(dc.trajectories, dc.is_psi_active, dc.psi_filter_beta));
         d.mid_div = divisor(dc.mid.dt, dc.name + " mid_level_controller/dt");
         d.low_div = divisor(dc.low.dt, dc.name + " low_level_controller/dt");
         d.next_traj_step = 0;
@@ -73,33 +73,39 @@ void SequentialSimulator::step() {
         }
     }
 
-    // 2. Mid-level controllers
-    for (Drone& d : drones_) {
-        if (k_ % d.mid_div == 0) {
-            d.mid_out = d.mid->compute(toEigen(d.traj->position()), toEigen(d.traj->velocity()),
-                                       toEigen(d.traj->acceleration()), d.traj->psi(),
-                                       d.dyn->position(), d.dyn->velocity(), d.dyn->eulerAngles());
-            d.dyn->setThrustCommand(d.mid_out.thrust);
-        }
-    }
-
-    // 3. Low-level controllers
-    for (Drone& d : drones_) {
-        if (k_ % d.low_div == 0) {
-            d.torques = d.low->compute(d.mid_out.ref_angles, d.dyn->eulerAngles());
-            d.dyn->setTorqueCommand(d.torques);
-        }
-    }
-
-    // 4. Downwash disturbance (held between updates)
+    // 2. Downwash disturbance (held between updates). Uses only the state at t_k, so it can be
+    //    computed before the controllers; the static part feeds the optional feedforward.
     if (cfg_.disturbance_enabled && k_ % dist_div_ == 0) {
         std::vector<DroneKinematics> kin(drones_.size());
         for (size_t i = 0; i < drones_.size(); ++i) {
             kin[i].position_world = drones_[i].dyn->position() + drones_[i].cfg.initial_offset;
             kin[i].R_body_to_world = drones_[i].dyn->rotation();
         }
-        std::vector<Eigen::Vector3d> f = downwash_->compute(kin);
-        for (size_t i = 0; i < drones_.size(); ++i) drones_[i].disturbance = f[i];
+        std::vector<Eigen::Vector3d> f_static;
+        std::vector<Eigen::Vector3d> f = downwash_->compute(kin, &f_static);
+        for (size_t i = 0; i < drones_.size(); ++i) {
+            drones_[i].disturbance = f[i];
+            drones_[i].disturbance_static = f_static[i];
+        }
+    }
+
+    // 3. Mid-level controllers
+    for (Drone& d : drones_) {
+        if (k_ % d.mid_div == 0) {
+            d.mid_out = d.mid->compute(toEigen(d.traj->position()), toEigen(d.traj->velocity()),
+                                       toEigen(d.traj->acceleration()), d.traj->psi(),
+                                       d.dyn->position(), d.dyn->velocity(), d.dyn->eulerAngles(),
+                                       d.disturbance_static);
+            d.dyn->setThrustCommand(d.mid_out.thrust);
+        }
+    }
+
+    // 4. Low-level controllers
+    for (Drone& d : drones_) {
+        if (k_ % d.low_div == 0) {
+            d.torques = d.low->compute(d.mid_out.ref_angles, d.dyn->eulerAngles());
+            d.dyn->setTorqueCommand(d.torques);
+        }
     }
 
     // 5. Log row at t_k

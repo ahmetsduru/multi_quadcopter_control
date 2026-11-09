@@ -5,8 +5,9 @@
 
 namespace mqc_sim {
 
-TrajectorySequencer::TrajectorySequencer(const std::vector<TrajectorySpec>& specs, bool is_psi_active)
-    : specs_(specs), m_is_psi_active(is_psi_active) {
+TrajectorySequencer::TrajectorySequencer(const std::vector<TrajectorySpec>& specs, bool is_psi_active,
+                                         double psi_filter_beta)
+    : specs_(specs), m_is_psi_active(is_psi_active), psi_filter_beta_(psi_filter_beta) {
     // Constructor of TrajectoryGenerator: request the first trajectory
     have_current_ = fetchNext();
     if (!have_current_) {
@@ -153,7 +154,7 @@ void TrajectorySequencer::tick() {
 
 // Same as TrajectoryGenerator::generatePsi (m_last_psi is initialised to 0 here)
 void TrajectorySequencer::generatePsi() {
-    const double alpha = 0.05;
+    const double alpha = psi_filter_beta_;
 
     if (m_is_psi_active) {
         if (std::isfinite(m_velocity.x) && std::isfinite(m_velocity.y)) {

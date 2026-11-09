@@ -157,7 +157,8 @@ int main(int argc, char** argv) {
 
     // ---------------- Simulation options
     double real_time_factor, sim_duration, end_hold_time, viz_rate, path_rate, disturbance_rate;
-    bool log_enabled, disturbance_enabled, publish_topics, shutdown_on_finish;
+    bool log_enabled, disturbance_enabled, publish_topics, shutdown_on_finish, disturbance_feedforward;
+    double psi_filter_beta;
     int log_decimation, noise_seed;
     std::string log_dir;
     pnh.param("real_time_factor", real_time_factor, 1.0);  // <= 0: as fast as possible
@@ -184,6 +185,9 @@ int main(int argc, char** argv) {
     cfg.downwash.noise_seed = noise_seed;
     cfg.disturbance_enabled = disturbance_enabled;
     cfg.disturbance_rate = disturbance_rate;
+    // Controller / trajectory options (same for every drone)
+    pnh.param("disturbance_feedforward", disturbance_feedforward, false);  // f_des -= f_dw (Eq. 21)
+    pnh.param("psi_filter_beta", psi_filter_beta, 0.05);                   // yaw low-pass beta (Eq. 19)
     if (log_decimation < 1) log_decimation = 1;
 
     // ---------------- Drones
@@ -194,7 +198,10 @@ int main(int argc, char** argv) {
     try {
         std::vector<DroneConfig> drones;
         for (int i = 1; i <= num_drones; ++i) {
-            drones.push_back(loadDrone(nh, "drone" + std::to_string(i)));
+            DroneConfig dc = loadDrone(nh, "drone" + std::to_string(i));
+            dc.mid.disturbance_feedforward = disturbance_feedforward;
+            dc.psi_filter_beta = psi_filter_beta;
+            drones.push_back(dc);
         }
         if (drones.empty()) throw std::runtime_error("num_drones must be >= 1");
         cfg.dt = drones.front().quad.dt;
@@ -204,6 +211,8 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    ROS_INFO("Sequential sim: disturbance feedforward %s, psi_filter_beta=%.3f",
+             disturbance_feedforward ? "ON" : "OFF", psi_filter_beta);
     ROS_INFO("Sequential sim: %d drones, dt=%.4f s, disturbance %s (%.0f Hz, noise_seed=%d, z0=%.4f), "
              "real_time_factor=%.2f",
              num_drones, cfg.dt, disturbance_enabled ? "on" : "off", disturbance_rate, noise_seed,

@@ -45,7 +45,7 @@ double lowPID(double setpoint, double measured_value, double& prev_error, double
 MidLevelOutput MidLevelController::compute(const Eigen::Vector3d& ref_pos, const Eigen::Vector3d& ref_vel,
                                            const Eigen::Vector3d& ref_acc, double ref_psi,
                                            const Eigen::Vector3d& pos, const Eigen::Vector3d& vel,
-                                           const Eigen::Vector3d& euler) {
+                                           const Eigen::Vector3d& euler, const Eigen::Vector3d& f_dw) {
     const double m = p_.mass;
 
     // World-frame PID forces (MidLevelController::computeThrust)
@@ -55,6 +55,13 @@ MidLevelOutput MidLevelController::compute(const Eigen::Vector3d& ref_pos, const
                              p_.kp_y, p_.ki_y, p_.kd_y, p_.dt, p_.integral_min, p_.integral_max) + m * ref_acc.y();
     double thrust_z = midPID(ref_pos.z(), pos.z(), ref_vel.z(), vel.z(), integral_z_,
                              p_.kp_z, p_.ki_z, p_.kd_z, p_.dt, p_.integral_min, p_.integral_max) + m * ref_acc.z() + m * 9.81;
+
+    // Disturbance feedforward: f_des = Kp e_p + Kd e_v + m a_des + m g - f_dw
+    if (p_.disturbance_feedforward) {
+        thrust_x -= f_dw.x();
+        thrust_y -= f_dw.y();
+        thrust_z -= f_dw.z();
+    }
 
     const double phi = euler.x(), theta = euler.y(), psi = euler.z();
 

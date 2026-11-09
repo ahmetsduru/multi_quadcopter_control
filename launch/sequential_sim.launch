@@ -17,6 +17,12 @@
     <!-- max_vertical_range > 0: bu dikey mesafeden (m) uzak etkileşimler ihmal edilir, -1: sınır yok -->
     <arg name="max_vertical_range" default="-1.0"/>
     <arg name="shutdown_on_finish" default="false"/>
+    <!-- Kontrolcüde bozucu ileri beslemesi: f_des = ... - f_dw (makale Denk. 21). false: kapalı -->
+    <arg name="disturbance_feedforward" default="false"/>
+    <!-- Yörünge yönlü yaw açısı alçak geçiren filtre katsayısı beta (makale Denk. 19) -->
+    <arg name="psi_filter_beta" default="0.05"/>
+    <!-- Log klasörü (karşılaştırma koşuları için farklı klasör verilebilir) -->
+    <arg name="log_dir" default="$(find multi_quadcopter_control)/log"/>
 
     <rosparam file="$(find multi_quadcopter_control)/config/trajectory_crescent.yaml" command="load"/>
     <rosparam file="$(find multi_quadcopter_control)/config/all_trajectories.yaml" command="load"/>
@@ -82,12 +88,15 @@
         <param name="sim_duration" value="$(arg sim_duration)"/>
         <param name="end_hold_time" value="$(arg end_hold_time)"/>
         <param name="shutdown_on_finish" value="$(arg shutdown_on_finish)"/>
+        <param name="disturbance_feedforward" value="$(arg disturbance_feedforward)"/>
+        <param name="psi_filter_beta" value="$(arg psi_filter_beta)"/>
         <!-- RViz / topic yayın frekansları (simülasyon zamanında, Hz) -->
         <param name="viz_rate" value="30.0"/>
         <param name="path_rate" value="10.0"/>
         <param name="publish_topics" value="true"/>
         <!-- Log: log/<drone>_log.txt, data_logger ile aynı sütunlar. 1: her adım (500 Hz) -->
         <param name="log_enabled" value="true"/>
+        <param name="log_dir" value="$(arg log_dir)"/>
         <param name="log_decimation" value="1"/>
 
         <!-- Downwash bozucu modeli: 1/(dz^2 + z0^2), z0 = sqrt(0.05) -> z0^2 = 0.05 -->

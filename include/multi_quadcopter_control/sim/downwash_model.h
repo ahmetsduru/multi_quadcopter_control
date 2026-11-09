@@ -56,7 +56,10 @@ public:
     void addDrone(const std::string& name, double mass);
 
     // Disturbance force (world frame) on every drone. Advances each drone's noise exactly once.
-    std::vector<Eigen::Vector3d> compute(const std::vector<DroneKinematics>& drones);
+    // If static_force is given it receives the deterministic downwash part (without turbulence),
+    // i.e. the modelled disturbance used as controller feedforward.
+    std::vector<Eigen::Vector3d> compute(const std::vector<DroneKinematics>& drones,
+                                         std::vector<Eigen::Vector3d>* static_force = nullptr);
 
 private:
     DownwashParams p_;
