@@ -41,8 +41,8 @@ swarm, plus RViz. Every time step (`dt` = 2 ms) runs the components in a fixed o
 
 1. trajectory generator (20 Hz)
 2. downwash / turbulence disturbance (500 Hz)
-3. mid-level (position) controller (`mid_level_controller/dt`, 20 Hz)
-4. low-level (attitude) controller (`low_level_controller/dt`, 100 Hz)
+3. mid-level (position) controller (`mid_level_controller/dt`, 100 Hz)
+4. low-level (attitude) controller (`low_level_controller/dt`, 250 Hz)
 5. logging
 6. dynamics integration (Runge-Kutta Cash-Karp 5(4), 500 Hz)
 
@@ -73,10 +73,10 @@ roslaunch multi_quadcopter_control sequential_sim.launch controller:=ndob
 ```
 
 Without disturbance (`disturbance_enabled:=false`) `pid_ff` and `pid` give identical results.
-`ndob` additionally produces a small spurious estimate because the observer is updated with an
-explicit Euler step at the mid-level rate while the thrust changes between updates. At the default
-20 Hz (`mid_level_controller/dt: 0.05`) this increases the tracking error by about 10 % without
-disturbance; at 100 Hz (`dt: 0.01`) all three controllers give the same result without disturbance.
+`ndob` gives practically the same result as well (its observer, updated with an explicit Euler
+step at the mid-level rate, produces only a very small estimate from unmodelled effects). At a low
+mid-level rate this discretization error grows: at 20 Hz it increases the tracking error by about
+10 % without disturbance.
 
 - `pid_ff` uses only the deterministic downwash part of the model; the turbulence is not
   compensated and acts directly on the plant.
