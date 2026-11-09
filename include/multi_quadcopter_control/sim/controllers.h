@@ -1,5 +1,8 @@
 // Mid-level (position) and low-level (attitude) controllers (ROS-free).
 // Same control laws as src/mid_level_cont.cpp and src/low_level_cont.cpp.
+// The mid-level controller has two modes:
+//   PID : hierarchical PID (current src/mid_level_cont.cpp)
+//   NDOB: PID + model-based nonlinear disturbance observer (NDOB version of mid_level_cont.cpp)
 #ifndef MQC_SIM_CONTROLLERS_H
 #define MQC_SIM_CONTROLLERS_H
 
@@ -8,7 +11,10 @@
 namespace mqc_sim {
 
 // ---------------------------------------------------------------- Mid level
+enum class MidLevelMode { PID, NDOB };
+
 struct MidLevelParams {
+    MidLevelMode mode = MidLevelMode::PID;
     double kp_x = 0, ki_x = 0, kd_x = 0;
     double kp_y = 0, ki_y = 0, kd_y = 0;
     double kp_z = 0, ki_z = 0, kd_z = 0;
@@ -17,16 +23,22 @@ struct MidLevelParams {
     double dt = 0.05;
     double mass = 0.382;
     bool disturbance_feedforward = false;  // f_des -= f_dw (modelled downwash, Eq. 21)
+
+    // NDOB (mid_level_controller/lv_x, lv_y, lv_z): observer bandwidths (rad/s)
+    double lv_x = 2.0, lv_y = 2.0, lv_z = 2.5;
+    double ndob_tau_motor = 0.05;  // thrust filter time constant used by the observer (s)
 };
 
 struct MidLevelOutput {
     double thrust = 0.0;                                     // reference_thrust
     Eigen::Vector3d ref_angles = Eigen::Vector3d::Zero();    // reference_euler_angles
+    Eigen::Vector3d ndob_estimate = Eigen::Vector3d::Zero(); // NDOB: estimated disturbance (delta_f)
 };
 
 class MidLevelController {
 public:
-    explicit MidLevelController(const MidLevelParams& p) : p_(p) {}
+    explicit MidLevelController(const MidLevelParams& p)
+        : p_(p), last_thrust_(p.mass * 9.81), filtered_thrust_(p.mass * 9.81) {}
 
     // f_dw: modelled downwash force on this drone (world frame), used only if
     // disturbance_feedforward is enabled.
@@ -39,6 +51,21 @@ public:
 private:
     MidLevelParams p_;
     double integral_x_ = 0.0, integral_y_ = 0.0, integral_z_ = 0.0;
+
+    // NDOB state
+    Eigen::Vector3d zv_ = Eigen::Vector3d::Zero();       // observer internal state
+    Eigen::Vector3d delta_f_ = Eigen::Vector3d::Zero();  // estimated disturbance
+    double last_thrust_;                                 // last commanded thrust (starts at hover)
+    double filtered_thrust_;                             // first-order filtered thrust (starts at hover)
+
+    MidLevelOutput computePID(const Eigen::Vector3d& ref_pos, const Eigen::Vector3d& ref_vel,
+                              const Eigen::Vector3d& ref_acc, double ref_psi,
+                              const Eigen::Vector3d& pos, const Eigen::Vector3d& vel,
+                              const Eigen::Vector3d& euler, const Eigen::Vector3d& f_dw);
+    MidLevelOutput computeNDOB(const Eigen::Vector3d& ref_pos, const Eigen::Vector3d& ref_vel,
+                               const Eigen::Vector3d& ref_acc, double ref_psi,
+                               const Eigen::Vector3d& pos, const Eigen::Vector3d& vel,
+                               const Eigen::Vector3d& euler, const Eigen::Vector3d& f_dw);
 };
 
 // ---------------------------------------------------------------- Low level

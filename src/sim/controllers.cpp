@@ -46,6 +46,17 @@ MidLevelOutput MidLevelController::compute(const Eigen::Vector3d& ref_pos, const
                                            const Eigen::Vector3d& ref_acc, double ref_psi,
                                            const Eigen::Vector3d& pos, const Eigen::Vector3d& vel,
                                            const Eigen::Vector3d& euler, const Eigen::Vector3d& f_dw) {
+    if (p_.mode == MidLevelMode::NDOB) {
+        return computeNDOB(ref_pos, ref_vel, ref_acc, ref_psi, pos, vel, euler, f_dw);
+    }
+    return computePID(ref_pos, ref_vel, ref_acc, ref_psi, pos, vel, euler, f_dw);
+}
+
+// Hierarchical PID (current src/mid_level_cont.cpp)
+MidLevelOutput MidLevelController::computePID(const Eigen::Vector3d& ref_pos, const Eigen::Vector3d& ref_vel,
+                                              const Eigen::Vector3d& ref_acc, double ref_psi,
+                                              const Eigen::Vector3d& pos, const Eigen::Vector3d& vel,
+                                              const Eigen::Vector3d& euler, const Eigen::Vector3d& f_dw) {
     const double m = p_.mass;
 
     // World-frame PID forces (MidLevelController::computeThrust)
@@ -87,6 +98,92 @@ MidLevelOutput MidLevelController::compute(const Eigen::Vector3d& ref_pos, const
     ref_theta = std::max(-angle_limit, std::min(ref_theta, angle_limit));
 
     out.ref_angles = Eigen::Vector3d(ref_phi, ref_theta, ref_psi);
+    return out;
+}
+
+// PID + model-based NDOB (NDOB version of src/mid_level_cont.cpp, same equations and order)
+MidLevelOutput MidLevelController::computeNDOB(const Eigen::Vector3d& ref_pos, const Eigen::Vector3d& ref_vel,
+                                               const Eigen::Vector3d& ref_acc, double ref_psi,
+                                               const Eigen::Vector3d& pos, const Eigen::Vector3d& vel,
+                                               const Eigen::Vector3d& euler, const Eigen::Vector3d& f_dw) {
+    const double m = p_.mass;
+    const double dt = p_.dt;
+    const double phi = euler.x(), theta = euler.y(), psi = euler.z();
+
+    // Thrust filter (actuator lag seen by the observer)
+    const double alpha = dt / (p_.ndob_tau_motor + dt);
+    filtered_thrust_ = (1.0 - alpha) * filtered_thrust_ + alpha * last_thrust_;
+
+    const double c_phi = std::cos(phi), s_phi = std::sin(phi);
+    const double c_theta = std::cos(theta), s_theta = std::sin(theta);
+    const double c_psi = std::cos(psi), s_psi = std::sin(psi);
+
+    // Body-z thrust projected to the world frame
+    const double f_thrust_world_x = filtered_thrust_ * (c_psi * s_theta * c_phi + s_psi * s_phi);
+    const double f_thrust_world_y = filtered_thrust_ * (s_psi * s_theta * c_phi - c_psi * s_phi);
+    const double f_thrust_world_z = filtered_thrust_ * (c_theta * c_phi);
+
+    // Disturbance estimate (before integration)
+    delta_f_.x() = zv_.x() + p_.lv_x * m * vel.x();
+    delta_f_.y() = zv_.y() + p_.lv_y * m * vel.y();
+    delta_f_.z() = zv_.z() + p_.lv_z * m * vel.z();
+
+    // Observer dynamics + Euler integration
+    const double dz_x = -p_.lv_x * delta_f_.x() - p_.lv_x * f_thrust_world_x;
+    const double dz_y = -p_.lv_y * delta_f_.y() - p_.lv_y * f_thrust_world_y;
+    const double dz_z = -p_.lv_z * delta_f_.z() - p_.lv_z * (f_thrust_world_z - (m * 9.81));
+    zv_.x() += dz_x * dt;
+    zv_.y() += dz_y * dt;
+    zv_.z() += dz_z * dt;
+
+    // Control law: PID + feedforward - estimated disturbance
+    double thrust_x = midPID(ref_pos.x(), pos.x(), ref_vel.x(), vel.x(), integral_x_,
+                             p_.kp_x, p_.ki_x, p_.kd_x, dt, p_.integral_min, p_.integral_max)
+                      + (m * ref_acc.x()) - delta_f_.x();
+    double thrust_y = midPID(ref_pos.y(), pos.y(), ref_vel.y(), vel.y(), integral_y_,
+                             p_.kp_y, p_.ki_y, p_.kd_y, dt, p_.integral_min, p_.integral_max)
+                      + (m * ref_acc.y()) - delta_f_.y();
+    double thrust_z = midPID(ref_pos.z(), pos.z(), ref_vel.z(), vel.z(), integral_z_,
+                             p_.kp_z, p_.ki_z, p_.kd_z, dt, p_.integral_min, p_.integral_max)
+                      + (m * ref_acc.z()) + (m * 9.81) - delta_f_.z();
+
+    // Optional modelled-downwash feedforward (off by default)
+    if (p_.disturbance_feedforward) {
+        thrust_x -= f_dw.x();
+        thrust_y -= f_dw.y();
+        thrust_z -= f_dw.z();
+    }
+
+    // Reference angles (exact, nonlinear transformation)
+    Eigen::Vector3d ref_angles;
+    if (std::abs(thrust_z) < 1e-5) {
+        ref_angles = Eigen::Vector3d(0.0, 0.0, ref_psi);
+    } else {
+        const double total = std::sqrt(thrust_x * thrust_x + thrust_y * thrust_y + thrust_z * thrust_z);
+        double sin_phi_val = (thrust_x * std::sin(psi) - thrust_y * std::cos(psi)) / total;
+        sin_phi_val = std::max(-1.0, std::min(1.0, sin_phi_val));
+        ref_angles = Eigen::Vector3d(std::asin(sin_phi_val),
+                                     std::atan2(thrust_x * std::cos(psi) + thrust_y * std::sin(psi), thrust_z),
+                                     ref_psi);
+    }
+
+    // World forces -> body frame with the reference attitude; only body-z thrust can be applied
+    const double phi_r = ref_angles.x(), theta_r = ref_angles.y(), psi_r = ref_angles.z();
+    Eigen::Matrix3d R;
+    R << std::cos(psi_r) * std::cos(theta_r), std::sin(psi_r) * std::cos(theta_r), -std::sin(theta_r),
+         std::cos(psi_r) * std::sin(theta_r) * std::sin(phi_r) - std::sin(psi_r) * std::cos(phi_r),
+         std::sin(psi_r) * std::sin(theta_r) * std::sin(phi_r) + std::cos(psi_r) * std::cos(phi_r),
+         std::cos(theta_r) * std::sin(phi_r),
+         std::cos(psi_r) * std::sin(theta_r) * std::cos(phi_r) + std::sin(psi_r) * std::sin(phi_r),
+         std::sin(psi_r) * std::sin(theta_r) * std::cos(phi_r) - std::cos(psi_r) * std::sin(phi_r),
+         std::cos(theta_r) * std::cos(phi_r);
+    const Eigen::Vector3d body_forces = R * Eigen::Vector3d(thrust_x, thrust_y, thrust_z);
+    last_thrust_ = std::max(p_.min_thrust, std::min(body_forces.z(), p_.max_thrust));
+
+    MidLevelOutput out;
+    out.thrust = last_thrust_;
+    out.ref_angles = ref_angles;
+    out.ndob_estimate = delta_f_;
     return out;
 }
 

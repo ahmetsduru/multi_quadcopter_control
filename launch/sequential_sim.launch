@@ -17,6 +17,8 @@
     <!-- max_vertical_range > 0: bu dikey mesafeden (m) uzak etkileşimler ihmal edilir, -1: sınır yok -->
     <arg name="max_vertical_range" default="-1.0"/>
     <arg name="shutdown_on_finish" default="false"/>
+    <!-- Orta seviye kontrolcü: pid (hiyerarşik PID, mevcut hali) veya ndob (PID + doğrusal olmayan bozucu gözlemcisi) -->
+    <arg name="controller" default="pid"/>
     <!-- Kontrolcüde bozucu ileri beslemesi: f_des = ... - f_dw (makale Denk. 21). false: kapalı -->
     <arg name="disturbance_feedforward" default="false"/>
     <!-- Yörünge yönlü yaw açısı alçak geçiren filtre katsayısı beta (makale Denk. 19) -->
@@ -88,6 +90,7 @@
         <param name="sim_duration" value="$(arg sim_duration)"/>
         <param name="end_hold_time" value="$(arg end_hold_time)"/>
         <param name="shutdown_on_finish" value="$(arg shutdown_on_finish)"/>
+        <param name="controller_type" value="$(arg controller)"/>
         <param name="disturbance_feedforward" value="$(arg disturbance_feedforward)"/>
         <param name="psi_filter_beta" value="$(arg psi_filter_beta)"/>
         <!-- RViz / topic yayın frekansları (simülasyon zamanında, Hz) -->

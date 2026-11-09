@@ -124,6 +124,7 @@ void SequentialSimulator::step() {
         r.r_eul_ang = d.mid_out.ref_angles;
         r.r_torq = d.torques;
         r.dist_f = d.disturbance;
+        r.ndob_f = d.mid_out.ndob_estimate;
         r.r_thr = d.mid_out.thrust;
         r.r_psi = d.traj->psi();
     }

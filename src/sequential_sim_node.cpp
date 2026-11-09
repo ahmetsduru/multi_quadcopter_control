@@ -88,6 +88,10 @@ DroneConfig loadDrone(const ros::NodeHandle& nh, const std::string& name) {
     d.mid.max_thrust = requireParam<double>(nh, m + "max_thrust");
     d.mid.dt = requireParam<double>(nh, m + "dt");
     d.mid.mass = d.quad.mass;
+    // NDOB observer bandwidths (used only with controller_type = ndob)
+    nh.param(m + "lv_x", d.mid.lv_x, 2.0);
+    nh.param(m + "lv_y", d.mid.lv_y, 2.0);
+    nh.param(m + "lv_z", d.mid.lv_z, 2.5);
 
     // low_level_controller
     const std::string l = ns + "low_level_controller/";
@@ -141,7 +145,7 @@ geometry_msgs::Vector3 toMsg(const Eigen::Vector3d& v) {
 
 struct DroneRos {
     ros::Publisher path_pub, ref_path_pub;
-    ros::Publisher pos_pub, euler_pub, ref_pos_pub, dist_pub, thrust_pub;
+    ros::Publisher pos_pub, euler_pub, ref_pos_pub, dist_pub, thrust_pub, ndob_pub;
     nav_msgs::Path path, ref_path;
     std::unique_ptr<DroneLogWriter> log;
     double sq_err_sum = 0.0, max_err = 0.0;
@@ -159,6 +163,7 @@ int main(int argc, char** argv) {
     double real_time_factor, sim_duration, end_hold_time, viz_rate, path_rate, disturbance_rate;
     bool log_enabled, disturbance_enabled, publish_topics, shutdown_on_finish, disturbance_feedforward;
     double psi_filter_beta;
+    std::string controller_type;
     int log_decimation, noise_seed;
     std::string log_dir;
     pnh.param("real_time_factor", real_time_factor, 1.0);  // <= 0: as fast as possible
@@ -188,6 +193,18 @@ int main(int argc, char** argv) {
     // Controller / trajectory options (same for every drone)
     pnh.param("disturbance_feedforward", disturbance_feedforward, false);  // f_des -= f_dw (Eq. 21)
     pnh.param("psi_filter_beta", psi_filter_beta, 0.05);                   // yaw low-pass beta (Eq. 19)
+    // Mid-level controller: "pid" (hierarchical PID) or "ndob" (PID + nonlinear disturbance observer)
+    pnh.param("controller_type", controller_type, std::string("pid"));
+    MidLevelMode mid_mode;
+    if (controller_type == "pid") {
+        mid_mode = MidLevelMode::PID;
+    } else if (controller_type == "ndob") {
+        mid_mode = MidLevelMode::NDOB;
+    } else {
+        ROS_FATAL("Sequential sim: unknown controller_type '%s' (use 'pid' or 'ndob')", controller_type.c_str());
+        return 1;
+    }
+    const bool ndob_mode = (mid_mode == MidLevelMode::NDOB);
     if (log_decimation < 1) log_decimation = 1;
 
     // ---------------- Drones
@@ -200,6 +217,11 @@ int main(int argc, char** argv) {
         for (int i = 1; i <= num_drones; ++i) {
             DroneConfig dc = loadDrone(nh, "drone" + std::to_string(i));
             dc.mid.disturbance_feedforward = disturbance_feedforward;
+            dc.mid.mode = mid_mode;
+            if (ndob_mode) {
+                ROS_INFO("Sequential sim: %s NDOB gains lv = [%.3f %.3f %.3f]", dc.name.c_str(),
+                         dc.mid.lv_x, dc.mid.lv_y, dc.mid.lv_z);
+            }
             dc.psi_filter_beta = psi_filter_beta;
             drones.push_back(dc);
         }
@@ -211,8 +233,8 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    ROS_INFO("Sequential sim: disturbance feedforward %s, psi_filter_beta=%.3f",
-             disturbance_feedforward ? "ON" : "OFF", psi_filter_beta);
+    ROS_INFO("Sequential sim: mid-level controller %s, disturbance feedforward %s, psi_filter_beta=%.3f",
+             ndob_mode ? "PID + NDOB" : "PID", disturbance_feedforward ? "ON" : "OFF", psi_filter_beta);
     ROS_INFO("Sequential sim: %d drones, dt=%.4f s, disturbance %s (%.0f Hz, noise_seed=%d, z0=%.4f), "
              "real_time_factor=%.2f",
              num_drones, cfg.dt, disturbance_enabled ? "on" : "off", disturbance_rate, noise_seed,
@@ -238,10 +260,13 @@ int main(int argc, char** argv) {
             out[i].ref_pos_pub = nh.advertise<geometry_msgs::Vector3>(ns + "reference_position", 10);
             out[i].dist_pub = nh.advertise<geometry_msgs::Vector3>(ns + "disturbance_force", 10);
             out[i].thrust_pub = nh.advertise<std_msgs::Float64>(ns + "reference_thrust", 10);
+            if (ndob_mode) {
+                out[i].ndob_pub = nh.advertise<geometry_msgs::Vector3>(ns + "ndob_estimated_disturbance", 10);
+            }
         }
         if (log_enabled) {
             const std::string path = log_dir + "/" + sim->droneName(i) + "_log.txt";
-            out[i].log.reset(new DroneLogWriter(path));
+            out[i].log.reset(new DroneLogWriter(path, ndob_mode));
             if (!out[i].log->isOpen()) {
                 ROS_ERROR("Sequential sim: cannot open %s", path.c_str());
             } else {
@@ -283,6 +308,7 @@ int main(int argc, char** argv) {
                 std_msgs::Float64 thr;
                 thr.data = row.r_thr;
                 out[i].thrust_pub.publish(thr);
+                if (ndob_mode) out[i].ndob_pub.publish(toMsg(row.ndob_f));
             }
 
             if (!append_path) continue;

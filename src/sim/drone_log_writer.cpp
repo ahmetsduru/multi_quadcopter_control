@@ -4,7 +4,7 @@
 
 namespace mqc_sim {
 
-DroneLogWriter::DroneLogWriter(const std::string& path) {
+DroneLogWriter::DroneLogWriter(const std::string& path, bool ndob_columns) : ndob_columns_(ndob_columns) {
     file_.open(path, std::ios::out);
     if (!file_.is_open()) return;
 
@@ -15,6 +15,7 @@ DroneLogWriter::DroneLogWriter(const std::string& path) {
               << ", " << name << ".y"
               << ", " << name << ".z";
     }
+    if (ndob_columns_) file_ << ", ndob_f.x, ndob_f.y, ndob_f.z";
     file_ << ", r_thr, r_psi\n";
 }
 
@@ -38,6 +39,7 @@ void DroneLogWriter::write(const LogRow& r) {
     vec(r.r_eul_ang);
     vec(r.r_torq);
     vec(r.dist_f);
+    if (ndob_columns_) vec(r.ndob_f);
     file_ << ", " << r.r_thr << ", " << r.r_psi << "\n";
 }
 

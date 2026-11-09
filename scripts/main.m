@@ -9,6 +9,7 @@
 %   Fig. 5  Euler açıları                                  -> log_dir
 %   Fig. 6  Bozucu kuvvetler                               -> log_dir
 %   Fig. 7  Thrust                                         -> log_dir
+%   NDOB    NDOB bozucu kestirimi (controller:=ndob koşusu) -> log_dir (ndob_f sütunları varsa)
 %   Fig. 8  Ablasyon: feedforward aktif vs pasif           -> log_dir + ablation_log_dir
 %   Fig. S5 Drone 1 hibrit yörünge ve waypointler          -> log_dir + config/*.yaml
 %   Fig. S6 Drone 2 yönelim hatası, beta karşılaştırması   -> log_dir + beta_log_dir
@@ -209,6 +210,32 @@ for a = 1:3
 end
 addTopLegend(lgd_handles, [0.1 0.94 0.8 0.05], S);
 saveFigure(fig, eps_folder, 'Fig6.eps', output_pdf);
+
+%% === NDOB KESTİRİMİ (yalnızca controller:=ndob koşusunda, ndob_f sütunları varsa) ===
+if ismember("ndob_f.x", D(valid(1)).T.Properties.VariableNames)
+    fig = figure;
+    lgd_handles = gobjects(0);
+    for a = 1:3
+        ax = subplot(3, 1, a); hold(ax, 'on');
+        all_vals = [];
+        for i = valid
+            v = D(i).T{:, "ndob_f." + axis_names(a)};
+            all_vals = [all_vals; v]; %#ok<AGROW>
+            h = plot(ax, D(i).t, v, 'LineWidth', line_w, 'Color', colors(i,:), 'DisplayName', sprintf('Q %d', i));
+            if a == 1, lgd_handles(end+1) = h; else, h.HandleVisibility = 'off'; end %#ok<SAGROW>
+        end
+        ylim(ax, padLimits(all_vals, 0.1));
+        addZones(ax, interact_zones, interact_cols);
+        styleAxes(ax, S);
+        ylabel(ax, sprintf('\\Delta f_{%s} (N)', axis_names(a)), 'FontWeight', 'bold', ...
+               'FontSize', font_size, 'FontName', font_name);
+        if a == 3
+            xlabel(ax, 't (s)', 'FontWeight', 'bold', 'FontSize', font_size, 'FontName', font_name);
+        end
+    end
+    addTopLegend(lgd_handles, [0.1 0.94 0.8 0.05], S);
+    saveFigure(fig, eps_folder, 'Fig_NDOB_estimate.eps', output_pdf);
+end
 
 %% === Fig. 7 - THRUST ===
 fig = figure;
