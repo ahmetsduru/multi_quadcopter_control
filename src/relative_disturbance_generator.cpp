@@ -186,7 +186,6 @@ private:
     std::map<std::string, ros::Subscriber> sub_orient_; 
     std::map<std::string, geometry_msgs::Vector3> drone_initial_offsets_;
     std::map<std::string, ros::Publisher> pub_total_;  
-    std::map<std::string, ros::Publisher> pub_static_; 
 
     // Gürültü Üreteçleri
     std::map<std::string, PinkNoise3D> noise_generators_;
@@ -306,7 +305,6 @@ private:
                     
                     // Publisher'ları oluştur
                     pub_total_[drone_name] = nh_.advertise<geometry_msgs::Vector3>("/" + drone_name + "/disturbance_force", 10);
-                    pub_static_[drone_name] = nh_.advertise<geometry_msgs::Vector3>("/" + drone_name + "/disturbance_static", 10);
                     
                     // Gürültü üretecini başlat
                     if (noise_generators_.find(drone_name) == noise_generators_.end()) {
@@ -343,7 +341,6 @@ private:
     // rastgele kesiyor ve kuvvette sıçramalara yol açıyordu.
     void computeAndPublishDisturbancesOptimized() {
         std::map<std::string, Eigen::Vector3d> acc_total_world;
-        std::map<std::string, Eigen::Vector3d> acc_static_world;
 
         // --- 4.1. Başlangıç + Adım Başına Tek Gürültü Örneği ---
         // Her drone'un gürültü üreteci her döngü adımında TAM BİR KEZ ilerler.
@@ -353,7 +350,6 @@ private:
         const ros::Time now = ros::Time::now();
         for (const auto& pair : drone_positions_) {
             acc_total_world[pair.first] = Eigen::Vector3d::Zero();
-            acc_static_world[pair.first] = Eigen::Vector3d::Zero();
             active[pair.first] = position_timeout_ <= 0.0 ||
                 !((now - drone_last_update_[pair.first]) > ros::Duration(position_timeout_));
 
@@ -415,11 +411,9 @@ private:
 
                 // Toplam Kuvvet (4 pervane etkisi)
                 Eigen::Vector3d f_total_body = (f_static_body + f_turb_body) * 4.0;
-                Eigen::Vector3d f_static_only_body = f_static_body * 4.0;
 
                 // 6. World Frame'e Dönüş ve Toplama
                 acc_total_world[bot_name] += R_top_to_world * f_total_body;
-                acc_static_world[bot_name] += R_top_to_world * f_static_only_body;
             }
         }
 
@@ -433,13 +427,6 @@ private:
             msg_total.y = pair.second.y();
             msg_total.z = pair.second.z();
             pub_total_[d_name].publish(msg_total);
-
-            // Sadece Statik (Görselleştirme için) -> World Frame
-            geometry_msgs::Vector3 msg_static;
-            msg_static.x = acc_static_world[d_name].x();
-            msg_static.y = acc_static_world[d_name].y();
-            msg_static.z = acc_static_world[d_name].z();
-            pub_static_[d_name].publish(msg_static);
         }
     }
 };
