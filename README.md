@@ -52,13 +52,19 @@ twice gives bit-identical log files on the same machine and build, independent o
 
 ### Controller options
 
-Select the mid-level controller with the `controller` argument:
+Select the mid-level controller with the `controller` argument. All three use the same
+hierarchical PID (same gains, reference-angle computation, thrust projection and limits); they
+differ only in the disturbance compensation term `f_comp` in
 
-| `controller` | Mid-level controller | Disturbance compensation |
+```
+f_des = Kp e_p + Ki ∫e_p + Kd e_v + m a_des + m g - f_comp
+```
+
+| `controller` | `f_comp` | Description |
 |---|---|---|
-| `pid_ff` (default) | Hierarchical PID | Modelled downwash as feedforward: `f_des = Kp e_p + Kd e_v + m a_des + m g - f_dw` |
-| `pid` | Hierarchical PID | None (ablation case, `f_dw = 0`) |
-| `ndob` | PID + nonlinear disturbance observer | Estimated disturbance `Δf` (observer), no model feedforward |
+| `pid_ff` (default) | `f_dw` | Modelled downwash as feedforward (proposed controller) |
+| `pid` | `0` | No disturbance compensation (ablation) |
+| `ndob` | `Δf` | Disturbance estimated by a nonlinear disturbance observer |
 
 ```bash
 roslaunch multi_quadcopter_control sequential_sim.launch controller:=pid_ff
@@ -66,12 +72,26 @@ roslaunch multi_quadcopter_control sequential_sim.launch controller:=pid
 roslaunch multi_quadcopter_control sequential_sim.launch controller:=ndob
 ```
 
+Without disturbance (`disturbance_enabled:=false`) `pid_ff` and `pid` give identical results.
+`ndob` additionally produces a small spurious estimate because the observer is updated with an
+explicit Euler step at the mid-level rate while the thrust changes between updates. At the default
+20 Hz (`mid_level_controller/dt: 0.05`) this increases the tracking error by about 10 % without
+disturbance; at 100 Hz (`dt: 0.01`) all three controllers give the same result without disturbance.
+
 - `pid_ff` uses only the deterministic downwash part of the model; the turbulence is not
   compensated and acts directly on the plant.
-- `ndob` does not add the model feedforward, because the observer already estimates the
-  disturbance. The observer bandwidths are read from `mid_level_controller/lv_x`, `lv_y`, `lv_z`
-  in the drone's parameter file (defaults 2.0, 2.0, 2.5 rad/s). In this mode the estimate is also
-  logged (`ndob_f.*`) and published on `/droneN/ndob_estimated_disturbance`.
+- `ndob` uses the observer (per axis, world frame, explicit Euler at the mid-level rate)
+
+  ```
+  Δf = z + L m v
+  ż  = -L Δf - L (f_thrust - m g)
+  ```
+
+  where `f_thrust` is the previous thrust command passed through a first-order filter with the
+  actuator time constant (`tau_thrust`) and projected with the measured attitude. The gains
+  `L = diag(lv_x, lv_y, lv_z)` are read from `mid_level_controller/lv_x`, `lv_y`, `lv_z` in the
+  drone's parameter file (defaults 2.0, 2.0, 2.5 rad/s). The estimate is logged (`ndob_f.*`) and
+  published on `/droneN/ndob_estimated_disturbance`.
 
 ### Other launch arguments
 

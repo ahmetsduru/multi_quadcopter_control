@@ -1,8 +1,10 @@
 // Mid-level (position) and low-level (attitude) controllers (ROS-free).
 // Same control laws as src/mid_level_cont.cpp and src/low_level_cont.cpp.
-// The mid-level controller has two modes:
-//   PID : hierarchical PID (current src/mid_level_cont.cpp)
-//   NDOB: PID + model-based nonlinear disturbance observer (NDOB version of mid_level_cont.cpp)
+// The mid-level controller is the hierarchical PID of src/mid_level_cont.cpp in every mode; the modes
+// differ only in the disturbance compensation term subtracted from the desired force:
+//   PID                              : none
+//   PID + disturbance_feedforward    : modelled downwash f_dw (Eq. 21)
+//   NDOB                             : disturbance delta_f estimated by a nonlinear disturbance observer
 #ifndef MQC_SIM_CONTROLLERS_H
 #define MQC_SIM_CONTROLLERS_H
 
@@ -26,7 +28,7 @@ struct MidLevelParams {
 
     // NDOB (mid_level_controller/lv_x, lv_y, lv_z): observer bandwidths (rad/s)
     double lv_x = 2.0, lv_y = 2.0, lv_z = 2.5;
-    double ndob_tau_motor = 0.05;  // thrust filter time constant used by the observer (s)
+    double ndob_tau_motor = 0.1;   // observer thrust filter time constant (s); the simulator sets it to tau_thrust
 };
 
 struct MidLevelOutput {
@@ -58,14 +60,11 @@ private:
     double last_thrust_;                                 // last commanded thrust (starts at hover)
     double filtered_thrust_;                             // first-order filtered thrust (starts at hover)
 
-    MidLevelOutput computePID(const Eigen::Vector3d& ref_pos, const Eigen::Vector3d& ref_vel,
+    MidLevelOutput computeLaw(const Eigen::Vector3d& ref_pos, const Eigen::Vector3d& ref_vel,
                               const Eigen::Vector3d& ref_acc, double ref_psi,
                               const Eigen::Vector3d& pos, const Eigen::Vector3d& vel,
-                              const Eigen::Vector3d& euler, const Eigen::Vector3d& f_dw);
-    MidLevelOutput computeNDOB(const Eigen::Vector3d& ref_pos, const Eigen::Vector3d& ref_vel,
-                               const Eigen::Vector3d& ref_acc, double ref_psi,
-                               const Eigen::Vector3d& pos, const Eigen::Vector3d& vel,
-                               const Eigen::Vector3d& euler, const Eigen::Vector3d& f_dw);
+                              const Eigen::Vector3d& euler, const Eigen::Vector3d& f_comp, bool use_comp);
+    void updateObserver(const Eigen::Vector3d& vel, const Eigen::Vector3d& euler);
 };
 
 // ---------------------------------------------------------------- Low level

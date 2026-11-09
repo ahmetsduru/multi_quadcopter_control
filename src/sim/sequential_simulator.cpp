@@ -39,7 +39,9 @@ SequentialSimulator::SequentialSimulator(const SimConfig& config, const std::vec
         Drone d;
         d.cfg = dc;
         d.dyn.reset(new QuadDynamics(dc.quad));
-        d.mid.reset(new MidLevelController(dc.mid));
+        MidLevelParams mid = dc.mid;
+        mid.ndob_tau_motor = dc.quad.tau_thrust;  // NDOB thrust model uses the actual actuator time constant
+        d.mid.reset(new MidLevelController(mid));
         d.low.reset(new LowLevelController(dc.low));
         d.traj.reset(new TrajectorySequencer(dc.trajectories, dc.is_psi_active, dc.psi_filter_beta));
         d.mid_div = divisor(dc.mid.dt, dc.name + " mid_level_controller/dt");
