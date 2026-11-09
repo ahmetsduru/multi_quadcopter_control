@@ -11,11 +11,11 @@ clc; clear; close all;
 %% === AYARLAR ===
 m_drone        = 0.382;          % kaynak (üstteki) drone kütlesi (kg)
 g              = 9.81;
-C_coup         = 0.065;          % c_coup (Tablo S2)
+C_coup         = 0.09;           % c_coup
 r_lat          = 0.05;           % r_lat
-z0             = sqrt(0.1);      % z0 (z0^2 = 0.1, Denk. 8)
+z0             = sqrt(0.05);     % z0 (z0^2 = 0.05)
 sigma          = 0.15;           % sigma (m)
-turb_intensity = 0.30;           % lambda (Tablo S2)
+turb_intensity = 0.70;           % turb_intensity
 rho_air        = 1.225;
 noise_seed     = 42;             % gürültü haritası tekrarlanabilir olsun
 
