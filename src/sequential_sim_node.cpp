@@ -16,6 +16,9 @@
 
 #include <Eigen/Geometry>
 #include <chrono>
+#include <ctime>
+#include <fstream>
+#include <iomanip>
 #include <cmath>
 #include <memory>
 #include <stdexcept>
@@ -456,6 +459,31 @@ int main(int argc, char** argv) {
     }
     ROS_INFO("Sequential sim: finished at t=%.3f s (%lld steps) in %.2f s wall time", sim->time(),
              sim->stepCount(), wall);
+
+    // Run summary next to the logs, so that scripts can check which run the logs belong to
+    if (log_enabled) {
+        const std::string info_path = log_dir + "/run_info.txt";
+        std::ofstream info(info_path);
+        if (info.is_open()) {
+            const std::time_t now = std::time(nullptr);
+            char date[32];
+            std::strftime(date, sizeof(date), "%Y-%m-%d %H:%M:%S", std::localtime(&now));
+            info << "date: " << date << "\n"
+                 << "controller: " << controller_type << "\n"
+                 << "disturbance_enabled: " << (disturbance_enabled ? "true" : "false") << "\n"
+                 << "noise_seed: " << noise_seed << "\n"
+                 << "turb_intensity: " << cfg.downwash.turb_intensity << "\n"
+                 << "psi_filter_beta: " << psi_filter_beta << "\n"
+                 << "trajectory_time_scale: " << trajectory_time_scale << "\n"
+                 << "sim_end_time: " << sim->time() << "\n";
+            info << std::setprecision(6);
+            for (size_t i = 0; i < sim->droneCount(); ++i) {
+                const double rms = out[i].samples ? std::sqrt(out[i].sq_err_sum / out[i].samples) : 0.0;
+                info << sim->droneName(i) << "_rms: " << rms << "\n";
+            }
+            ROS_INFO("Sequential sim: run summary written to %s", info_path.c_str());
+        }
+    }
 
     if (shutdown_on_finish) {
         ros::shutdown();

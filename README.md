@@ -160,6 +160,10 @@ r_pos.xyz, r_vel.xyz, r_acc.xyz, r_eul_ang.xyz, r_torq.xyz, dist_f.xyz, [ndob_f.
 `a_` = actual, `r_` = reference / command, `dist_f` = disturbance force on the drone (world frame),
 `ndob_f` = NDOB estimate (only with `controller:=ndob`). Positions include the drone's initial offset.
 
+Each run also writes `run_info.txt` to the log folder (controller, seed, time scale, date and the
+per-drone RMS printed in the terminal). `scripts/main.m` prints which run each log folder belongs to
+and warns if the RMS computed from the logs differs from `run_info.txt` or the file is missing.
+
 ## Reproducing the figures
 
 1. Run the simulations (each writes to its own folder). All three in one go:

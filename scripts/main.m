@@ -119,6 +119,12 @@ D_abl  = readLogs(ablation_log_dir, num_drones, plot_step);
 D_beta = readLogs(beta_log_dir, num_drones, plot_step);
 D_geo  = readLogs(geo_log_dir, num_drones, plot_step);
 
+% Hangi log klasörü hangi koşuya ait? (simülasyonun yazdığı run_info.txt ile kontrol)
+checkRunInfo(log_dir, D, 'Ana koşu');
+checkRunInfo(ablation_log_dir, D_abl, 'Ablasyon');
+checkRunInfo(beta_log_dir, D_beta, 'Beta = 0.1');
+checkRunInfo(geo_log_dir, D_geo, 'SE(3)');
+
 %% === Fig. 1 - POZİSYON + Z ZOOM ===
 fig = figure;
 lgd_handles = gobjects(0);
@@ -430,6 +436,35 @@ function D = readLogs(dir_path, num_drones, plot_step)
         D(i).t  = T{:, "time"} - T{1, "time"};
         D(i).Tp = T(1:plot_step:end, :);
         D(i).tp = D(i).t(1:plot_step:end);
+    end
+end
+
+function checkRunInfo(dir_path, D, label)
+    % run_info.txt: koşunun kontrolcüsü ve terminalde basılan RMS değerleri. Loglardan hesaplanan RMS
+    % ile karşılaştırılır; fark ya da dosyanın olmaması logların başka bir koşudan geldiğini gösterir.
+    if isempty(dir_path) || ~any([D.ok]), return; end
+    info_file = fullfile(dir_path, 'run_info.txt');
+    if ~isfile(info_file)
+        warning('%s: %s yok. Loglar sıralı simülasyondan değil (eski ya da başka bir kaynaktan) olabilir.', ...
+                label, info_file);
+        return;
+    end
+    txt = fileread(info_file);
+    ctrl = regexp(txt, 'controller:\s*(\S+)', 'tokens', 'once');
+    dt   = regexp(txt, 'date:\s*([^\n]+)', 'tokens', 'once');
+    if isempty(ctrl), ctrl = {'?'}; end
+    if isempty(dt), dt = {'?'}; end
+    fprintf('%s: %s | controller = %s | %s\n', label, dir_path, ctrl{1}, strtrim(dt{1}));
+    for i = 1:numel(D)
+        if ~D(i).ok, continue; end
+        tok = regexp(txt, sprintf('drone%d_rms:\\s*([-0-9.eE+]+)', i), 'tokens', 'once');
+        if isempty(tok), continue; end
+        rms_sim = str2double(tok{1});
+        rms_log = sqrt(mean(positionError(D(i).T).^2));
+        if abs(rms_sim - rms_log) > 1e-4
+            warning('%s: drone%d RMS logda %.5f, simülasyonda %.5f. Loglar bu koşuya ait değil olabilir.', ...
+                    label, i, rms_log, rms_sim);
+        end
     end
 end
 
