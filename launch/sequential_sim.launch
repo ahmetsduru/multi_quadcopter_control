@@ -109,10 +109,10 @@
         <param name="disturbance_rate" value="500.0"/>
         <param name="noise_seed" value="$(arg noise_seed)"/>
         <param name="max_vertical_range" value="$(arg max_vertical_range)"/>
-        <param name="z0" value="0.22360679774997896"/>
-        <param name="c_coup" value="0.065"/>
+        <param name="z0" value="1.0"/>
+        <param name="c_coup" value="0.476"/>
         <param name="r_lat" value="0.05"/>
-        <param name="sigma" value="0.15"/>
+        <param name="sigma" value="0.206"/>
         <param name="turb_intensity" value="0.30"/>
     </node>
 </launch>
