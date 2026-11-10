@@ -108,7 +108,7 @@
         <param name="log_dir" value="$(arg log_dir)"/>
         <param name="log_decimation" value="1"/>
 
-        <!-- Downwash bozucu modeli: 1/(dz^2 + z0^2), z0 = sqrt(0.05) -> z0^2 = 0.05 -->
+        <!-- Downwash bozucu modeli: 1/(dz^2 + z0^2), z0 = 0.8 -> z0^2 = 0.64 -->
         <param name="disturbance_enabled" value="$(arg disturbance_enabled)"/>
         <param name="disturbance_rate" value="500.0"/>
         <param name="noise_seed" value="$(arg noise_seed)"/>

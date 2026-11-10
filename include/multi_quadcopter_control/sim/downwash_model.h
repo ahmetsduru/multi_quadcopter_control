@@ -34,10 +34,10 @@ struct PinkNoise3D {
 };
 
 struct DownwashParams {
-    double c_coup = 0.065;            // Table S2
+    double c_coup = 0.3;
     double r_lat = 0.05;
-    double z0 = 0.22360679774997896;  // sqrt(0.05) -> z0^2 = 0.05
-    double sigma = 0.15;
+    double z0 = 0.8;                  // z0^2 = 0.64
+    double sigma = 0.22;
     double turb_intensity = 0.30;     // lambda
     double max_vertical_range = -1.0;  // <= 0: unlimited
     long long noise_seed = 42;         // < 0: random
