@@ -54,7 +54,8 @@ SequentialSimulator::SequentialSimulator(const SimConfig& config, const std::vec
             d.se3_att.reset(new Se3AttitudeController(sa));
             d.se3_out.thrust = dc.quad.mass * 9.81;
         }
-        d.traj.reset(new TrajectorySequencer(dc.trajectories, dc.is_psi_active, dc.psi_filter_beta));
+        d.traj.reset(new TrajectorySequencer(dc.trajectories, dc.is_psi_active, dc.psi_filter_beta,
+                                             dc.trajectory_time_scale));
         d.mid_div = divisor(dc.mid.dt, dc.name + " mid_level_controller/dt");
         d.low_div = divisor(dc.low.dt, dc.name + " low_level_controller/dt");
         d.next_traj_step = 0;
@@ -108,6 +109,7 @@ void SequentialSimulator::step() {
             d.se3_out = d.se3_pos->compute(toEigen(d.traj->position()), toEigen(d.traj->velocity()),
                                            toEigen(d.traj->acceleration()), toEigen(d.traj->jerk()),
                                            d.traj->psi(), d.dyn->position(), d.dyn->velocity(),
+                                           d.dyn->acceleration(d.disturbance), d.dyn->rotation(),
                                            d.disturbance_static);
             d.mid_out.thrust = d.se3_out.thrust;
             d.mid_out.ref_angles = rotationToEuler(d.se3_out.R_d);  // for logging
@@ -124,8 +126,8 @@ void SequentialSimulator::step() {
     // 4. Low-level controllers
     for (Drone& d : drones_) {
         if (k_ % d.low_div == 0 && d.cfg.use_se3) {
-            d.torques = d.se3_att->compute(d.se3_out.R_d, d.se3_out.omega_d, d.dyn->rotation(),
-                                           d.dyn->angularVelocity());
+            d.torques = d.se3_att->compute(d.se3_out.R_d, d.se3_out.omega_d, d.se3_out.omega_dot_d,
+                                           d.dyn->rotation(), d.dyn->angularVelocity());
             d.dyn->setTorqueCommand(d.torques);
         } else if (k_ % d.low_div == 0) {
             d.torques = d.low->compute(d.mid_out.ref_angles, d.dyn->eulerAngles());

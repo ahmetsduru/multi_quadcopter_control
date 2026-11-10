@@ -27,8 +27,9 @@ public:
     static constexpr double kSampleStep = 0.05;
 
     // psi_filter_beta: low-pass coefficient of the trajectory-aligned yaw (Eq. 19), 0.05 in the original code
+    // time_scale: multiplies all waypoint times (< 1: faster, more aggressive trajectories)
     TrajectorySequencer(const std::vector<TrajectorySpec>& specs, bool is_psi_active,
-                        double psi_filter_beta = 0.05);
+                        double psi_filter_beta = 0.05, double time_scale = 1.0);
 
     // One iteration of the trajectory loop: evaluate the reference at the current local time,
     // switch to the next trajectory if needed, then advance the local time.
@@ -72,6 +73,7 @@ private:
     bool m_initial_trajectory = true;
     bool m_is_psi_active = true;
     double psi_filter_beta_ = 0.05;
+    double time_scale_ = 1.0;
     Vec3 m_position, m_velocity, m_acceleration, m_jerk;
     double m_des_psi = 0.0;
     double m_last_psi = 0.0;

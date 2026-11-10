@@ -6,8 +6,13 @@
 namespace mqc_sim {
 
 TrajectorySequencer::TrajectorySequencer(const std::vector<TrajectorySpec>& specs, bool is_psi_active,
-                                         double psi_filter_beta)
-    : specs_(specs), m_is_psi_active(is_psi_active), psi_filter_beta_(psi_filter_beta) {
+                                         double psi_filter_beta, double time_scale)
+    : specs_(specs), m_is_psi_active(is_psi_active), psi_filter_beta_(psi_filter_beta), time_scale_(time_scale) {
+    if (time_scale_ != 1.0) {
+        for (TrajectorySpec& s : specs_) {
+            for (double& t : s.times) t *= time_scale_;
+        }
+    }
     // Constructor of TrajectoryGenerator: request the first trajectory
     have_current_ = fetchNext();
     if (!have_current_) {
@@ -57,7 +62,7 @@ bool TrajectorySequencer::plan() {
         points_x_mod.insert(points_x_mod.begin(), m_position.x);
         points_y_mod.insert(points_y_mod.begin(), m_position.y);
         points_z_mod.insert(points_z_mod.begin(), m_position.z);
-        double last_time = times_mod.back() + extra_time;
+        double last_time = times_mod.back() + extra_time * time_scale_;
         times_mod.push_back(last_time);
     }
 
@@ -160,6 +165,11 @@ void TrajectorySequencer::generatePsi() {
         if (std::isfinite(m_velocity.x) && std::isfinite(m_velocity.y)) {
             if (!(m_velocity.x == 0.0 && m_velocity.y == 0.0)) {
                 double new_psi = std::atan2(m_velocity.y, m_velocity.x);
+                // Unwrap: keep psi continuous when the heading crosses +/-pi (atan2 jumps by 2 pi there and
+                // the low-pass filter would otherwise sweep through all headings).
+                if (std::abs(new_psi - m_last_psi) > M_PI) {
+                    new_psi = m_last_psi + std::remainder(new_psi - m_last_psi, 2.0 * M_PI);
+                }
                 m_des_psi = alpha * new_psi + (1.0 - alpha) * m_last_psi;
                 m_last_psi = m_des_psi;
             } else {

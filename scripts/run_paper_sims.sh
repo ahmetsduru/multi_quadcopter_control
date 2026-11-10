@@ -21,7 +21,7 @@ run() {
 run "[1/4] Proposed controller (PID + downwash feedforward)" "${PKG}/log"                controller:=pid_ff
 run "[2/4] Ablation (PID, no feedforward; Fig. 8, Table 2)"  "${PKG}/log_no_feedforward" controller:=pid
 run "[3/4] Yaw filter beta = 0.1 (Fig. S6)"                  "${PKG}/log_beta_0.1"       controller:=pid_ff psi_filter_beta:=0.1
-run "[4/4] Geometric SE(3) controller (Fig. 2, Table 1)"    "${PKG}/log_se3"            controller:=se3
+run "[4/4] Geometric SE(3) controller (Fig. 2, Table 1)"    "${PKG}/log_se3"            controller:=se3_ff
 
 echo
 echo "All runs finished. Now run scripts/main.m in MATLAB."

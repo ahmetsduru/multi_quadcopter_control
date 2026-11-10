@@ -66,23 +66,28 @@ f_des = Kp e_p + Ki ∫e_p + Kd e_v + m a_des + m g - f_comp
 | `pid` | `0` | No disturbance compensation (ablation) |
 | `ndob` | `Δf` | Disturbance estimated by a nonlinear disturbance observer |
 
-A fourth option, `controller:=se3`, runs the geometric SE(3) controller of Lee et al., ported from
-[multi_quadcopter_geometric_control](https://github.com/ahmetsduru/multi_quadcopter_geometric_control),
-with the same downwash feedforward `f_dw` as `pid_ff`, the same rates and thrust limits. Its gains are
-in the `se3_mid_level_controller` / `se3_low_level_controller` sections of the parameter files.
+`controller:=se3_ff` runs the geometric tracking controller on SE(3) of Lee, Leok and McClamroch
+(CDC 2010): thrust `f = F_des · R e3`, desired attitude from `F_des` and the yaw reference, desired
+angular velocity from `dF_des` (using the measured acceleration), and the attitude law
+`M = -k_R e_R - k_Ω e_Ω + Ω×JΩ - J(Ω̂ Rᵀ R_d Ω_d - Rᵀ R_d Ω̇_d)` (`Ω̇_d` by finite difference,
+`ψ̇_d = 0`). It uses the same downwash feedforward `f_dw` as `pid_ff`; `controller:=se3` is the same
+controller without feedforward. All controllers share the same vehicle model (mass, inertia, actuator
+lags, drag), rates and thrust limits; only the controller gains differ. The SE(3) gains are in the
+`se3_mid_level_controller` / `se3_low_level_controller` sections of the parameter files.
 
 Gain tuning (PID and SE(3), same procedure): the position gains `(kp_xy, kd_xy)` were selected on a
 common grid as the set with the lowest mean RMSE over 8 turbulence seeds among the sets that stay
 stable, with no change in the vertical order of the UAVs, under all ±30 % perturbations of the x/y
 and z gains. `kp_z = 15`, `kd_z = 5` for both; the attitude loops use the same gains
-(`kp = 0.02`, `kd = 0.01`) and no integral terms. Result: PID `kp_xy = 3.0`, `kd_xy = 0.4`;
-SE(3) `kp_xy = 1.5`, `kd_xy = 1.2`.
+(`kp = 0.02`, `kd = 0.01`) and no integral terms. Result: PID `kp_xy = 4.0`, `kd_xy = 0.4`;
+SE(3) `kp_xy = 5.0`, `kd_xy = 0.4`.
 
 ```bash
 roslaunch multi_quadcopter_control sequential_sim.launch controller:=pid_ff
 roslaunch multi_quadcopter_control sequential_sim.launch controller:=pid
 roslaunch multi_quadcopter_control sequential_sim.launch controller:=ndob
 roslaunch multi_quadcopter_control sequential_sim.launch controller:=se3
+roslaunch multi_quadcopter_control sequential_sim.launch controller:=se3_ff
 ```
 
 Without disturbance (`disturbance_enabled:=false`) `pid_ff` and `pid` give identical results.
@@ -119,6 +124,7 @@ mid-level rate this discretization error grows: at 20 Hz it increases the tracki
 | `noise_seed` | `42` | Turbulence noise seed; `-1` = random seed on every run |
 | `max_vertical_range` | `-1.0` | Ignore downwash interactions farther than this vertical distance (m); `-1` = no limit |
 | `psi_filter_beta` | `0.05` | Low-pass coefficient β of the trajectory-aligned yaw angle |
+| `trajectory_time_scale` | `1.0` | Multiplies all waypoint times; < 1 gives faster, more aggressive trajectories (0.5 = twice as fast) |
 | `log_dir` | `<package>/log` | Folder for the log files |
 
 Downwash model parameters (`c_coup`, `r_lat`, `z0`, `sigma`, `turb_intensity`, `disturbance_rate`)
@@ -153,6 +159,10 @@ r_pos.xyz, r_vel.xyz, r_acc.xyz, r_eul_ang.xyz, r_torq.xyz, dist_f.xyz, [ndob_f.
 
 `a_` = actual, `r_` = reference / command, `dist_f` = disturbance force on the drone (world frame),
 `ndob_f` = NDOB estimate (only with `controller:=ndob`). Positions include the drone's initial offset.
+
+Each run also writes `run_info.txt` to the log folder (controller, seed, time scale, date and the
+per-drone RMS printed in the terminal). `scripts/main.m` prints which run each log folder belongs to
+and warns if the RMS computed from the logs differs from `run_info.txt` or the file is missing.
 
 ## Reproducing the figures
 
