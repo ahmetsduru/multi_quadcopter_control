@@ -16,7 +16,8 @@
 %   Table 1 RMSE/ISE: önerilen vs SE(3)                    -> log_dir + geo_log_dir
 %   Table 2 RMSE/ISE: feedforward aktif vs pasif           -> log_dir + ablation_log_dir
 %   Fig. F1 Komşu İHA'lar arası bağıl mesafe hatası ve formasyon hatası -> log_dir (+ ablation_log_dir, geo_log_dir)
-%   Table 3 İHA çiftleri matrisi: üst üçgen formasyon hatası, alt üçgen bağıl mesafe hatası (RMS)
+%   Table 3 İHA çiftleri matrisi: üst üçgen formasyon hatası (RMS, baskın yön xy/z),
+%           alt üçgen bağıl mesafe hatası (RMS, işaretli ortalama)
 %   (Fig. S2 için: fig_S2_downwash_field.m)
 %
 % Gerekli simülasyon koşularının hepsi tek komutla çalıştırılabilir (her biri ayrı log klasörüne yazar):
@@ -371,7 +372,13 @@ addTopLegend(hs, [0.1 0.94 0.8 0.05], S);
 saveFigure(fig, eps_folder, 'FigF1_formation_error.eps', output_pdf);
 
 % Table 3: İHA çiftleri matrisi (her kontrolcü için). Satır/sütun Q1..Q5;
-%   köşegenin üstü: formasyon hatası RMS ||e_ij|| (m), köşegenin altı: bağıl mesafe hatası RMS e_d,ij (m).
+%   köşegenin üstü: formasyon hatası RMS ||e_ij|| (m) ve parantez içinde baskın yönü:
+%       (z) dikey bileşen, (xy) yatay bileşen daha büyük. Downwash dikey olduğundan (z) bozucunun izidir.
+%   köşegenin altı: bağıl mesafe hatası RMS e_d,ij (m) ve parantez içinde işaretli ortalaması:
+%       (+) çift istenenden uzak, (-) istenenden yakın (çarpışma yönü), ~0 ise yönsüz (gürültü benzeri) hata.
+%   RMS işareti ve yönü kaybettiği için bu ekler yönü gösterir. e_d, e_ij'nin iki İHA'yı birleştiren
+%   doğrultudaki bileşenidir; bu yüzden alt üçgen üst üçgenden büyük olamaz, aradaki fark formasyonun
+%   mesafeyi değiştirmeden bozulmasıdır (ör. yan yana iki İHA'dan birinin aşağı kayması).
 % Değerler çiftin komşu olduğu süre boyunca hesaplanır; hiç komşu olmayan çiftler '-' ile gösterilir.
 names_Q = "Q" + string(1:num_drones);
 file_tag = {'proposed', 'without_ff', 'se3'};
@@ -380,12 +387,17 @@ for r = avail_F
     for k = 1:size(F{r}.pairs, 1)
         i1 = F{r}.pairs(k, 1); j1 = F{r}.pairs(k, 2);
         if ~isnan(F{r}.pair_EF(k))
-            M(i1, j1) = sprintf('%.3f', F{r}.pair_EF(k));   % üst üçgen: formasyon hatası
-            M(j1, i1) = sprintf('%.3f', F{r}.pair_Ed(k));   % alt üçgen: bağıl mesafe hatası
+            if F{r}.pair_EF_z(k) >= F{r}.pair_EF_xy(k), dir_F = 'z'; else, dir_F = 'xy'; end
+            mean_d = sprintf('%+.3f', F{r}.pair_Ed_mean(k));
+            if abs(F{r}.pair_Ed_mean(k)) < 5e-4, mean_d = '0.000'; end      % '+0.000' / '-0.000' yazılmasın
+            M(i1, j1) = sprintf('%.3f (%s)', F{r}.pair_EF(k), dir_F);        % üst üçgen: formasyon hatası
+            M(j1, i1) = sprintf('%.3f (%s)', F{r}.pair_Ed(k), mean_d);       % alt üçgen: bağıl mesafe hatası
         end
     end
     tbl3 = array2table(M, 'RowNames', cellstr(names_Q), 'VariableNames', cellstr(names_Q));
-    fprintf('\nTable 3 (%s): üst üçgen = formasyon hatası, alt üçgen = bağıl mesafe hatası (RMS, m)\n', labels_F{r});
+    fprintf('\nTable 3 (%s), m\n', labels_F{r});
+    fprintf('  üst üçgen: formasyon hatası RMS (baskın yön: xy yatay, z dikey)\n');
+    fprintf('  alt üçgen: bağıl mesafe hatası RMS (işaretli ortalama: + istenenden uzak, - istenenden yakın)\n');
     disp(tbl3);
     writetable(tbl3, fullfile(eps_folder, sprintf('Table3_formation_%s.csv', file_tag{r})), 'WriteRowNames', true);
 end
@@ -695,18 +707,23 @@ function F = formationCore(t, Pa, Pr, r_N)
     pairs = nchoosek(1:N, 2);
     sq_d = 0; sq_f = 0; cnt = 0;
     pair_Ed = nan(size(pairs, 1), 1); pair_EF = pair_Ed;
+    pair_Ed_mean = pair_Ed; pair_EF_xy = pair_Ed; pair_EF_z = pair_Ed;
     for k = 1:size(pairs, 1)
         da = Pa(:, :, pairs(k, 1)) - Pa(:, :, pairs(k, 2));
         dr = Pr(:, :, pairs(k, 1)) - Pr(:, :, pairs(k, 2));
         nb = sqrt(sum(dr.^2, 2)) <= r_N;                       % zamana bağlı komşuluk
         e_d = sqrt(sum(da.^2, 2)) - sqrt(sum(dr.^2, 2));       % bağıl mesafe hatası
-        e_f = sqrt(sum((da - dr).^2, 2));                      % formasyon (bağıl konum) hatası
+        ev  = da - dr;                                         % formasyon hatası vektörü e_ij = e_i - e_j
+        e_f = sqrt(sum(ev.^2, 2));                             % formasyon (bağıl konum) hatası
         sq_d = sq_d + nb .* e_d.^2;
         sq_f = sq_f + nb .* e_f.^2;
         cnt  = cnt + nb;
         if any(nb)                                             % çift bazında RMS (komşu oldukları süre)
             pair_Ed(k) = sqrt(mean(e_d(nb).^2));
             pair_EF(k) = sqrt(mean(e_f(nb).^2));
+            pair_Ed_mean(k) = mean(e_d(nb));                   % işaret: + uzak, - yakın
+            pair_EF_xy(k) = sqrt(mean(sum(ev(nb, 1:2).^2, 2))); % yatay bileşen RMS
+            pair_EF_z(k)  = sqrt(mean(ev(nb, 3).^2));           % dikey bileşen RMS
         end
     end
     ok = cnt > 0;
@@ -716,6 +733,7 @@ function F = formationCore(t, Pa, Pr, r_N)
     F.rms_Ed = sqrt(mean(F.Ed(ok).^2)); F.max_Ed = max(F.Ed(ok));
     F.rms_EF = sqrt(mean(F.EF(ok).^2)); F.max_EF = max(F.EF(ok));
     F.pairs = pairs; F.pair_Ed = pair_Ed; F.pair_EF = pair_EF;
+    F.pair_Ed_mean = pair_Ed_mean; F.pair_EF_xy = pair_EF_xy; F.pair_EF_z = pair_EF_z;
 end
 
 function lim = padLimits(vals, frac)

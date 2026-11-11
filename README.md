@@ -195,8 +195,12 @@ and warns if the RMS computed from the logs differs from `run_info.txt` or the f
    UAVs (desired distance below `neighbor_radius` = 3 m): the relative distance error
    `e_d,ij = ||p_i - p_j|| - ||p_i^ref - p_j^ref||` and the formation error
    `e_ij = (p_i - p_j) - (p_i^ref - p_j^ref)`, each as an RMS over the neighbour pairs (`E_d`, `E_F`).
-   Table 3 is a Q1-Q5 matrix per controller: upper triangle = RMS formation error of the pair,
-   lower triangle = RMS relative distance error, computed while the pair are neighbours.
+   Table 3 is a Q1-Q5 matrix per controller, computed while the pair are neighbours:
+   upper triangle = RMS formation error of the pair with its dominant direction, `(xy)` horizontal or
+   `(z)` vertical; lower triangle = RMS relative distance error with its signed mean in parentheses,
+   `+` the pair is farther apart than desired, `-` closer than desired. The RMS values carry no
+   direction, the parenthesised entries do. Since `e_d,ij` is the component of `e_ij` along the line
+   joining the pair, the lower entry never exceeds the upper one.
 
 3. Fig. S2 (downwash force and velocity field) is computed from the model by
    `scripts/fig_S2_downwash_field.m`.
