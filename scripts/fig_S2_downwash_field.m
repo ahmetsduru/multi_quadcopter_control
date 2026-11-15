@@ -11,7 +11,7 @@ clc; clear; close all;
 %% === AYARLAR ===
 m_drone        = 0.382;          % kaynak (üstteki) drone kütlesi (kg)
 g              = 9.81;
-C_coup         = 0.3;            % c_coup
+C_coup         = 0.34;           % c_coup
 r_lat          = 0.05;           % r_lat
 z0             = 0.8;            % z0 (z0^2 = 0.64)
 sigma          = 0.22;           % sigma (m)

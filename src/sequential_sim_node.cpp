@@ -215,7 +215,7 @@ int main(int argc, char** argv) {
     pnh.param("disturbance_enabled", disturbance_enabled, true);
     pnh.param("disturbance_rate", disturbance_rate, 500.0);
     pnh.param("noise_seed", noise_seed, 42);
-    pnh.param("c_coup", cfg.downwash.c_coup, 0.3);
+    pnh.param("c_coup", cfg.downwash.c_coup, 0.34);
     pnh.param("r_lat", cfg.downwash.r_lat, 0.05);
     pnh.param("z0", cfg.downwash.z0, 0.8);
     pnh.param("sigma", cfg.downwash.sigma, 0.22);

@@ -95,7 +95,7 @@
         <param name="max_vertical_range" value="$(arg max_vertical_range)"/>
         <!-- Downwash modeli: 1/(dz^2 + z0^2), z0 = 0.8 -> z0^2 = 0.64 -->
         <param name="z0" value="0.8"/>
-        <param name="c_coup" value="0.3"/>
+        <param name="c_coup" value="0.34"/>
         <param name="r_lat" value="0.05"/>
         <param name="sigma" value="0.22"/>
         <param name="turb_intensity" value="0.30"/>
