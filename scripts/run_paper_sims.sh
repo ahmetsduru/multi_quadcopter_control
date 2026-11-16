@@ -1,13 +1,19 @@
 #!/usr/bin/env bash
-# Runs the simulations needed by scripts/main.m (manuscript figures and tables).
+# Runs the simulations needed by scripts/main.m (manuscript and supplement figures and tables).
 #   rosrun multi_quadcopter_control run_paper_sims.sh
-# Each run writes droneN_log.txt files to its own folder inside the package.
+# Every run writes droneN_log.txt and run_info.txt to its own folder log/<run>/:
+#   log/pid_ff, log/pid, log/ndob, log/se3, log/se3_ff   one folder per controller (disturbed)
+#   log/pid_nominal                                      PID, disturbance off
+#   log/pid_ff_beta0.1                                   PID+FF, yaw filter beta = 0.1
+# main.m picks the runs it needs by these names (settings at the top of main.m).
 
 PKG=$(rospack find multi_quadcopter_control) || { echo "Package not found. Did you source devel/setup.bash?"; exit 1; }
+LOG="${PKG}/log"
 COMMON="rviz:=false real_time_factor:=0 shutdown_on_finish:=true"
 
 run() {
-    local label=$1 dir=$2; shift 2
+    local label=$1 name=$2; shift 2
+    local dir="${LOG}/${name}"
     echo
     echo "=== ${label} -> ${dir}"
     roslaunch multi_quadcopter_control sequential_sim.launch ${COMMON} log_dir:="${dir}" "$@"
@@ -18,12 +24,13 @@ run() {
     fi
 }
 
-run "[1/6] Proposed controller (PID + downwash feedforward)" "${PKG}/log"                controller:=pid_ff
-run "[2/6] Ablation (PID, no feedforward; Fig. 8, Table 2)"  "${PKG}/log_no_feedforward" controller:=pid
-run "[3/6] Yaw filter beta = 0.1 (Fig. S6)"                  "${PKG}/log_beta_0.1"       controller:=pid_ff psi_filter_beta:=0.1
-run "[4/6] Geometric SE(3) controller (Fig. 2, Table 1)"    "${PKG}/log_se3"            controller:=se3_ff
-run "[5/6] PID + NDOB, no downwash model (Fig. 9, Table 4)" "${PKG}/log_ndob"           controller:=ndob
-run "[6/6] Disturbance-free run (Table 4)"                  "${PKG}/log_nominal"        controller:=pid disturbance_enabled:=false
+run "[1/7] PID + downwash feedforward (PID+FF)"     pid_ff         controller:=pid_ff
+run "[2/7] PID, no feedforward"                     pid            controller:=pid
+run "[3/7] PID + NDOB, no downwash model"           ndob           controller:=ndob
+run "[4/7] Geometric SE(3), no feedforward"         se3            controller:=se3
+run "[5/7] Geometric SE(3) + feedforward"           se3_ff         controller:=se3_ff
+run "[6/7] PID, disturbance off"                    pid_nominal    controller:=pid disturbance_enabled:=false
+run "[7/7] PID+FF, yaw filter beta = 0.1"           pid_ff_beta0.1 controller:=pid_ff psi_filter_beta:=0.1
 
 echo
 echo "All runs finished. Now run scripts/main.m in MATLAB."

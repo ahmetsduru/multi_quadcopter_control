@@ -28,8 +28,10 @@
     <arg name="psi_filter_beta" default="0.05"/>
     <!-- Yörünge zaman ölçeği: 1 = normal, < 1 = daha hızlı / agresif (0.5 = iki kat hızlı) -->
     <arg name="trajectory_time_scale" default="1.0"/>
-    <!-- Log klasörü (karşılaştırma koşuları için farklı klasör verilebilir) -->
-    <arg name="log_dir" default="$(find multi_quadcopter_control)/log"/>
+    <!-- Log klasörü: varsayılan olarak her kontrolcü kendi klasörüne yazar (log/<controller>/).
+         Bozucusuz ya da farklı beta gibi başka ayarlı koşular için ayrı bir klasör verin
+         (scripts/run_paper_sims.sh: log/pid_nominal, log/pid_ff_beta0.1). -->
+    <arg name="log_dir" default="$(find multi_quadcopter_control)/log/$(arg controller)"/>
 
     <rosparam file="$(find multi_quadcopter_control)/config/trajectory_crescent.yaml" command="load"/>
     <rosparam file="$(find multi_quadcopter_control)/config/all_trajectories.yaml" command="load"/>

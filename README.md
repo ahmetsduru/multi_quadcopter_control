@@ -125,7 +125,7 @@ mid-level rate this discretization error grows: at 20 Hz it increases the tracki
 | `max_vertical_range` | `-1.0` | Ignore downwash interactions farther than this vertical distance (m); `-1` = no limit |
 | `psi_filter_beta` | `0.05` | Low-pass coefficient β of the trajectory-aligned yaw angle |
 | `trajectory_time_scale` | `1.0` | Multiplies all waypoint times; < 1 gives faster, more aggressive trajectories (0.5 = twice as fast) |
-| `log_dir` | `<package>/log` | Folder for the log files |
+| `log_dir` | `<package>/log/<controller>` | Folder for the log files (one folder per controller by default) |
 
 Downwash model parameters (`c_coup`, `r_lat`, `z0`, `sigma`, `turb_intensity`, `disturbance_rate`)
 and visualization / logging rates (`viz_rate`, `path_rate`, `log_decimation`) are node parameters
@@ -150,7 +150,7 @@ At the end the node prints the RMS and maximum position error of every drone.
 
 ## Logs
 
-One file per drone, `log/droneN_log.txt` (CSV, one row per time step), with the columns
+One file per drone, `log/<controller>/droneN_log.txt` (CSV, one row per time step), with the columns
 
 ```
 time, a_pos.xyz, a_vel.xyz, a_acc.xyz, a_ang_vel.xyz, a_eul_ang.xyz,
@@ -166,44 +166,58 @@ and warns if the RMS computed from the logs differs from `run_info.txt` or the f
 
 ## Reproducing the figures
 
-1. Run the simulations (each writes to its own folder). All six in one go:
+1. Run the simulations. Every run writes to its own folder `log/<run>/`:
+
+   | Run (folder) | Settings |
+   |---|---|
+   | `pid_ff` | PID + downwash feedforward (proposed) |
+   | `pid` | PID, no feedforward |
+   | `ndob` | PID + NDOB, the controller does not use the downwash model |
+   | `se3` | geometric SE(3), no feedforward |
+   | `se3_ff` | geometric SE(3) + downwash feedforward |
+   | `pid_nominal` | PID, disturbance off |
+   | `pid_ff_beta0.1` | PID + feedforward, yaw filter beta = 0.1 |
+
+   All seven in one go:
 
    ```bash
    rosrun multi_quadcopter_control run_paper_sims.sh
    ```
 
-   or one by one:
+   or one at a time. Without `log_dir` a run writes to `log/<controller>/`; give runs with other
+   settings their own folder:
 
    ```bash
-   roscd multi_quadcopter_control
-   # proposed controller -> log/
-   roslaunch multi_quadcopter_control sequential_sim.launch rviz:=false real_time_factor:=0 shutdown_on_finish:=true controller:=pid_ff
-   # ablation, no feedforward (Fig. 8, Table 2) -> log_no_feedforward/
-   roslaunch multi_quadcopter_control sequential_sim.launch rviz:=false real_time_factor:=0 shutdown_on_finish:=true controller:=pid log_dir:=$(pwd)/log_no_feedforward
-   # yaw filter beta = 0.1 (Fig. S6) -> log_beta_0.1/
-   roslaunch multi_quadcopter_control sequential_sim.launch rviz:=false real_time_factor:=0 shutdown_on_finish:=true psi_filter_beta:=0.1 log_dir:=$(pwd)/log_beta_0.1
-   # geometric SE(3) controller (Fig. 2, Table 1) -> log_se3/
-   roslaunch multi_quadcopter_control sequential_sim.launch rviz:=false real_time_factor:=0 shutdown_on_finish:=true controller:=se3_ff log_dir:=$(pwd)/log_se3
-   # PID + NDOB, no downwash model (Fig. 9, Table 4) -> log_ndob/
-   roslaunch multi_quadcopter_control sequential_sim.launch rviz:=false real_time_factor:=0 shutdown_on_finish:=true controller:=ndob log_dir:=$(pwd)/log_ndob
-   # disturbance-free run (Table 4) -> log_nominal/
-   roslaunch multi_quadcopter_control sequential_sim.launch rviz:=false real_time_factor:=0 shutdown_on_finish:=true controller:=pid disturbance_enabled:=false log_dir:=$(pwd)/log_nominal
+   roslaunch multi_quadcopter_control sequential_sim.launch rviz:=false real_time_factor:=0 shutdown_on_finish:=true controller:=se3
+   roslaunch multi_quadcopter_control sequential_sim.launch rviz:=false real_time_factor:=0 shutdown_on_finish:=true controller:=pid disturbance_enabled:=false log_dir:=$(rospack find multi_quadcopter_control)/log/pid_nominal
    ```
 
-2. Run `scripts/main.m` in MATLAB. It writes every figure as EPS and SVG (both vector; SVG for
-   Word) and the tables as CSV to `scripts/EPS_Results/`, and all figures to
-   `scripts/all_drones_plots_fixed.pdf`. Labels: `PID+FF` (proposed), `PID` (no feedforward),
-   `PID+NDOB`, `SE(3)+FF`. The downwash interaction zones of Fig. 6, 7 and 9 and the z range of the
-   Fig. 1 zoom insets are taken from the logs. `TableS2_parameters.csv` (simulation parameters) and
+2. Run `scripts/main.m` in MATLAB. The settings at the top choose which run each figure uses:
+
+   | Setting | Default | Used by |
+   |---|---|---|
+   | `main_ctrl` | `pid_ff` | Fig. 1, 3-7, S5, S6, Table 1-2 |
+   | `compare_ctrl` | `se3_ff` | Fig. 2, Table 1 |
+   | `ablation_ctrl` | `main_ctrl` without `_ff` | Fig. 8, Table 2 |
+   | `formation_ctrls` | main, ablation, compare | Fig. F1, Table 3 |
+   | `mismatch_ctrls` | `pid`, `ndob`, `pid_ff` | Fig. 9, Table 4 (no compensation / observer / model feedforward) |
+   | `nominal_run` | `pid_nominal` | Table 4 (disturbance-free reference) |
+
+   For example `main_ctrl = 'se3_ff'` draws the state figures of the SE(3) controller and compares it
+   with `se3` in Fig. 8. Each run is read once and checked against its `run_info.txt` (controller,
+   disturbance on/off, beta); a mismatch gives a warning. The outputs go to
+   `scripts/EPS_Results/<main_ctrl>/`: every figure as EPS and SVG (both vector; SVG for Word), the
+   tables as CSV and all figures in `all_figures.pdf`. Labels: `PID+FF`, `PID`, `PID+NDOB`, `SE(3)`,
+   `SE(3)+FF`. The downwash interaction zones of Fig. 6, 7 and 9 and the z range of the Fig. 1 zoom
+   insets are taken from the logs. `TableS2_parameters.csv` (simulation parameters) and
    `TableS3_gains.csv` (PID, SE(3) and NDOB gains, update rates) are read from `config/*.yaml` and
    `launch/sequential_sim.launch`. Run `scripts/fig_S2_downwash_field.m` for Fig. S2; it also reads
    the downwash parameters from the launch file.
-   Fig. 2 and Table 1 also need the logs of the SE(3) geometric controller (`geo_log_dir`).
    Fig. 9 and `Table4_compensator_mismatch.csv` compare three ways of handling the downwash on the
-   disturbed UAVs: no compensation, NDOB (the controller does not use the downwash model, the
-   force is estimated by the observer) and the model-based feedforward. Table 4 also gives the
-   increase over the disturbance-free run (`dRMSE`) and the share of the downwash-induced error that
-   remains after compensation. Figures whose input folder is missing are skipped with a warning.
+   disturbed UAVs: no compensation, NDOB (the force is estimated by the observer) and the
+   model-based feedforward. Table 4 also gives the increase over the disturbance-free run (`dRMSE`)
+   and the share of the downwash-induced error that remains after compensation. Figures whose runs
+   are missing are skipped with a warning.
    Line plots use every 5th sample (100 Hz) to keep the vector EPS files small; metrics and bar
    plots use the full 500 Hz data.
 
