@@ -9,7 +9,7 @@
 %   Fig. 5  Euler açıları                                  -> log_dir
 %   Fig. 6  Bozucu kuvvetler                               -> log_dir
 %   Fig. 7  Thrust                                         -> log_dir
-%   NDOB    NDOB bozucu kestirimi (controller:=ndob koşusu) -> log_dir (ndob_f sütunları varsa)
+%   NDOB    NDOB bozucu kestirimi, 3 eksen, tüm İHA'lar     -> ndob_log_dir
 %   Fig. 8  Ablasyon: feedforward aktif vs pasif           -> log_dir + ablation_log_dir
 %   Fig. S5 Drone 1 hibrit yörünge ve waypointler          -> log_dir + config/*.yaml
 %   Fig. S6 Drone 2 yönelim hatası, beta karşılaştırması   -> log_dir + beta_log_dir
@@ -18,6 +18,10 @@
 %   Fig. F1 Komşu İHA'lar arası bağıl mesafe hatası ve formasyon hatası -> log_dir (+ ablation_log_dir, geo_log_dir)
 %   Table 3 İHA çiftleri matrisi: üst üçgen formasyon hatası (RMS, baskın yön xy/z),
 %           alt üçgen bağıl mesafe hatası (RMS, işaretli ortalama)
+%   Fig. 9  Uyumsuz kompanzatör: gerçek downwash vs NDOB kestirimi ve konum hatası
+%           (kompanzasyon yok / NDOB / model tabanlı FF)       -> log_dir + ndob_log_dir + ablation_log_dir
+%   Table 4 Uyumsuz kompanzatör: RMSE ve bozucusuz koşuya göre artış (ΔRMSE)
+%                                                              -> log_dir + ndob_log_dir + ablation_log_dir + nominal_log_dir
 %   (Fig. S2 için: fig_S2_downwash_field.m)
 %
 % Gerekli simülasyon koşularının hepsi tek komutla çalıştırılabilir (her biri ayrı log klasörüne yazar):
@@ -31,6 +35,10 @@
 %      roslaunch multi_quadcopter_control sequential_sim.launch rviz:=false real_time_factor:=0 shutdown_on_finish:=true psi_filter_beta:=0.1 log_dir:=$(rospack find multi_quadcopter_control)/log_beta_0.1
 %   4) Geometrik SE(3) kontrolcü -> log_se3/
 %      roslaunch multi_quadcopter_control sequential_sim.launch rviz:=false real_time_factor:=0 shutdown_on_finish:=true controller:=se3_ff log_dir:=$(rospack find multi_quadcopter_control)/log_se3
+%   5) PID + NDOB (downwash modeli kullanılmaz, bozucu gözlemciyle kestirilir) -> log_ndob/
+%      roslaunch multi_quadcopter_control sequential_sim.launch rviz:=false real_time_factor:=0 shutdown_on_finish:=true controller:=ndob log_dir:=$(rospack find multi_quadcopter_control)/log_ndob
+%   6) Bozucusuz koşu (PID, downwash kapalı) -> log_nominal/
+%      roslaunch multi_quadcopter_control sequential_sim.launch rviz:=false real_time_factor:=0 shutdown_on_finish:=true controller:=pid disturbance_enabled:=false log_dir:=$(rospack find multi_quadcopter_control)/log_nominal
 % Eksik klasörlere bağlı grafikler uyarı verilerek atlanır.
 
 clear; clc; close all;
@@ -47,12 +55,16 @@ log_dir          = fullfile(pkg_dir, 'log');                  % önerilen kontro
 ablation_log_dir = fullfile(pkg_dir, 'log_no_feedforward');   % Fig. 8 / Table 2
 beta_log_dir     = fullfile(pkg_dir, 'log_beta_0.1');         % Fig. S6
 geo_log_dir      = fullfile(pkg_dir, 'log_se3');              % Fig. 2 / Table 1: SE(3) kontrolcü (controller:=se3_ff)
+ndob_log_dir     = fullfile(pkg_dir, 'log_ndob');             % Fig. 9 / Table 4: PID + NDOB (controller:=ndob)
+nominal_log_dir  = fullfile(pkg_dir, 'log_nominal');          % Table 4: bozucusuz koşu (disturbance_enabled:=false)
 config_dir       = fullfile(pkg_dir, 'config');               % Fig. S5 waypointleri
 
 beta_main   = 0.05;   % log_dir koşusundaki psi_filter_beta
 beta_alt    = 0.1;    % beta_log_dir koşusundaki psi_filter_beta
 s6_drone    = 2;      % Fig. S6 drone'u
 fig8_drones = [2 3];  % Fig. 8 drone'ları
+fig9_drones = [2 3];  % Fig. 9 drone'ları (downwash etkisindeki İHA'lar)
+c_ndob      = [0.30 0.75 0.93];   % Fig. 9: NDOB rengi
 s5_drone    = 1;      % Fig. S5 drone'u
 
 % Formasyon ölçütleri (Fig. F1, Table 3)
@@ -119,12 +131,16 @@ fprintf('Ana koşu: %d drone logu okundu (%s)\n', numel(valid), log_dir);
 D_abl  = readLogs(ablation_log_dir, num_drones, plot_step);
 D_beta = readLogs(beta_log_dir, num_drones, plot_step);
 D_geo  = readLogs(geo_log_dir, num_drones, plot_step);
+D_ndob = readLogs(ndob_log_dir, num_drones, plot_step);
+D_nom  = readLogs(nominal_log_dir, num_drones, plot_step);
 
 % Hangi log klasörü hangi koşuya ait? (simülasyonun yazdığı run_info.txt ile kontrol)
 checkRunInfo(log_dir, D, 'Ana koşu');
 checkRunInfo(ablation_log_dir, D_abl, 'Ablasyon');
 checkRunInfo(beta_log_dir, D_beta, 'Beta = 0.1');
 checkRunInfo(geo_log_dir, D_geo, 'SE(3)');
+checkRunInfo(ndob_log_dir, D_ndob, 'NDOB');
+checkRunInfo(nominal_log_dir, D_nom, 'Bozucusuz');
 
 %% === Fig. 1 - POZİSYON + Z ZOOM ===
 fig = figure;
@@ -233,17 +249,25 @@ end
 addTopLegend(lgd_handles, [0.1 0.94 0.8 0.05], S);
 saveFigure(fig, eps_folder, 'Fig6.eps', output_pdf);
 
-%% === NDOB KESTİRİMİ (yalnızca controller:=ndob koşusunda, ndob_f sütunları varsa) ===
-if ismember("ndob_f.x", D(valid(1)).T.Properties.VariableNames)
+%% === NDOB KESTİRİMİ (controller:=ndob koşusu, ndob_f sütunları) ===
+% Kaynak: ndob_log_dir; yoksa log_dir'in kendisi bir NDOB koşusuysa o kullanılır.
+D_est = [];
+if hasNdobColumns(D_ndob)
+    D_est = D_ndob;
+elseif hasNdobColumns(D)
+    D_est = D;
+end
+if ~isempty(D_est)
+    valid_est = find([D_est.ok]);
     fig = figure;
     lgd_handles = gobjects(0);
     for a = 1:3
         ax = subplot(3, 1, a); hold(ax, 'on');
         all_vals = [];
-        for i = valid
-            v = D(i).Tp{:, "ndob_f." + axis_names(a)};
+        for i = valid_est
+            v = D_est(i).Tp{:, "ndob_f." + axis_names(a)};
             all_vals = [all_vals; v]; %#ok<AGROW>
-            h = plot(ax, D(i).tp, v, 'LineWidth', line_w, 'Color', colors(i,:), 'DisplayName', sprintf('Q %d', i));
+            h = plot(ax, D_est(i).tp, v, 'LineWidth', line_w, 'Color', colors(i,:), 'DisplayName', sprintf('Q %d', i));
             if a == 1, lgd_handles(end+1) = h; else, h.HandleVisibility = 'off'; end %#ok<SAGROW>
         end
         ylim(ax, padLimits(all_vals, 0.1));
@@ -294,6 +318,49 @@ if any([D_abl.ok])
     saveFigure(fig, eps_folder, 'Fig8.eps', output_pdf);
 else
     warning('Fig. 8 / Table 2 atlandı: ablasyon logları bulunamadı (%s).', ablation_log_dir);
+end
+
+%% === Fig. 9 - UYUMSUZ KOMPANZATÖR: NDOB (Hakem 1) ===
+% Üst satır: NDOB koşusunda simülatörün uyguladığı downwash kuvveti (dist_f.z) ve NDOB kestirimi (ndob_f.z).
+%   NDOB downwash modelini kullanmaz; kestirim, modellenmemiş diğer etkileri (sürükleme vb.) de içerir.
+% Alt satır: konum hatası; kompanzasyon yok (geniş, renkli), NDOB (orta, açık mavi), model tabanlı FF (dar, koyu).
+if hasNdobColumns(D_ndob) && any([D_abl.ok])
+    fig = figure('Position', [100, 100, 1200, 800]);
+    nc = numel(fig9_drones);
+    tl = tiledlayout(fig, 2, nc, 'TileSpacing', 'compact', 'Padding', 'compact');
+    for c = 1:nc
+        i = fig9_drones(c);
+        ax = nexttile(tl, c); hold(ax, 'on'); box(ax, 'on');
+        f_true = D_ndob(i).Tp{:, "dist_f.z"};
+        f_est  = D_ndob(i).Tp{:, "ndob_f.z"};
+        h1 = plot(ax, D_ndob(i).tp, f_true, '-', 'Color', colors(i,:), 'LineWidth', line_w);
+        h2 = plot(ax, D_ndob(i).tp, f_est, '--', 'Color', dark_gray, 'LineWidth', line_w);
+        ylim(ax, padLimits([f_true; f_est], 0.1));
+        addZones(ax, interact_zones, interact_cols);
+        styleAxes(ax, S);
+        set(ax, 'FontSize', 16, 'XTick', 0:10:t_axis_max);
+        if c == 1
+            ylabel(ax, 'f_{dist,z} (N)', 'FontWeight', 'bold', 'FontSize', 16, 'FontName', font_name);
+        end
+        lgd = legend(ax, [h1 h2], {'Applied downwash', 'NDOB estimate'}, 'Location', 'SouthWest', ...
+                     'FontSize', 12, 'FontWeight', 'bold', 'FontName', font_name, 'Box', 'on');
+        title(lgd, sprintf('Q %d', i));
+    end
+    for c = 1:nc
+        i = fig9_drones(c);
+        ax = nexttile(tl, nc + c); hold(ax, 'on'); box(ax, 'on');
+        [hs, names] = errorBars(ax, {D_abl(i), D_ndob(i), D(i)}, {colors(i,:), c_ndob, dark_gray}, ...
+                                {'No compensation', 'NDOB', 'Model-based FF'}, sparse_factor);
+        finishBarAxes(ax, interact_zones, interact_cols, S, 16);
+        barLegend(ax, hs, names, sprintf('Q %d', i), font_name);
+        if c == 1
+            ylabel(ax, '||e_p|| (m)', 'FontWeight', 'bold', 'FontSize', 16, 'FontName', font_name);
+        end
+    end
+    xlabel(tl, 't (s)', 'FontWeight', 'bold', 'FontSize', font_size, 'FontName', font_name);
+    saveFigure(fig, eps_folder, 'Fig9.eps', output_pdf);
+else
+    warning('Fig. 9 atlandı: NDOB (%s) veya ablasyon (%s) logları bulunamadı.', ndob_log_dir, ablation_log_dir);
 end
 
 %% === Fig. S5 - DRONE 1 HİBRİT YÖRÜNGE VE WAYPOINTLER ===
@@ -427,6 +494,57 @@ if any([D_abl.ok])
     disp(tbl2);
     writetable(tbl2, fullfile(eps_folder, 'Table2.csv'));
 end
+
+%% === Table 4 - UYUMSUZ KOMPANZATÖR (Hakem 1) ===
+% Model tabanlı FF (simülatörle aynı model), NDOB (model yok, gözlemci kestirimi) ve kompanzasyonsuz koşu.
+%   dRMSE        = RMSE - bozucusuz RMSE (downwash'ın yarattığı ek hata)
+%   NDOB_vs_FF   = NDOB'un model tabanlı FF'ye göre RMSE artışı (%)
+%   residual_pct = kompanzasyondan sonra kalan downwash hatası / kompanzasyonsuz downwash hatası (%);
+%                  yalnızca downwash'a maruz kalan İHA'lar için (kompanzasyonsuz dRMSE > 0.1 mm).
+if any([D_ndob.ok]) && any([D_abl.ok])
+    M_ndob = metrics(D_ndob);
+    M_none = metrics(D_abl);
+    if any([D_nom.ok])
+        M_nom = metrics(D_nom);
+    else
+        M_nom = struct('rmse', nan(num_drones, 1));
+        warning('Table 4: bozucusuz loglar bulunamadı (%s); dRMSE sütunları NaN.', nominal_log_dir);
+    end
+    d_none = M_none.rmse - M_nom.rmse;
+    d_ndob = M_ndob.rmse - M_nom.rmse;
+    d_ff   = M.rmse - M_nom.rmse;
+    disturbed = d_none > 1e-4;
+    res_ndob = nan(num_drones, 1); res_ff = res_ndob;
+    res_ndob(disturbed) = d_ndob(disturbed) ./ d_none(disturbed) * 100;
+    res_ff(disturbed)   = d_ff(disturbed) ./ d_none(disturbed) * 100;
+    Quadcopter = "Q " + string((1:num_drones)');
+    tbl4 = table(Quadcopter, M_nom.rmse, M_none.rmse, M_ndob.rmse, M.rmse, d_none, d_ndob, d_ff, ...
+                 (M_ndob.rmse - M.rmse) ./ M.rmse * 100, res_ndob, res_ff, ...
+                 'VariableNames', {'Quadcopter', 'DisturbanceFree_RMSE_m', 'NoCompensation_RMSE_m', ...
+                                   'NDOB_RMSE_m', 'ModelFF_RMSE_m', 'NoCompensation_dRMSE_m', 'NDOB_dRMSE_m', ...
+                                   'ModelFF_dRMSE_m', 'NDOB_vs_ModelFF_pct', 'NDOB_residual_pct', ...
+                                   'ModelFF_residual_pct'});
+    fprintf('\nTable 4: Uyumsuz kompanzatör - kompanzasyon yok / NDOB / model tabanlı FF\n');
+    disp(tbl4);
+    writetable(tbl4, fullfile(eps_folder, 'Table4_compensator_mismatch.csv'));
+
+    % NDOB kestirim hatası (z), downwash etkinken (|f_dist,z| > 0.05 N)
+    if hasNdobColumns(D_ndob)
+        for i = fig9_drones
+            if ~D_ndob(i).ok, continue; end
+            f_true = D_ndob(i).T{:, "dist_f.z"};
+            f_est  = D_ndob(i).T{:, "ndob_f.z"};
+            act = abs(f_true) > 0.05;
+            if ~any(act), continue; end
+            fprintf('NDOB kestirimi Q %d (downwash etkin, %.1f s): RMS hata %.3f N, RMS downwash %.3f N (%%%.0f)\n', ...
+                    i, sum(act) * mean(diff(D_ndob(i).t)), sqrt(mean((f_est(act) - f_true(act)).^2)), ...
+                    sqrt(mean(f_true(act).^2)), ...
+                    100 * sqrt(mean((f_est(act) - f_true(act)).^2)) / sqrt(mean(f_true(act).^2)));
+        end
+    end
+else
+    warning('Table 4 atlandı: NDOB (%s) veya ablasyon (%s) logları bulunamadı.', ndob_log_dir, ablation_log_dir);
+end
 fprintf('=====================================================================\n');
 fprintf('Grafikler "%s" klasörüne ve "%s" dosyasına kaydedildi.\n', eps_folder, output_pdf);
 
@@ -486,6 +604,12 @@ function e = positionError(T)
              (T{:, "a_pos.z"} - T{:, "r_pos.z"}).^2);
 end
 
+function tf = hasNdobColumns(Dx)
+    % Log, controller:=ndob koşusundan mı? (ndob_f.x sütunu var mı)
+    v = find([Dx.ok], 1);
+    tf = ~isempty(v) && ismember("ndob_f.x", Dx(v).T.Properties.VariableNames);
+end
+
 function M = metrics(D)
     n = numel(D);
     M = struct('rmse', nan(n, 1), 'ise', nan(n, 1), 'max', nan(n, 1));
@@ -527,8 +651,8 @@ end
 
 function [hs, names] = errorBars(ax, runs, cols, labels, sparse_factor)
     % Seyreltilmiş konum hatası çubukları (ilk koşu geniş/renkli, ikinci dar/koyu)
-    widths = [1.0 0.5];
-    alphas = [0.6 0.9];
+    widths = [1.0 0.5 0.25];
+    alphas = [0.6 0.9 0.9];
     hs = gobjects(0); names = {};
     for k = 1:numel(runs)
         if ~runs{k}.ok, continue; end

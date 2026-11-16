@@ -18,10 +18,12 @@ run() {
     fi
 }
 
-run "[1/4] Proposed controller (PID + downwash feedforward)" "${PKG}/log"                controller:=pid_ff
-run "[2/4] Ablation (PID, no feedforward; Fig. 8, Table 2)"  "${PKG}/log_no_feedforward" controller:=pid
-run "[3/4] Yaw filter beta = 0.1 (Fig. S6)"                  "${PKG}/log_beta_0.1"       controller:=pid_ff psi_filter_beta:=0.1
-run "[4/4] Geometric SE(3) controller (Fig. 2, Table 1)"    "${PKG}/log_se3"            controller:=se3_ff
+run "[1/6] Proposed controller (PID + downwash feedforward)" "${PKG}/log"                controller:=pid_ff
+run "[2/6] Ablation (PID, no feedforward; Fig. 8, Table 2)"  "${PKG}/log_no_feedforward" controller:=pid
+run "[3/6] Yaw filter beta = 0.1 (Fig. S6)"                  "${PKG}/log_beta_0.1"       controller:=pid_ff psi_filter_beta:=0.1
+run "[4/6] Geometric SE(3) controller (Fig. 2, Table 1)"    "${PKG}/log_se3"            controller:=se3_ff
+run "[5/6] PID + NDOB, no downwash model (Fig. 9, Table 4)" "${PKG}/log_ndob"           controller:=ndob
+run "[6/6] Disturbance-free run (Table 4)"                  "${PKG}/log_nominal"        controller:=pid disturbance_enabled:=false
 
 echo
 echo "All runs finished. Now run scripts/main.m in MATLAB."
