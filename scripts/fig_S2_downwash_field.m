@@ -4,25 +4,32 @@
 %   f_static = K * n / (dz^2 + z0^2) * exp(-r^2 / (2 sigma^2))
 %   f_total  = f_static + |f_static| .* (turb_intensity * pink_noise)
 %   v        = sqrt(|f_total| / (rho * C_coup * 4))
-% Parametreler launch/sequential_sim.launch varsayılanlarıyla aynıdır; değiştirdiyseniz burada da güncelleyin.
+% Downwash parametreleri launch/sequential_sim.launch dosyasından, kaynak İHA kütlesi
+% config/quadcopter_params_2.yaml dosyasından (simülasyonda kaynak İHA'lar Q4 ve Q5) okunur.
 
 clc; clear; close all;
 
 %% === AYARLAR ===
-m_drone        = 0.382;          % kaynak (üstteki) drone kütlesi (kg)
-g              = 9.81;
-C_coup         = 0.34;           % c_coup
-r_lat          = 0.05;           % r_lat
-z0             = 0.8;            % z0 (z0^2 = 0.64)
-sigma          = 0.22;           % sigma (m)
-turb_intensity = 0.30;           % turb_intensity (lambda)
-rho_air        = 1.225;
-noise_seed     = 42;             % gürültü haritası tekrarlanabilir olsun
-
 script_dir = fileparts(mfilename('fullpath'));
 if isempty(script_dir), script_dir = pwd; end
+pkg_dir    = fullfile(script_dir, '..');
 eps_folder = fullfile(script_dir, 'EPS_Results');
 if ~exist(eps_folder, 'dir'), mkdir(eps_folder); end
+
+launch_txt = fileread(fullfile(pkg_dir, 'launch', 'sequential_sim.launch'));
+yaml_txt   = fileread(fullfile(pkg_dir, 'config', 'quadcopter_params_2.yaml'));
+
+m_drone        = yamlNumber(yaml_txt, 'mass');            % kaynak (üstteki) drone kütlesi (kg)
+g              = 9.81;
+C_coup         = launchParam(launch_txt, 'c_coup');       % c_coup (m^2)
+r_lat          = launchParam(launch_txt, 'r_lat');        % kappa_lat
+z0             = launchParam(launch_txt, 'z0');           % z0 (m)
+sigma          = launchParam(launch_txt, 'sigma');        % sigma (m)
+turb_intensity = launchParam(launch_txt, 'turb_intensity'); % lambda
+rho_air        = yamlNumber(yaml_txt, 'rho');
+noise_seed     = 42;             % gürültü haritası tekrarlanabilir olsun
+fprintf('Fig. S2: m = %g kg, C_coup = %g, kappa_lat = %g, z0 = %g m, sigma = %g m, lambda = %g\n', ...
+        m_drone, C_coup, r_lat, z0, sigma, turb_intensity);
 
 font_name = 'Times New Roman';
 
@@ -82,7 +89,26 @@ for k = 1:2
 end
 
 exportgraphics(fig, fullfile(eps_folder, 'FigS2.eps'), 'ContentType', 'vector');
-fprintf('Fig. S2 kaydedildi: %s\n', fullfile(eps_folder, 'FigS2.eps'));
+set(fig, 'PaperPositionMode', 'auto');
+try
+    print(fig, fullfile(eps_folder, 'FigS2.svg'), '-dsvg', '-vector');     % R2022b ve sonrası
+catch
+    print(fig, fullfile(eps_folder, 'FigS2.svg'), '-dsvg', '-painters');   % eski sürümler
+end
+fprintf('Fig. S2 kaydedildi: %s (.eps, .svg)\n', fullfile(eps_folder, 'FigS2'));
+
+%% === YARDIMCI FONKSİYONLAR ===
+function v = launchParam(txt, name)
+    tok = regexp(txt, ['<param name="' name '" value="([^"]+)"'], 'tokens', 'once');
+    if isempty(tok), error('launch parametresi bulunamadı: %s', name); end
+    v = str2double(tok{1});
+end
+
+function v = yamlNumber(txt, key)
+    tok = regexp(txt, ['(?m)^\s*' key ':\s*([-+0-9.eE]+)'], 'tokens', 'once');
+    if isempty(tok), error('yaml anahtarı bulunamadı: %s', key); end
+    v = str2double(tok{1});
+end
 
 %% === PINK NOISE ALANI (1/f, spektral sentez) ===
 function field = pinkNoiseField(rows, cols)

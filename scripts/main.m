@@ -3,7 +3,7 @@
 % grafikleri ve tabloları üretir:
 %
 %   Fig. 1  Pozisyon (x, y, z) + z zoom                    -> log_dir
-%   Fig. 2  Anlık konum hatası: önerilen vs SE(3)          -> log_dir + geo_log_dir
+%   Fig. 2  Anlık konum hatası: PID+FF vs SE(3)+FF         -> log_dir + geo_log_dir
 %   Fig. 3  Hız                                            -> log_dir
 %   Fig. 4  İvme                                           -> log_dir
 %   Fig. 5  Euler açıları                                  -> log_dir
@@ -13,21 +13,24 @@
 %   Fig. 8  Ablasyon: feedforward aktif vs pasif           -> log_dir + ablation_log_dir
 %   Fig. S5 Drone 1 hibrit yörünge ve waypointler          -> log_dir + config/*.yaml
 %   Fig. S6 Drone 2 yönelim hatası, beta karşılaştırması   -> log_dir + beta_log_dir
-%   Table 1 RMSE/ISE: önerilen vs SE(3)                    -> log_dir + geo_log_dir
+%   Table 1 RMSE/ISE: PID+FF vs SE(3)+FF                   -> log_dir + geo_log_dir
 %   Table 2 RMSE/ISE: feedforward aktif vs pasif           -> log_dir + ablation_log_dir
 %   Fig. F1 Komşu İHA'lar arası bağıl mesafe hatası ve formasyon hatası -> log_dir (+ ablation_log_dir, geo_log_dir)
 %   Table 3 İHA çiftleri matrisi: üst üçgen formasyon hatası (RMS, baskın yön xy/z),
 %           alt üçgen bağıl mesafe hatası (RMS, işaretli ortalama)
 %   Fig. 9  Uyumsuz kompanzatör: gerçek downwash vs NDOB kestirimi ve konum hatası
-%           (kompanzasyon yok / NDOB / model tabanlı FF)       -> log_dir + ndob_log_dir + ablation_log_dir
+%           (PID / PID+NDOB / PID+FF)                          -> log_dir + ndob_log_dir + ablation_log_dir
 %   Table 4 Uyumsuz kompanzatör: RMSE ve bozucusuz koşuya göre artış (ΔRMSE)
 %                                                              -> log_dir + ndob_log_dir + ablation_log_dir + nominal_log_dir
+%   Table S2 Simülasyon parametreleri (config/*.yaml + launch/sequential_sim.launch)
+%   Table S3 Kontrolcü kazançları (PID, SE(3), NDOB)          -> config/*.yaml
 %   (Fig. S2 için: fig_S2_downwash_field.m)
+% Her figür EPS ve Word için SVG (ikisi de vektör) olarak scripts/EPS_Results/ klasörüne yazılır.
 %
 % Gerekli simülasyon koşularının hepsi tek komutla çalıştırılabilir (her biri ayrı log klasörüne yazar):
 %   rosrun multi_quadcopter_control run_paper_sims.sh
 % veya tek tek:
-%   1) Önerilen kontrolcü (controller:=pid_ff, varsayılan; beta = 0.05) -> log/
+%   1) PID+FF (controller:=pid_ff, varsayılan; beta = 0.05) -> log/
 %      roslaunch multi_quadcopter_control sequential_sim.launch rviz:=false real_time_factor:=0 shutdown_on_finish:=true
 %   2) Ablasyon (controller:=pid, feedforward yok) -> log_no_feedforward/
 %      roslaunch multi_quadcopter_control sequential_sim.launch rviz:=false real_time_factor:=0 shutdown_on_finish:=true controller:=pid log_dir:=$(rospack find multi_quadcopter_control)/log_no_feedforward
@@ -51,7 +54,7 @@ script_dir = fileparts(mfilename('fullpath'));
 if isempty(script_dir), script_dir = pwd; end
 pkg_dir    = fullfile(script_dir, '..');
 
-log_dir          = fullfile(pkg_dir, 'log');                  % önerilen kontrolcü (ana koşu)
+log_dir          = fullfile(pkg_dir, 'log');                  % PID+FF (ana koşu)
 ablation_log_dir = fullfile(pkg_dir, 'log_no_feedforward');   % Fig. 8 / Table 2
 beta_log_dir     = fullfile(pkg_dir, 'log_beta_0.1');         % Fig. S6
 geo_log_dir      = fullfile(pkg_dir, 'log_se3');              % Fig. 2 / Table 1: SE(3) kontrolcü (controller:=se3_ff)
@@ -74,6 +77,7 @@ neighbor_radius = 3.0;   % m
 
 output_pdf = fullfile(script_dir, 'all_drones_plots_fixed.pdf');
 eps_folder = fullfile(script_dir, 'EPS_Results');
+save_svg   = true;   % Word için SVG (vektör) de yaz
 
 % Zaman ekseni (makaledeki gibi 0-60 s)
 t_axis_max = 60;
@@ -82,14 +86,17 @@ t_axis_max = 60;
 % cubic spline -> min snap (8.05 s) -> min snap (21.05 s) -> min jerk (32.55 s), bitiş 54.55 s.
 t_switch = [8.05 21.05 32.55];
 
-% Downwash etkileşim bölgeleri (s): yeşil = Q4/Q5 -> Q2/Q3, sarı = Q4 ve Q5 -> Q2
-t_interact_green  = [23.5 33.5];
-t_interact_yellow = 33.5;           % -> t_axis_max
+% Downwash etkileşim bölgeleri (Fig. 6, 7, 9) ana koşunun loglarından bulunur (|f_dist| > interact_thr):
+%   yeşil: ilk downwash etkisinin başladığı an -> iki İHA'nın aynı anda etkilendiği son an
+%          (Q5 -> Q2 ve Q4 -> Q3)
+%   sarı : yeşilin sonu -> t_axis_max (yalnızca Q2 etkileniyor: Q5, sonra Q4 ve Q5)
+interact_thr = 0.05;   % N
 
-% Fig. 1 z zoom pencereleri (s) ve z aralığı (m)
+% Fig. 1 z zoom pencereleri (s). Zoom'un z aralığı, zoom_drones'un (downwash etkisindeki İHA'lar)
+% o penceredeki gerçek ve istenen z değerlerinden belirlenir.
 zoom_windows = [23 25; 34 36];
 zoom_colors  = {'r', 'b'};
-zoom_zlim    = [1.9 3.0];
+zoom_drones  = [2 3];
 
 % Çubuk grafikleri (Fig. 2, 8, S6): her sparse_factor örnekten biri (500 Hz log -> 0.6 s)
 sparse_factor = 300;
@@ -113,9 +120,9 @@ c_yellow = [1 1 0.9];
 if isfile(output_pdf), delete(output_pdf); end
 if ~exist(eps_folder, 'dir'), mkdir(eps_folder); end
 
+setappdata(0, 'paper_save_svg', save_svg);   % saveFigure okur
+
 phase_zones    = [[0 t_switch]' [t_switch t_axis_max]'];
-interact_zones = [t_interact_green; t_interact_yellow t_axis_max];
-interact_cols  = [c_green; c_yellow];
 axis_names     = ["x", "y", "z"];
 
 S = struct('font_name', font_name, 'font_size', font_size, 'line_w', line_w, 't_max', t_axis_max);
@@ -141,6 +148,12 @@ checkRunInfo(beta_log_dir, D_beta, 'Beta = 0.1');
 checkRunInfo(geo_log_dir, D_geo, 'SE(3)');
 checkRunInfo(ndob_log_dir, D_ndob, 'NDOB');
 checkRunInfo(nominal_log_dir, D_nom, 'Bozucusuz');
+
+% Downwash etkileşim bölgeleri (ana koşunun bozucu kuvvetlerinden)
+interact_zones = interactionZones(D, interact_thr, t_axis_max);
+interact_cols  = [c_green; c_yellow];
+interact_cols  = interact_cols(1:size(interact_zones, 1), :);
+fprintf('Downwash etkileşim bölgeleri (s): %s\n', mat2str(interact_zones));
 
 %% === Fig. 1 - POZİSYON + Z ZOOM ===
 fig = figure;
@@ -170,9 +183,17 @@ for a = 1:3
            'FontName', font_name);
 end
 hZ = ax;
+zoom_zlim = zeros(size(zoom_windows));
 for w = 1:size(zoom_windows, 1)
+    vals = [];
+    for i = zoom_drones
+        if ~D(i).ok, continue; end
+        m = D(i).t >= zoom_windows(w, 1) & D(i).t <= zoom_windows(w, 2);
+        vals = [vals; D(i).T{m, "a_pos.z"}; D(i).T{m, "r_pos.z"}]; %#ok<AGROW>
+    end
+    zoom_zlim(w, :) = padLimits(vals, 0.1);
     for tw = zoom_windows(w, :)
-        line(hZ, [tw tw], zoom_zlim, 'Color', zoom_colors{w}, 'LineStyle', '--', ...
+        line(hZ, [tw tw], zoom_zlim(w, :), 'Color', zoom_colors{w}, 'LineStyle', '--', ...
              'LineWidth', line_w, 'HandleVisibility', 'off');
     end
 end
@@ -188,20 +209,20 @@ for w = 1:size(zoom_windows, 1)
         plot(ax_zoom, D(i).tp, D(i).Tp{:, "r_pos.z"}, ':k', 'LineWidth', line_w);
     end
     xlim(ax_zoom, zoom_windows(w, :));
-    ylim(ax_zoom, zoom_zlim);
+    ylim(ax_zoom, zoom_zlim(w, :));
     set(ax_zoom, 'FontSize', 9, 'FontName', font_name, 'XTick', [], 'YTick', [], 'LineWidth', 1.5);
 end
 addTopLegend(lgd_handles, [0.1 0.94 0.8 0.05], S);
 saveFigure(fig, eps_folder, 'Fig1.eps', output_pdf);
 
-%% === Fig. 2 - ANLIK KONUM HATASI: ÖNERİLEN vs SE(3) ===
+%% === Fig. 2 - ANLIK KONUM HATASI: PID+FF vs SE(3)+FF ===
 if any([D_geo.ok])
     fig = figure('Position', [100, 100, 1200, 800]);
     tl = tiledlayout(fig, 3, 2, 'TileSpacing', 'compact', 'Padding', 'compact');
     for i = 1:num_drones
         ax = nexttile(tl); hold(ax, 'on'); box(ax, 'on');
         [hs, names] = errorBars(ax, {D(i), D_geo(i)}, {colors(i,:), dark_gray}, ...
-                                {'Proposed Controller', 'SE(3) Controller'}, sparse_factor);
+                                {'PID+FF', 'SE(3)+FF'}, sparse_factor);
         finishBarAxes(ax, phase_zones, c_phase, S, 16);
         barLegend(ax, hs, names, sprintf('Q %d', i), font_name);
     end
@@ -323,7 +344,7 @@ end
 %% === Fig. 9 - UYUMSUZ KOMPANZATÖR: NDOB (Hakem 1) ===
 % Üst satır: NDOB koşusunda simülatörün uyguladığı downwash kuvveti (dist_f.z) ve NDOB kestirimi (ndob_f.z).
 %   NDOB downwash modelini kullanmaz; kestirim, modellenmemiş diğer etkileri (sürükleme vb.) de içerir.
-% Alt satır: konum hatası; kompanzasyon yok (geniş, renkli), NDOB (orta, açık mavi), model tabanlı FF (dar, koyu).
+% Alt satır: konum hatası; PID (geniş, renkli), PID+NDOB (orta, açık mavi), PID+FF (dar, koyu).
 if hasNdobColumns(D_ndob) && any([D_abl.ok])
     fig = figure('Position', [100, 100, 1200, 800]);
     nc = numel(fig9_drones);
@@ -350,7 +371,7 @@ if hasNdobColumns(D_ndob) && any([D_abl.ok])
         i = fig9_drones(c);
         ax = nexttile(tl, nc + c); hold(ax, 'on'); box(ax, 'on');
         [hs, names] = errorBars(ax, {D_abl(i), D_ndob(i), D(i)}, {colors(i,:), c_ndob, dark_gray}, ...
-                                {'No compensation', 'NDOB', 'Model-based FF'}, sparse_factor);
+                                {'PID', 'PID+NDOB', 'PID+FF'}, sparse_factor);
         finishBarAxes(ax, interact_zones, interact_cols, S, 16);
         barLegend(ax, hs, names, sprintf('Q %d', i), font_name);
         if c == 1
@@ -405,7 +426,7 @@ end
 %   formasyon hatası     e_ij   = (p_i - p_j) - (p_i^ref - p_j^ref)
 % Her an komşu çiftler üzerinden RMS alınır: E_d(t), E_F(t).
 runs_F   = {D, D_abl, D_geo};
-labels_F = {'Proposed (PID + FF)', 'Without feedforward', 'SE(3) Controller'};
+labels_F = {'PID+FF', 'PID', 'SE(3)+FF'};
 cols_F   = {[0 0.4470 0.7410], [0.8500 0.3250 0.0980], dark_gray};
 F = cell(1, 3);
 for r = 1:3
@@ -448,7 +469,7 @@ saveFigure(fig, eps_folder, 'FigF1_formation_error.eps', output_pdf);
 %   mesafeyi değiştirmeden bozulmasıdır (ör. yan yana iki İHA'dan birinin aşağı kayması).
 % Değerler çiftin komşu olduğu süre boyunca hesaplanır; hiç komşu olmayan çiftler '-' ile gösterilir.
 names_Q = "Q" + string(1:num_drones);
-file_tag = {'proposed', 'without_ff', 'se3'};
+file_tag = {'pid_ff', 'pid', 'se3_ff'};
 for r = avail_F
     M = repmat("-", num_drones, num_drones);
     for k = 1:size(F{r}.pairs, 1)
@@ -472,7 +493,7 @@ end
 %% === Table 1 / Table 2 - PERFORMANS METRİKLERİ ===
 M = metrics(D);
 fprintf('\n=====================================================================\n');
-fprintf('   ÖNERİLEN KONTROLCÜ (RMSE: ortalama, ISE: toplam, MAX: en büyük)\n');
+fprintf('   PID+FF (RMSE: ortalama, ISE: toplam, MAX: en büyük)\n');
 fprintf('=====================================================================\n');
 for i = 1:num_drones
     if D(i).ok
@@ -483,14 +504,14 @@ for i = 1:num_drones
 end
 
 if any([D_geo.ok])
-    tbl1 = comparisonTable(M, metrics(D_geo), 'HierarchicalPID', 'Geometric');
-    fprintf('\nTable 1: Hiyerarşik PID vs Geometrik (SE(3)) kontrolcü\n');
+    tbl1 = comparisonTable(M, metrics(D_geo), 'PID_FF', 'SE3_FF');
+    fprintf('\nTable 1: PID+FF vs SE(3)+FF\n');
     disp(tbl1);
     writetable(tbl1, fullfile(eps_folder, 'Table1.csv'));
 end
 if any([D_abl.ok])
-    tbl2 = comparisonTable(M, metrics(D_abl), 'Proposed', 'NoFeedforward');
-    fprintf('\nTable 2: Ablasyon - feedforward aktif vs pasif (f_dist = 0)\n');
+    tbl2 = comparisonTable(M, metrics(D_abl), 'PID_FF', 'PID');
+    fprintf('\nTable 2: Ablasyon - PID+FF vs PID (feedforward yok)\n');
     disp(tbl2);
     writetable(tbl2, fullfile(eps_folder, 'Table2.csv'));
 end
@@ -498,7 +519,7 @@ end
 %% === Table 4 - UYUMSUZ KOMPANZATÖR (Hakem 1) ===
 % Model tabanlı FF (simülatörle aynı model), NDOB (model yok, gözlemci kestirimi) ve kompanzasyonsuz koşu.
 %   dRMSE        = RMSE - bozucusuz RMSE (downwash'ın yarattığı ek hata)
-%   NDOB_vs_FF   = NDOB'un model tabanlı FF'ye göre RMSE artışı (%)
+%   PID_NDOB_vs_PID_FF_pct = PID+NDOB'un PID+FF'ye göre RMSE artışı (%)
 %   residual_pct = kompanzasyondan sonra kalan downwash hatası / kompanzasyonsuz downwash hatası (%);
 %                  yalnızca downwash'a maruz kalan İHA'lar için (kompanzasyonsuz dRMSE > 0.1 mm).
 if any([D_ndob.ok]) && any([D_abl.ok])
@@ -520,11 +541,11 @@ if any([D_ndob.ok]) && any([D_abl.ok])
     Quadcopter = "Q " + string((1:num_drones)');
     tbl4 = table(Quadcopter, M_nom.rmse, M_none.rmse, M_ndob.rmse, M.rmse, d_none, d_ndob, d_ff, ...
                  (M_ndob.rmse - M.rmse) ./ M.rmse * 100, res_ndob, res_ff, ...
-                 'VariableNames', {'Quadcopter', 'DisturbanceFree_RMSE_m', 'NoCompensation_RMSE_m', ...
-                                   'NDOB_RMSE_m', 'ModelFF_RMSE_m', 'NoCompensation_dRMSE_m', 'NDOB_dRMSE_m', ...
-                                   'ModelFF_dRMSE_m', 'NDOB_vs_ModelFF_pct', 'NDOB_residual_pct', ...
-                                   'ModelFF_residual_pct'});
-    fprintf('\nTable 4: Uyumsuz kompanzatör - kompanzasyon yok / NDOB / model tabanlı FF\n');
+                 'VariableNames', {'Quadcopter', 'DisturbanceFree_RMSE_m', 'PID_RMSE_m', ...
+                                   'PID_NDOB_RMSE_m', 'PID_FF_RMSE_m', 'PID_dRMSE_m', 'PID_NDOB_dRMSE_m', ...
+                                   'PID_FF_dRMSE_m', 'PID_NDOB_vs_PID_FF_pct', 'PID_NDOB_residual_pct', ...
+                                   'PID_FF_residual_pct'});
+    fprintf('\nTable 4: Uyumsuz kompanzatör - PID / PID+NDOB / PID+FF\n');
     disp(tbl4);
     writetable(tbl4, fullfile(eps_folder, 'Table4_compensator_mismatch.csv'));
 
@@ -545,6 +566,20 @@ if any([D_ndob.ok]) && any([D_abl.ok])
 else
     warning('Table 4 atlandı: NDOB (%s) veya ablasyon (%s) logları bulunamadı.', ndob_log_dir, ablation_log_dir);
 end
+%% === Table S2 / Table S3 - SİMÜLASYON PARAMETRELERİ VE KONTROLCÜ KAZANÇLARI ===
+% Değerler doğrudan config/*.yaml ve launch/sequential_sim.launch dosyalarından okunur.
+try
+    [tblS2, tblS3] = parameterTables(config_dir, fullfile(pkg_dir, 'launch', 'sequential_sim.launch'));
+    fprintf('\nTable S2: Simülasyon parametreleri\n');
+    disp(tblS2);
+    writetable(tblS2, fullfile(eps_folder, 'TableS2_parameters.csv'));
+    fprintf('\nTable S3: Kontrolcü kazançları\n');
+    disp(tblS3);
+    writetable(tblS3, fullfile(eps_folder, 'TableS3_gains.csv'));
+catch err
+    warning('Table S2 / S3 atlandı: %s', err.message);
+end
+
 fprintf('=====================================================================\n');
 fprintf('Grafikler "%s" klasörüne ve "%s" dosyasına kaydedildi.\n', eps_folder, output_pdf);
 
@@ -860,6 +895,154 @@ function F = formationCore(t, Pa, Pr, r_N)
     F.pair_Ed_mean = pair_Ed_mean; F.pair_EF_xy = pair_EF_xy; F.pair_EF_z = pair_EF_z;
 end
 
+function zones = interactionZones(D, thr, t_max)
+    % Downwash etkileşim bölgeleri: her an |f_dist| > thr olan İHA sayısından (bkz. interactionZonesCore)
+    valid = find([D.ok]);
+    t = D(valid(1)).t;
+    n_dist = zeros(numel(t), 1);
+    for i = valid
+        Ti = D(i).T;
+        F = sqrt(Ti{:, "dist_f.x"}.^2 + Ti{:, "dist_f.y"}.^2 + Ti{:, "dist_f.z"}.^2);
+        if numel(F) ~= numel(t)
+            F = interp1(D(i).t, F, t, 'previous', 0);
+        end
+        n_dist = n_dist + (F > thr);
+    end
+    zones = interactionZonesCore(t, n_dist, t_max);
+end
+
+function zones = interactionZonesCore(t, n_dist, t_max)
+    % yeşil: ilk etkilenme -> en az iki İHA'nın aynı anda etkilendiği son an; sarı: oradan t_max'a
+    % (0.1 s'ye yuvarlanır). Hiç etkileşim yoksa boş, iki İHA hiç aynı anda etkilenmiyorsa tek bölge.
+    k_on  = find(n_dist >= 1, 1, 'first');
+    k_two = find(n_dist >= 2, 1, 'last');
+    if isempty(k_on)
+        zones = zeros(0, 2);
+        return;
+    end
+    t_on = floor(t(k_on) * 10) / 10;
+    if isempty(k_two) || t(k_two) <= t(k_on)
+        zones = [t_on t_max];
+    else
+        t_mid = round(t(k_two) * 10) / 10;
+        zones = [t_on t_mid; t_mid t_max];
+    end
+end
+
+function [tblS2, tblS3] = parameterTables(config_dir, launch_file)
+    % Table S2 (simülasyon parametreleri) ve Table S3 (kazançlar), makaledeki sembollerle
+    q1 = fileread(fullfile(config_dir, 'quadcopter_params_1.yaml'));   % Q1
+    q2 = fileread(fullfile(config_dir, 'quadcopter_params_2.yaml'));   % Q2-Q5
+    ln = fileread(launch_file);
+    dyn1 = yamlSection(q1, 'state_derivative_solver_node');
+    dyn2 = yamlSection(q2, 'state_derivative_solver_node');
+    m  = [yamlNumber(dyn1, 'mass'), yamlNumber(dyn2, 'mass')];
+    g  = yamlArray(dyn1, 'g');
+    I  = yamlArray(dyn1, 'I');
+    A  = yamlArray(dyn1, 'A_trans');
+    C1 = yamlArray(dyn1, 'Cd_trans');
+    C2 = yamlArray(dyn2, 'Cd_trans');
+    if isequal(C1, C2)
+        cd_txt = sprintf('diag(%s)', numList(C1([1 5 9])));
+    else
+        cd_txt = sprintf('diag(%s) (Q1); diag(%s) (Q2-Q5)', numList(C1([1 5 9])), numList(C2([1 5 9])));
+    end
+    if isequal(I, yamlArray(dyn2, 'I')), I_txt = sprintf('diag(%s)', numList(I([1 5 9])));
+    else, I_txt = sprintf('diag(%s) (Q1); diag(%s) (Q2-Q5)', numList(I([1 5 9])), numList(yamlArray(dyn2, 'I')));
+    end
+    if m(1) == m(2), m_txt = numList(m(1)); else, m_txt = sprintf('%g - %g', min(m), max(m)); end
+    rows = {
+        'm',        m_txt,                                          'kg'
+        'g',        sprintf('[%s]^T', numList(g)),                  'm/s^2'
+        'rho',      numList(yamlNumber(dyn1, 'rho')),               'kg/m^3'
+        'C_d',      cd_txt,                                         '-'
+        'A',        sprintf('diag(%s)', numList(A([1 5 9]))),       'm^2'
+        'C_coup',   numList(launchParam(ln, 'c_coup')),             'm^2'
+        'kappa_lat', numList(launchParam(ln, 'r_lat')),             '-'
+        'z_0',      numList(launchParam(ln, 'z0')),                 'm'
+        'sigma',    numList(launchParam(ln, 'sigma')),              'm'
+        'lambda',   numList(launchParam(ln, 'turb_intensity')),     '-'
+        'I',        I_txt,                                          'kg m^2'
+        'T_m',      numList(yamlNumber(dyn1, 'tau_thrust')),        's'
+        'T_tau',    numList(yamlNumber(dyn1, 'tau_torque')),        's'
+        'beta',     numList(launchArg(ln, 'psi_filter_beta')),      '-'
+        };
+    tblS2 = cell2table(rows, 'VariableNames', {'Symbol', 'Value', 'Unit'});
+
+    % Kazançlar (Q1 ve Q2-Q5 aynı olmalı; farklıysa ikisi de yazılır)
+    sec = {'mid_level_controller', 'low_level_controller', 'se3_mid_level_controller', 'se3_low_level_controller'};
+    names = {'PID position (x, y, z)', 'PID attitude (phi, theta, psi)', ...
+             'SE(3) position k_x, k_v (x, y, z)', 'SE(3) attitude k_R, k_Omega (phi, theta, psi)'};
+    keys = {{'thrust_x', 'thrust_y', 'thrust_z'}, {'torque1', 'torque2', 'torque3'}, ...
+            {'thrust_x', 'thrust_y', 'thrust_z'}, {'torque1', 'torque2', 'torque3'}};
+    rows = cell(0, 2);
+    for s = 1:numel(sec)
+        g1 = gainText(yamlSection(q1, sec{s}), keys{s});
+        g2 = gainText(yamlSection(q2, sec{s}), keys{s});
+        if ~strcmp(g1, g2), g1 = sprintf('%s (Q1); %s (Q2-Q5)', g1, g2); end
+        rows(end+1, :) = {names{s}, g1}; %#ok<AGROW>
+    end
+    mid1 = yamlSection(q1, 'mid_level_controller');
+    lv = [yamlNumber(mid1, 'lv_x', 2.0), yamlNumber(mid1, 'lv_y', 2.0), yamlNumber(mid1, 'lv_z', 2.5)];
+    rows(end+1, :) = {'NDOB observer gain L = diag(l_x, l_y, l_z) (1/s)', sprintf('diag(%s)', numList(lv))};
+    rows(end+1, :) = {'Update rates trajectory / position / attitude / dynamics (Hz)', ...
+                      sprintf('%g / %g / %g / %g', 20, 1 / yamlNumber(mid1, 'dt'), ...
+                              1 / yamlNumber(yamlSection(q1, 'low_level_controller'), 'dt'), ...
+                              1 / yamlNumber(dyn1, 'dt'))};
+    tblS3 = cell2table(rows, 'VariableNames', {'Gain', 'Value_kp_ki_kd'});
+end
+
+function txt = gainText(sec_txt, axis_keys)
+    % "kp/ki/kd" her eksen için, eksenler "; " ile
+    parts = cell(1, numel(axis_keys));
+    for a = 1:numel(axis_keys)
+        parts{a} = sprintf('%g/%g/%g', yamlNumber(sec_txt, ['kp_' axis_keys{a}]), ...
+                           yamlNumber(sec_txt, ['ki_' axis_keys{a}]), yamlNumber(sec_txt, ['kd_' axis_keys{a}]));
+    end
+    txt = strjoin(parts, '; ');
+end
+
+function sec_txt = yamlSection(txt, name)
+    % Sütun 0'daki "name:" satırından bir sonraki üst seviye anahtara kadar olan blok
+    lines_ = regexp(txt, '\r?\n', 'split');
+    k0 = find(strcmp(strtrim(lines_), [name ':']) & startsWith(lines_, name), 1);
+    if isempty(k0), error('yaml bölümü bulunamadı: %s', name); end
+    k1 = numel(lines_);
+    for k = k0 + 1:numel(lines_)
+        L = lines_{k};
+        if ~isempty(L) && ~isspace(L(1)) && L(1) ~= '#'
+            k1 = k - 1;
+            break;
+        end
+    end
+    sec_txt = strjoin(lines_(k0 + 1:k1), newline);
+end
+
+function v = yamlNumber(txt, key, default)
+    tok = regexp(txt, ['(?m)^\s*' key ':\s*([-+0-9.eE]+)'], 'tokens', 'once');
+    if isempty(tok)
+        if nargin > 2, v = default; return; end
+        error('yaml anahtarı bulunamadı: %s', key);
+    end
+    v = str2double(tok{1});
+end
+
+function v = launchParam(txt, name)
+    tok = regexp(txt, ['<param name="' name '" value="([^"]+)"'], 'tokens', 'once');
+    if isempty(tok), error('launch parametresi bulunamadı: %s', name); end
+    v = str2double(tok{1});
+end
+
+function v = launchArg(txt, name)
+    tok = regexp(txt, ['<arg name="' name '" default="([^"]+)"'], 'tokens', 'once');
+    if isempty(tok), error('launch argümanı bulunamadı: %s', name); end
+    v = str2double(tok{1});
+end
+
+function s = numList(v)
+    s = strjoin(arrayfun(@(x) sprintf('%g', x), v, 'UniformOutput', false), ', ');
+end
+
 function lim = padLimits(vals, frac)
     vals = vals(isfinite(vals));
     if isempty(vals), lim = [-1 1]; return; end
@@ -895,6 +1078,17 @@ end
 
 function saveFigure(fig, eps_folder, eps_name, output_pdf)
     exportgraphics(fig, fullfile(eps_folder, eps_name), 'ContentType', 'vector');
+    save_svg = getappdata(0, 'paper_save_svg');
+    if ~isempty(save_svg) && save_svg                     % Word için SVG (exportgraphics SVG yazamaz)
+        [~, base] = fileparts(eps_name);
+        svg_file = fullfile(eps_folder, [base '.svg']);
+        set(fig, 'PaperPositionMode', 'auto');            % ekrandaki boyut korunsun
+        try
+            print(fig, svg_file, '-dsvg', '-vector');     % R2022b ve sonrası
+        catch
+            print(fig, svg_file, '-dsvg', '-painters');   % eski sürümler
+        end
+    end
     exportgraphics(fig, output_pdf, 'Append', true);
     close(fig);
 end

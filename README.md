@@ -190,8 +190,14 @@ and warns if the RMS computed from the logs differs from `run_info.txt` or the f
    roslaunch multi_quadcopter_control sequential_sim.launch rviz:=false real_time_factor:=0 shutdown_on_finish:=true controller:=pid disturbance_enabled:=false log_dir:=$(pwd)/log_nominal
    ```
 
-2. Run `scripts/main.m` in MATLAB. It writes the EPS figures and `Table1.csv` / `Table2.csv` to
-   `scripts/EPS_Results/` and all figures to `scripts/all_drones_plots_fixed.pdf`.
+2. Run `scripts/main.m` in MATLAB. It writes every figure as EPS and SVG (both vector; SVG for
+   Word) and the tables as CSV to `scripts/EPS_Results/`, and all figures to
+   `scripts/all_drones_plots_fixed.pdf`. Labels: `PID+FF` (proposed), `PID` (no feedforward),
+   `PID+NDOB`, `SE(3)+FF`. The downwash interaction zones of Fig. 6, 7 and 9 and the z range of the
+   Fig. 1 zoom insets are taken from the logs. `TableS2_parameters.csv` (simulation parameters) and
+   `TableS3_gains.csv` (PID, SE(3) and NDOB gains, update rates) are read from `config/*.yaml` and
+   `launch/sequential_sim.launch`. Run `scripts/fig_S2_downwash_field.m` for Fig. S2; it also reads
+   the downwash parameters from the launch file.
    Fig. 2 and Table 1 also need the logs of the SE(3) geometric controller (`geo_log_dir`).
    Fig. 9 and `Table4_compensator_mismatch.csv` compare three ways of handling the downwash on the
    disturbed UAVs: no compensation, NDOB (the controller does not use the downwash model, the

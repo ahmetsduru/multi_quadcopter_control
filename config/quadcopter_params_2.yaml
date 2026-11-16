@@ -12,6 +12,11 @@ mid_level_controller:
   ki_thrust_z: 0.0
   kd_thrust_z: 5.0
 
+  # NDOB observer gains L = diag(lv_x, lv_y, lv_z) (1/s), used only with controller:=ndob
+  lv_x: 2.0
+  lv_y: 2.0
+  lv_z: 2.5
+
   integral_min: 0.0
   integral_max: 0.5
 
