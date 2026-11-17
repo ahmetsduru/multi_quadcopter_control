@@ -242,7 +242,7 @@ if all(f2_ok)
             if ~Dk.ok, continue; end
             [tb, eb] = windowRms(Dk, fig2_window);
             hs(k) = plot(ax, tb, eb, ctrlLineStyle(fig2_ctrls{k}), 'Color', ctrlColor(fig2_ctrls{k}), ...
-                         'LineWidth', line_w);
+                         'LineWidth', ctrlLineWidth(fig2_ctrls{k}));
         end
         yl = ylim(ax); ylim(ax, [0 yl(2) * 1.05]);
         addZones(ax, phase_zones, c_phase);
@@ -464,15 +464,16 @@ fig = figure('Position', [100, 100, 1000, 700]);
 axs = stackedAxes(fig, 2);
 fields_F  = {'Ed', 'EF'};
 ylabels_F = {'E_d (m)', 'E_F (m)'};
-hs = gobjects(0);
+hs = gobjects(1, numel(formation_ctrls));
+[~, ord_F] = sort(cellfun(@ctrlLineWidth, formation_ctrls(avail_F)), 'descend');   % kalından inceye çiz
 for a = 1:2
     ax = axs(a); hold(ax, 'on');
-    for r = avail_F
+    for r = avail_F(ord_F)
         idx = 1:plot_step:numel(F{r}.t);
         h = plot(ax, F{r}.t(idx), F{r}.(fields_F{a})(idx), ctrlLineStyle(formation_ctrls{r}), ...
-                 'LineWidth', line_w, 'Color', cols_F{r}, ...
+                 'LineWidth', ctrlLineWidth(formation_ctrls{r}), 'Color', cols_F{r}, ...
                  'DisplayName', labels_F{r});
-        if a == 1, hs(end+1) = h; end %#ok<SAGROW>
+        if a == 1, hs(r) = h; end
     end
     yl = ylim(ax); ylim(ax, [0 yl(2) * 1.05]);
     addZones(ax, phase_zones, c_phase);
@@ -480,7 +481,7 @@ for a = 1:2
     ylabel(ax, ylabels_F{a}, 'FontWeight', 'bold', 'FontSize', font_size, 'FontName', font_name);
     xlabel(ax, 't (s)', 'FontWeight', 'bold', 'FontSize', font_size, 'FontName', font_name);
 end
-addTopLegend(hs, [0.1 0.94 0.8 0.05], S);
+addTopLegend(hs(isgraphics(hs)), [0.1 0.94 0.8 0.05], S);   % açıklama formation_ctrls sırasıyla
 saveFigure(fig, eps_folder, 'FigF1_formation_error.eps', output_pdf);
 
 % Table 3: İHA çiftleri matrisi (her kontrolcü için). Satır/sütun Q1..Q5;
@@ -751,16 +752,30 @@ function [t_b, e_b] = windowRms(D1, window)
 end
 
 function c = ctrlColor(name)
-    % Kontrolcü başına sabit çizgi rengi (Fig. 2, 9, F1). Okabe-Ito paleti: birbirinden ve renk körlüğünde
-    % ayırt edilebilir, açık renkli faz bölgelerinin üstünde de belirgin.
+    % Kontrolcü başına sabit, canlı (doygun) renk (Fig. 2, 8, 9, F1); açık renkli faz bölgelerinin
+    % üstünde de belirgin.
     ex = expectedRun(name, NaN);
     switch ex.ctrl
-        case 'pid_ff', c = [0.000 0.447 0.698];   % mavi
-        case 'se3_ff', c = [0.000 0.000 0.000];   % siyah
-        case 'ndob',   c = [0.835 0.369 0.000];   % turuncu-kırmızı (vermilion)
-        case 'pid',    c = [0.000 0.620 0.451];   % yeşil
-        case 'se3',    c = [0.800 0.475 0.655];   % pembe-mor (kesikli çizilir)
-        otherwise,     c = [0.337 0.706 0.914];   % açık mavi
+        case 'pid_ff', c = [0.00 0.40 1.00];   % canlı mavi
+        case 'se3_ff', c = [0.00 0.00 0.00];   % siyah
+        case 'ndob',   c = [0.90 0.00 0.00];   % kırmızı
+        case 'pid',    c = [0.00 0.65 0.00];   % yeşil
+        case 'se3',    c = [0.90 0.00 0.90];   % magenta (kesikli çizilir)
+        otherwise,     c = [1.00 0.50 0.00];   % turuncu
+    end
+end
+
+function w = ctrlLineWidth(name)
+    % Katmanlı kalınlık: altta çizilenler kalın, üsttekiler ince; üst üste binen eğriler iç içe
+    % şeritler olarak birlikte görünür (çizim sırası: PID, PID+NDOB, SE(3)+FF, PID+FF, kesikli SE(3)).
+    ex = expectedRun(name, NaN);
+    switch ex.ctrl
+        case 'pid',    w = 3.5;
+        case 'ndob',   w = 3.0;
+        case 'se3_ff', w = 2.5;
+        case 'pid_ff', w = 2.0;
+        case 'se3',    w = 2.2;
+        otherwise,     w = 2.0;
     end
 end
 
