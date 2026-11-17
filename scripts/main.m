@@ -528,7 +528,8 @@ end
 if all(f2_ok)
     tbl1 = multiComparisonTable(cellfun(@metrics, D_f2, 'UniformOutput', false), ...
                                 cellfun(@ctrlVar, fig2_ctrls, 'UniformOutput', false));
-    fprintf('\nTable 1: %s (fark %% = (diğeri - %s) / diğeri * 100)\n', strjoin(f2_labels, ' vs '), f2_labels{1});
+    fprintf('\nTable 1: %s; RMSE mm, ISE x10^-3 m^2 s (fark %% = (diğeri - %s) / diğeri * 100)\n', ...
+            strjoin(f2_labels, ' vs '), f2_labels{1});
     disp(tbl1);
     writetable(tbl1, fullfile(out_folder, 'Table1.csv'));
 end
@@ -543,8 +544,9 @@ if all(f8_ok) && mod(numel(fig8_ctrls), 2) == 0
                                      cellfun(@metrics, D_f8n, 'UniformOutput', false), ...
                                      cellfun(@ctrlVar, fig8_ctrls, 'UniformOutput', false), ...
                                      cellfun(@ctrlVar, fig8_nominal, 'UniformOutput', false));
-    fprintf(['\nTable 2: Bozucu bastırma - %s\n  dRMSE = RMSE - bozucusuz RMSE (mm); removed = ileri beslemenin ', ...
-             'giderdiği downwash hatası payı (%%), yalnızca downwash etkisindeki İHA''lar\n'], strjoin(f8_labels, ', '));
+    fprintf(['\nTable 2: Bozucu bastırma - %s\n  RMSE mm, ISE x10^-3 m^2 s; dRMSE / dISE = bozucusuz koşuya göre ', ...
+             'artış; removed = ileri beslemenin giderdiği downwash payı (%%), yalnızca downwash etkisindeki İHA''lar\n'], ...
+            strjoin(f8_labels, ', '));
     disp(tbl2);
     writetable(tbl2, fullfile(out_folder, 'Table2.csv'));
 end
@@ -802,24 +804,31 @@ end
 
 function tbl = disturbanceRejectionTable(Ms, Mnom, names, nom_names)
     % Çiftler sırayla (ileri beslemeli k, ileri beslemesiz k+1); Mnom{p}: p. çiftin bozucusuz koşusu.
-    % Her çift için: bozucusuz RMSE (mm), iki koşunun RMSE'si (m), downwash'ın eklediği hata
-    % dRMSE = RMSE - bozucusuz RMSE (mm) ve ileri beslemenin giderdiği pay
-    % removed = (1 - dRMSE_ff / dRMSE_noff) * 100 (yalnızca dRMSE_noff > 0.1 mm olan İHA'lar).
+    % Her çift için RMSE (mm) ve ISE (x10^-3 m^2 s): bozucusuz koşu, ileri beslemesiz ve ileri beslemeli
+    % koşu; downwash'ın eklediği kısım dRMSE / dISE (bozucusuz koşuya göre artış) ve ileri beslemenin
+    % giderdiği pay removed = (1 - d_ff / d_noff) * 100 (yalnızca dRMSE_noff > 0.1 mm olan İHA'lar).
     n = numel(Ms{1}.rmse);
     tbl = table("Q " + string((1:n)'), 'VariableNames', {'Quadcopter'});
     for p = 1:numel(Ms) / 2
         A = Ms{2 * p - 1}; B = Ms{2 * p}; N0 = Mnom{p};
-        dA = (A.rmse - N0.rmse) * 1e3;
-        dB = (B.rmse - N0.rmse) * 1e3;
-        removed = nan(n, 1);
-        dist = dB > 0.1;
-        removed(dist) = (1 - dA(dist) ./ dB(dist)) * 100;
-        tbl.([nom_names{p} '_RMSE_mm'])        = N0.rmse * 1e3;
-        tbl.([names{2 * p} '_RMSE_m'])         = B.rmse;
-        tbl.([names{2 * p - 1} '_RMSE_m'])     = A.rmse;
-        tbl.([names{2 * p} '_dRMSE_mm'])       = dB;
-        tbl.([names{2 * p - 1} '_dRMSE_mm'])   = dA;
-        tbl.([names{2 * p - 1} '_removed_pct']) = removed;
+        fa = names{2 * p - 1}; fb = names{2 * p}; fn = nom_names{p};
+        dRa = (A.rmse - N0.rmse) * 1e3;  dRb = (B.rmse - N0.rmse) * 1e3;
+        dIa = (A.ise - N0.ise) * 1e3;    dIb = (B.ise - N0.ise) * 1e3;
+        dist = dRb > 0.1;
+        remR = nan(n, 1); remR(dist) = (1 - dRa(dist) ./ dRb(dist)) * 100;
+        remI = nan(n, 1); remI(dist) = (1 - dIa(dist) ./ dIb(dist)) * 100;
+        tbl.([fn '_RMSE_mm'])         = N0.rmse * 1e3;
+        tbl.([fb '_RMSE_mm'])         = B.rmse * 1e3;
+        tbl.([fa '_RMSE_mm'])         = A.rmse * 1e3;
+        tbl.([fb '_dRMSE_mm'])        = dRb;
+        tbl.([fa '_dRMSE_mm'])        = dRa;
+        tbl.([fa '_removed_RMSE_pct']) = remR;
+        tbl.([fn '_ISE_milli_m2s'])   = N0.ise * 1e3;
+        tbl.([fb '_ISE_milli_m2s'])   = B.ise * 1e3;
+        tbl.([fa '_ISE_milli_m2s'])   = A.ise * 1e3;
+        tbl.([fb '_dISE_milli_m2s'])  = dIb;
+        tbl.([fa '_dISE_milli_m2s'])  = dIa;
+        tbl.([fa '_removed_ISE_pct']) = remI;
     end
 end
 
@@ -855,12 +864,13 @@ function styleErrorAxes(ax, drone, zones, zone_cols, S)
 end
 
 function tbl = multiComparisonTable(Ms, names)
-    % Her koşunun RMSE/ISE'si ve ilk koşunun diğerlerine göre iyileşmesi (%) = (B - A) / B * 100
+    % Her koşunun RMSE'si (mm) ve ISE'si (x10^-3 m^2 s), ilk koşunun diğerlerine göre iyileşmesi (%)
+    % = (diğeri - ilk) / diğeri * 100
     n = numel(Ms{1}.rmse);
     tbl = table("Q " + string((1:n)'), 'VariableNames', {'Quadcopter'});
     for k = 1:numel(Ms)
-        tbl.([names{k} '_RMSE_m']) = Ms{k}.rmse;
-        tbl.([names{k} '_ISE'])    = Ms{k}.ise;
+        tbl.([names{k} '_RMSE_mm'])        = Ms{k}.rmse * 1e3;
+        tbl.([names{k} '_ISE_milli_m2s'])  = Ms{k}.ise * 1e3;
     end
     A = Ms{1};
     for k = 2:numel(Ms)
