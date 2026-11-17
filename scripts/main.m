@@ -415,25 +415,24 @@ if ~isempty(wp) && D(s5_drone).ok
 end
 
 %% === Fig. S6 - DRONE 2 YÖNELİM HATASI (DCM), BETA KARŞILAŞTIRMASI ===
+% Yönelim hatası (geodesic, DCM) Fig. 2 gibi 50 ms pencere RMS'i olarak; beta = 0.1 kalın turuncu (altta),
+% beta = 0.05 ince mavi (üstte). beta sembolü dik ve kalın değil (skaler).
 if D(s6_drone).ok && D_beta(s6_drone).ok
-    fig = figure('Position', [100, 100, 800, 500]);
-    ax = axes(fig); hold(ax, 'on'); box(ax, 'on');
-    runs   = {D(s6_drone), D_beta(s6_drone)};
-    cols   = {colors(s6_drone,:), dark_gray};
-    widths = [0.5 0.3];
-    alphas = [0.6 0.9];
-    hs = gobjects(0);
-    for k = 1:2
-        e = dcmError(runs{k}.T);
-        idx = 1:sparse_factor:numel(e);
-        hs(end+1) = bar(ax, runs{k}.t(idx), e(idx), 'FaceColor', cols{k}, 'EdgeColor', 'none', ...
-                        'BarWidth', widths(k), 'FaceAlpha', alphas(k)); %#ok<SAGROW>
-    end
-    finishBarAxes(ax, phase_zones, c_phase, S, 16);
-    xlabel(ax, 't (s)', 'FontWeight', 'bold', 'FontSize', 16, 'FontName', font_name);
-    ylabel(ax, 'Orientation Error (rad)', 'FontWeight', 'bold', 'FontSize', 16, 'FontName', font_name);
-    legend(ax, hs, {sprintf('\\beta = %g', beta_main), sprintf('\\beta = %g', beta_alt)}, ...
-           'Location', 'NorthEast', 'FontSize', 12, 'FontWeight', 'bold', 'Box', 'on');
+    fig = figure('Position', [100, 100, 1000, 600]);
+    ax = stackedAxes(fig, 1); hold(ax, 'on'); box(ax, 'on');
+    beta_lbl = @(b) "\rm{}" + string(char(946)) + "\bf = " + sprintf('%g', b);
+    [tb, eb] = windowRmsSignal(D_beta(s6_drone).t, dcmError(D_beta(s6_drone).T), fig2_window);
+    h_alt  = plot(ax, tb, eb, '-', 'Color', [1.00 0.50 0.00], 'LineWidth', 3.5, 'DisplayName', beta_lbl(beta_alt));
+    [tb, eb] = windowRmsSignal(D(s6_drone).t, dcmError(D(s6_drone).T), fig2_window);
+    h_main = plot(ax, tb, eb, '-', 'Color', [0.00 0.40 1.00], 'LineWidth', 2.0, 'DisplayName', beta_lbl(beta_main));
+    yl = ylim(ax); ylim(ax, [0 yl(2) * 1.05]);
+    addZones(ax, phase_zones, c_phase);
+    styleAxes(ax, S);
+    text(ax, 0.985, 0.96, sprintf('Q %d', s6_drone), 'Units', 'normalized', 'HorizontalAlignment', 'right', ...
+         'VerticalAlignment', 'top', 'FontWeight', 'bold', 'FontSize', font_size, 'FontName', font_name);
+    xlabel(ax, 't (s)', 'FontWeight', 'bold', 'FontSize', font_size, 'FontName', font_name);
+    ylabel(ax, 'Orientation Error (rad)', 'FontWeight', 'bold', 'FontSize', font_size, 'FontName', font_name);
+    addTopLegend([h_main h_alt], [], S);
     saveFigure(fig, out_folder, 'FigS6.svg', output_pdf);
 else
     warning('Fig. S6 atlandı: beta logları bulunamadı (%s).', beta_log_dir);
@@ -730,12 +729,17 @@ function [t_b, e_b] = windowRms(D1, window)
     % Konum hatasının ardışık, örtüşmeyen pencerelerdeki RMS'i (pencere ortası zamanında).
     % Pencere referansın güncelleme periyoduna eşitse (20 Hz -> 0.05 s) testere dişi düzlenir ve
     % pencere RMS'lerinin karesel ortalaması RMSE'ye eşit olur.
-    e  = positionError(D1.T);
-    dt = median(diff(D1.t));
+    [t_b, e_b] = windowRmsSignal(D1.t, positionError(D1.T), window);
+end
+
+function [t_b, e_b] = windowRmsSignal(t, e, window)
+    % Herhangi bir hata sinyalinin ardışık, örtüşmeyen pencerelerdeki RMS'i
+    t  = t(:); e = e(:);
+    dt = median(diff(t));
     N  = max(1, round(window / dt));
     n  = floor(numel(e) / N);
     e_b = sqrt(mean(reshape(e(1:n * N).^2, N, n), 1))';
-    t_b = mean(reshape(D1.t(1:n * N), N, n), 1)';
+    t_b = mean(reshape(t(1:n * N), N, n), 1)';
 end
 
 function c = ctrlColor(name)
