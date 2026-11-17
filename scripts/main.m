@@ -752,16 +752,16 @@ function [t_b, e_b] = windowRms(D1, window)
 end
 
 function c = ctrlColor(name)
-    % Kontrolcü başına sabit, canlı (doygun) renk (Fig. 2, 8, 9, F1); açık renkli faz bölgelerinin
-    % üstünde de belirgin.
+    % Kontrolcü başına sabit, canlı (doygun) renk (Fig. 2, 8, 9, F1): mavi, siyah, turuncu, yeşil, mor;
+    % birbirine yakın ton yok ve açık renkli faz bölgelerinin üstünde de belirgin.
     ex = expectedRun(name, NaN);
     switch ex.ctrl
         case 'pid_ff', c = [0.00 0.40 1.00];   % canlı mavi
         case 'se3_ff', c = [0.00 0.00 0.00];   % siyah
-        case 'ndob',   c = [0.90 0.00 0.00];   % kırmızı
+        case 'ndob',   c = [1.00 0.50 0.00];   % turuncu
         case 'pid',    c = [0.00 0.65 0.00];   % yeşil
-        case 'se3',    c = [0.90 0.00 0.90];   % magenta (kesikli çizilir)
-        otherwise,     c = [1.00 0.50 0.00];   % turuncu
+        case 'se3',    c = [0.50 0.00 0.75];   % mor (kesikli çizilir)
+        otherwise,     c = [0.55 0.35 0.15];   % kahverengi
     end
 end
 
