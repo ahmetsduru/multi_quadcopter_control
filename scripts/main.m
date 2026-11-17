@@ -123,7 +123,7 @@ phase_zones    = [[0 t_switch]' [t_switch t_axis_max]'];
 axis_names     = ["x", "y", "z"];
 
 S = struct('font_name', font_name, 'font_size', font_size, 'line_w', line_w, 'ref_w', ref_w, ...
-           't_max', t_axis_max, 'ref_window', fig2_window);
+           't_max', t_axis_max);
 
 %% === VERİ OKUMA (gereken her koşu bir kez) ===
 % Her koşu log/<koşu>/ klasöründen okunur ve run_info.txt ile beklenen kontrolcü, bozucu ve beta
@@ -276,8 +276,11 @@ plotStateFigure(D, valid, "a_acc.", "r_acc.", ["a_x (m/s^2)", "a_y (m/s^2)", "a_
                 phase_zones, c_phase, colors, S, out_folder, 'Fig4.svg', output_pdf);
 
 %% === Fig. 5 - EULER AÇILARI ===
-plotStateFigure(D, valid, "a_eul_ang.", "r_eul_ang.", ["\phi (rad)", "\theta (rad)", "\psi (rad)"], ...
-                phase_zones, c_phase, colors, S, out_folder, 'Fig5.svg', output_pdf);
+% Açı sembolleri dik yazılsın diye TeX (\phi) yerine Unicode karakterleri: φ, θ, ψ.
+% İstenen açılar gerçek açıların altında açık gri çizgiyle çizilir (bkz. plotStateFigure, ref_below).
+plotStateFigure(D, valid, "a_eul_ang.", "r_eul_ang.", ...
+                [string(char(966)), string(char(952)), string(char(968))] + " (rad)", ...
+                phase_zones, c_phase, colors, S, out_folder, 'Fig5.svg', output_pdf, true);
 
 %% === Fig. 6 - BOZUCU KUVVETLER ===
 fig = figure('Position', [100, 100, 1000, 900]);
@@ -743,16 +746,6 @@ function tbl = comparisonTable(A, B, nameA, nameB)
                                   [nameB '_RMSE_m'], [nameB '_ISE'], 'RMSE_Improvement_pct', 'ISE_Improvement_pct'});
 end
 
-function [t, x] = breakWraps(t, x)
-    % Açıyı [-pi, pi] aralığına sarar ve sarma noktalarına NaN ekler (çizgi kesilir, dikey sıçrama çizilmez)
-    t = t(:); x = atan2(sin(x(:)), cos(x(:)));
-    j = find(abs(diff(x)) > pi);
-    for k = numel(j):-1:1
-        t = [t(1:j(k)); NaN; t(j(k) + 1:end)];
-        x = [x(1:j(k)); NaN; x(j(k) + 1:end)];
-    end
-end
-
 function [t_b, e_b] = windowRms(D1, window)
     % Konum hatasının ardışık, örtüşmeyen pencerelerdeki RMS'i (pencere ortası zamanında).
     % Pencere referansın güncelleme periyoduna eşitse (20 Hz -> 0.05 s) testere dişi düzlenir ve
@@ -875,7 +868,12 @@ function barLegend(ax, hs, names, ttl, font_name)
 end
 
 function plotStateFigure(D, valid, act_prefix, ref_prefix, ylabels, zones, zone_cols, colors, S, ...
-                         out_folder, out_name, output_pdf)
+                         out_folder, out_name, output_pdf, ref_below)
+    % ref_below = true: istenen değerler gerçek değerlerin ALTINDA açık gri ince çizgiyle çizilir
+    % (Fig. 5: istenen roll/pitch 20 Hz referansla titrer; üstte siyah noktalı çizilince gerçek açıları örter).
+    % false (varsayılan): istenen değerler üstte siyah noktalı.
+    if nargin < 13, ref_below = false; end
+    ref_col = [0.62 0.62 0.62];
     % 3 eksenli gerçek (renkli) + istenen (siyah noktalı) zaman grafiği
     fig = figure('Position', [100, 100, 1000, 900]);
     axs = stackedAxes(fig, 3);
@@ -884,38 +882,40 @@ function plotStateFigure(D, valid, act_prefix, ref_prefix, ylabels, zones, zone_
     for a = 1:3
         ax = axs(a); hold(ax, 'on');
         if a == 1
-            lgd_handles(end+1) = plot(ax, NaN, NaN, ':k', 'LineWidth', S.ref_w, 'DisplayName', 'Desired'); %#ok<AGROW>
+            if ref_below
+                lgd_handles(end+1) = plot(ax, NaN, NaN, '-', 'Color', ref_col, 'LineWidth', S.ref_w, ...
+                                          'DisplayName', 'Desired'); %#ok<AGROW>
+            else
+                lgd_handles(end+1) = plot(ax, NaN, NaN, ':k', 'LineWidth', S.ref_w, 'DisplayName', 'Desired'); %#ok<AGROW>
+            end
         end
         all_vals = [];
-        is_euler = act_prefix == "a_eul_ang.";
         for i = valid
-            t = D(i).tp;
             v = D(i).Tp{:, act_prefix + axis_names(a)};
             r = D(i).Tp{:, ref_prefix + axis_names(a)};
-            t_r = t;
-            if is_euler && a < 3
-                % istenen roll/pitch, pozisyon kontrolcüsünün çıkışıdır ve 20 Hz referansın her
-                % güncellemesinde titrer; referans periyodu (S.ref_window) üzerinden ortalaması çizilir
-                N = max(1, round(S.ref_window / median(diff(D(i).t))));
-                r_full = movmean(D(i).T{:, ref_prefix + axis_names(a)}, N);
-                r = interp1(D(i).t, r_full, t);           % seyreltilmiş zamanlarda (t, D(i).t'nin alt kümesi)
-            elseif is_euler && a == 3
-                % yaw [-pi, pi] aralığında; +/-pi geçişlerinde çizgi kesilir (dikey sıçrama çizilmez)
-                [t,   v] = breakWraps(t, v);
-                [t_r, r] = breakWraps(t_r, r);
+            if act_prefix == "a_eul_ang." && a == 3
+                % yaw: gerçek açı +/-pi'ye sarılı, referans sürekli -> ikisini de sürekli çiz
+                v = unwrap(v); r = unwrap(r);
+                k0 = round((r(1) - v(1)) / (2 * pi)); v = v + 2 * pi * k0;
             end
             all_vals = [all_vals; v; r]; %#ok<AGROW>
-            h = plot(ax, t, v, '-', 'Color', colors(i,:), 'LineWidth', S.line_w, ...
+            if ref_below
+                plot(ax, D(i).tp, r, '-', 'Color', ref_col, 'LineWidth', S.ref_w, 'HandleVisibility', 'off');
+            end
+            h = plot(ax, D(i).tp, v, '-', 'Color', colors(i,:), 'LineWidth', S.line_w, ...
                      'DisplayName', sprintf('Q %d', i));
             if a == 1, lgd_handles(end+1) = h; else, h.HandleVisibility = 'off'; end %#ok<AGROW>
-            plot(ax, t_r, r, ':k', 'LineWidth', S.ref_w, 'HandleVisibility', 'off');
+            if ~ref_below
+                plot(ax, D(i).tp, r, ':k', 'LineWidth', S.ref_w, 'HandleVisibility', 'off');
+            end
         end
-        if is_euler && a == 3
-            ylim(ax, [-pi pi] * 1.08);
-            set(ax, 'YTick', [-pi -pi/2 0 pi/2 pi], 'YTickLabel', {'-\pi', '-\pi/2', '0', '\pi/2', '\pi'});
-        else
-            ylim(ax, padLimits(all_vals, 0.1));
+        if ref_below
+            % istenen çizgiler tüm gerçek çizgilerin altında kalsın (faz bölgeleri yine en altta)
+            ch = ax.Children;
+            is_ref = arrayfun(@(c) isprop(c, 'Color') && isequal(c.Color, ref_col), ch);
+            ax.Children = [ch(~is_ref); ch(is_ref)];
         end
+        ylim(ax, padLimits(all_vals, 0.1));
         addZones(ax, zones, zone_cols);
         styleAxes(ax, S);
         ylabel(ax, ylabels(a), 'FontWeight', 'bold', 'FontSize', S.font_size, 'FontName', S.font_name);
