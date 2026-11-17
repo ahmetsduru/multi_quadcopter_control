@@ -3,7 +3,7 @@
 #   rosrun multi_quadcopter_control run_paper_sims.sh
 # Every run writes droneN_log.txt and run_info.txt to its own folder log/<run>/:
 #   log/pid_ff, log/pid, log/ndob, log/se3, log/se3_ff   one folder per controller (disturbed)
-#   log/pid_nominal                                      PID, disturbance off
+#   log/pid_nominal, log/se3_nominal                     PID / SE(3), disturbance off
 #   log/pid_ff_beta0.1                                   PID+FF, yaw filter beta = 0.1
 # main.m picks the runs it needs by these names (settings at the top of main.m).
 
@@ -24,13 +24,14 @@ run() {
     fi
 }
 
-run "[1/7] PID + downwash feedforward (PID+FF)"     pid_ff         controller:=pid_ff
-run "[2/7] PID, no feedforward"                     pid            controller:=pid
-run "[3/7] PID + NDOB, no downwash model"           ndob           controller:=ndob
-run "[4/7] Geometric SE(3), no feedforward"         se3            controller:=se3
-run "[5/7] Geometric SE(3) + feedforward"           se3_ff         controller:=se3_ff
-run "[6/7] PID, disturbance off"                    pid_nominal    controller:=pid disturbance_enabled:=false
-run "[7/7] PID+FF, yaw filter beta = 0.1"           pid_ff_beta0.1 controller:=pid_ff psi_filter_beta:=0.1
+run "[1/8] PID + downwash feedforward (PID+FF)"     pid_ff         controller:=pid_ff
+run "[2/8] PID, no feedforward"                     pid            controller:=pid
+run "[3/8] PID + NDOB, no downwash model"           ndob           controller:=ndob
+run "[4/8] Geometric SE(3), no feedforward"         se3            controller:=se3
+run "[5/8] Geometric SE(3) + feedforward"           se3_ff         controller:=se3_ff
+run "[6/8] PID, disturbance off"                    pid_nominal    controller:=pid disturbance_enabled:=false
+run "[7/8] SE(3), disturbance off"                  se3_nominal    controller:=se3 disturbance_enabled:=false
+run "[8/8] PID+FF, yaw filter beta = 0.1"           pid_ff_beta0.1 controller:=pid_ff psi_filter_beta:=0.1
 
 echo
 echo "All runs finished. Now run scripts/main.m in MATLAB."

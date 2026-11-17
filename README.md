@@ -176,9 +176,10 @@ and warns if the RMS computed from the logs differs from `run_info.txt` or the f
    | `se3` | geometric SE(3), no feedforward |
    | `se3_ff` | geometric SE(3) + downwash feedforward |
    | `pid_nominal` | PID, disturbance off |
+   | `se3_nominal` | SE(3), disturbance off |
    | `pid_ff_beta0.1` | PID + feedforward, yaw filter beta = 0.1 |
 
-   All seven in one go:
+   All eight in one go:
 
    ```bash
    rosrun multi_quadcopter_control run_paper_sims.sh
@@ -197,8 +198,9 @@ and warns if the RMS computed from the logs differs from `run_info.txt` or the f
    | Setting | Default | Used by |
    |---|---|---|
    | `main_ctrl` | `pid_ff` | Fig. 1, 3-7, S5, S6 |
-   | `fig2_ctrls` | `pid_ff`, `se3_ff`, `ndob` | Fig. 2, Table 1 (2-5 runs; the first is the reference). Fig. 2 plots the RMS of the position error over each 50 ms reference update period (`fig2_window`) |
-   | `fig8_ctrls` | `pid_ff`, `pid`, `se3_ff`, `se3` | Fig. 8, Table 2: ablation pairs (with feedforward, without), plotted like Fig. 2 for Q2 and Q3 |
+   | `fig2_ctrls` | `pid_ff`, `ndob`, `pid` | Fig. 2, Table 1: comparison of the compensations (2-5 runs; the first is the reference). Fig. 2 plots the RMS of the position error over each 50 ms reference update period (`fig2_window`) |
+   | `fig8_ctrls` | `pid_ff`, `pid`, `se3_ff`, `se3` | Fig. 8, Table 2: pairs (with feedforward, without), plotted like Fig. 2 for Q2 and Q3 |
+   | `fig8_nominal` | `pid_nominal`, `se3_nominal` | Table 2: disturbance-free run of each pair; the table gives the disturbance-free RMSE, the increase caused by the downwash (dRMSE) and the share of it removed by the feedforward |
    | `formation_ctrls` | `pid_ff`, `pid`, `se3_ff` | Fig. F1, Table 3 |
    | `mismatch_ctrls` | `pid`, `ndob`, `pid_ff` | Fig. 9, Table 4 (no compensation / observer / model feedforward) |
    | `nominal_run` | `pid_nominal` | Table 4 (disturbance-free reference) |

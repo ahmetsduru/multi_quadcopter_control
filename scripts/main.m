@@ -24,7 +24,7 @@
 %   Fig. S6 Drone 2 yönelim hatası, beta karşılaştırması        -> main_ctrl vs beta_run
 %   Fig. F1 Komşu İHA'lar arası bağıl mesafe ve formasyon hatası -> formation_ctrls
 %   Table 1 RMSE/ISE, ilk koşunun diğerlerine göre farkı (%)   -> fig2_ctrls
-%   Table 2 RMSE/ISE, ablasyon (çift çift)                      -> fig8_ctrls
+%   Table 2 Bozucu bastırma: bozucusuz RMSE, ΔRMSE, ileri beslemenin giderdiği pay -> fig8_ctrls + fig8_nominal
 %   Table 3 İHA çiftleri matrisi: üst üçgen formasyon hatası (RMS, baskın yön xy/z),
 %           alt üçgen bağıl mesafe hatası (RMS, işaretli ortalama) -> formation_ctrls
 %   Table 4 Uyumsuz kompanzatör: RMSE ve bozucusuz koşuya göre artış (ΔRMSE) -> mismatch_ctrls + nominal_run
@@ -47,13 +47,14 @@ pkg_dir    = fullfile(script_dir, '..');
 % --- Hangi grafik hangi koşuyu kullanır? (koşu adı = log/ altındaki klasör adı) ---
 % Kontrolcüler: pid_ff (PID+FF), pid (PID), ndob (PID+NDOB), se3 (SE(3)), se3_ff (SE(3)+FF)
 main_ctrl       = 'pid_ff';                    % Fig. 1, 3-7, S5, S6'nın ana koşusu
-fig2_ctrls      = {'pid_ff', 'se3_ff', 'ndob'};  % Fig. 2 / Table 1: 2-5 koşu (ilki referans: Table 1'deki
+fig2_ctrls      = {'pid_ff', 'ndob', 'pid'};  % Fig. 2 / Table 1: kompanzasyon karşılaştırması, 2-5 koşu (ilki referans: Table 1'deki
                                                        % fark % buna göre; çizgilerde en üstte). Renkler: ctrlColor
 fig2_window     = 0.05;   % s; Fig. 2'deki hata bu pencerelerdeki RMS'tir. Referans 20 Hz'de (50 ms) güncellendiği
                           % için ham hata her periyotta testere dişi çizer; 50 ms RMS bunu düzler ve karesel
                           % ortalaması tablodaki RMSE'ye eşittir.
 fig8_ctrls      = {'pid_ff', 'pid', 'se3_ff', 'se3'};   % Fig. 8 / Table 2: ablasyon çiftleri sırayla
                                                % (ileri beslemeli, ileri beslemesiz), (..., ...)
+fig8_nominal    = {'pid_nominal', 'se3_nominal'};   % Table 2: her çiftin bozucusuz koşusu (ΔRMSE için)
 formation_ctrls = {'pid_ff', 'pid', 'se3_ff'};   % Fig. F1 / Table 3
 mismatch_ctrls  = {'pid', 'ndob', 'pid_ff'};   % Fig. 9 / Table 4: kompanzasyon yok / gözlemci / model FF
 nominal_run     = 'pid_nominal';               % Table 4: bozucusuz koşu (disturbance_enabled:=false)
@@ -132,7 +133,7 @@ S = struct('font_name', font_name, 'font_size', font_size, 'line_w', line_w, 're
 %% === VERİ OKUMA (gereken her koşu bir kez) ===
 % Her koşu log/<koşu>/ klasöründen okunur ve run_info.txt ile beklenen kontrolcü, bozucu ve beta
 % ayarına sahip olduğu kontrol edilir.
-run_names = unique([{main_ctrl, nominal_run, beta_run}, fig8_ctrls, ...
+run_names = unique([{main_ctrl, nominal_run, beta_run}, fig8_ctrls, fig8_nominal, ...
                     fig2_ctrls, formation_ctrls, mismatch_ctrls], 'stable');
 run_data = containers.Map();
 for k = 1:numel(run_names)
@@ -151,6 +152,7 @@ D_f2   = cellfun(@(n) run_data(n), fig2_ctrls, 'UniformOutput', false);   % Fig.
 f2_ok  = cellfun(@(x) any([x.ok]), D_f2);
 D_f8   = cellfun(@(n) run_data(n), fig8_ctrls, 'UniformOutput', false);   % Fig. 8 / Table 2
 f8_ok  = cellfun(@(x) any([x.ok]), D_f8);
+D_f8n  = cellfun(@(n) run_data(n), fig8_nominal, 'UniformOutput', false);  % Table 2: bozucusuz koşular
 D_beta = run_data(beta_run);         % Fig. S6
 D_nom  = run_data(nominal_run);      % Table 4
 D_none = run_data(mismatch_ctrls{1});   % Fig. 9 / Table 4: kompanzasyon yok
@@ -530,10 +532,18 @@ if all(f2_ok)
     writetable(tbl1, fullfile(out_folder, 'Table1.csv'));
 end
 if all(f8_ok) && mod(numel(fig8_ctrls), 2) == 0
-    tbl2 = ablationTable(cellfun(@metrics, D_f8, 'UniformOutput', false), ...
-                         cellfun(@ctrlVar, fig8_ctrls, 'UniformOutput', false));
-    fprintf('\nTable 2: Ablasyon - ileri beslemeli / ileri beslemesiz çiftler: %s (iyileşme %% = (ileri beslemesiz - ileri beslemeli) / ileri beslemesiz * 100)\n', ...
-            strjoin(f8_labels, ', '));
+    if numel(fig8_nominal) ~= numel(fig8_ctrls) / 2
+        error('fig8_nominal her (ileri beslemeli, ileri beslemesiz) çifti için bir bozucusuz koşu içermeli.');
+    end
+    if ~all(cellfun(@(x) any([x.ok]), D_f8n))
+        warning('Table 2: bozucusuz koşular eksik (%s); ΔRMSE sütunları NaN.', strjoin(fig8_nominal, ', '));
+    end
+    tbl2 = disturbanceRejectionTable(cellfun(@metrics, D_f8, 'UniformOutput', false), ...
+                                     cellfun(@metrics, D_f8n, 'UniformOutput', false), ...
+                                     cellfun(@ctrlVar, fig8_ctrls, 'UniformOutput', false), ...
+                                     cellfun(@ctrlVar, fig8_nominal, 'UniformOutput', false));
+    fprintf(['\nTable 2: Bozucu bastırma - %s\n  dRMSE = RMSE - bozucusuz RMSE (mm); removed = ileri beslemenin ', ...
+             'giderdiği downwash hatası payı (%%), yalnızca downwash etkisindeki İHA''lar\n'], strjoin(f8_labels, ', '));
     disp(tbl2);
     writetable(tbl2, fullfile(out_folder, 'Table2.csv'));
 end
@@ -789,19 +799,26 @@ function axs = stackedAxes(fig, n, top_px)
     end
 end
 
-function tbl = ablationTable(Ms, names)
-    % Çiftler sırayla (ileri beslemeli, ileri beslemesiz): her ikisinin RMSE/ISE'si ve ileri beslemenin
-    % sağladığı iyileşme (%) = (ileri beslemesiz - ileri beslemeli) / ileri beslemesiz * 100
+function tbl = disturbanceRejectionTable(Ms, Mnom, names, nom_names)
+    % Çiftler sırayla (ileri beslemeli k, ileri beslemesiz k+1); Mnom{p}: p. çiftin bozucusuz koşusu.
+    % Her çift için: bozucusuz RMSE (mm), iki koşunun RMSE'si (m), downwash'ın eklediği hata
+    % dRMSE = RMSE - bozucusuz RMSE (mm) ve ileri beslemenin giderdiği pay
+    % removed = (1 - dRMSE_ff / dRMSE_noff) * 100 (yalnızca dRMSE_noff > 0.1 mm olan İHA'lar).
     n = numel(Ms{1}.rmse);
     tbl = table("Q " + string((1:n)'), 'VariableNames', {'Quadcopter'});
-    for k = 1:2:numel(Ms) - 1
-        A = Ms{k}; B = Ms{k + 1};
-        tbl.([names{k} '_RMSE_m'])     = A.rmse;
-        tbl.([names{k} '_ISE'])        = A.ise;
-        tbl.([names{k + 1} '_RMSE_m']) = B.rmse;
-        tbl.([names{k + 1} '_ISE'])    = B.ise;
-        tbl.([names{k} '_vs_' names{k + 1} '_RMSE_pct']) = (B.rmse - A.rmse) ./ B.rmse * 100;
-        tbl.([names{k} '_vs_' names{k + 1} '_ISE_pct'])  = (B.ise - A.ise) ./ B.ise * 100;
+    for p = 1:numel(Ms) / 2
+        A = Ms{2 * p - 1}; B = Ms{2 * p}; N0 = Mnom{p};
+        dA = (A.rmse - N0.rmse) * 1e3;
+        dB = (B.rmse - N0.rmse) * 1e3;
+        removed = nan(n, 1);
+        dist = dB > 0.1;
+        removed(dist) = (1 - dA(dist) ./ dB(dist)) * 100;
+        tbl.([nom_names{p} '_RMSE_mm'])        = N0.rmse * 1e3;
+        tbl.([names{2 * p} '_RMSE_m'])         = B.rmse;
+        tbl.([names{2 * p - 1} '_RMSE_m'])     = A.rmse;
+        tbl.([names{2 * p} '_dRMSE_mm'])       = dB;
+        tbl.([names{2 * p - 1} '_dRMSE_mm'])   = dA;
+        tbl.([names{2 * p - 1} '_removed_pct']) = removed;
     end
 end
 
