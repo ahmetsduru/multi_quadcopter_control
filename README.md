@@ -212,6 +212,8 @@ and warns if the RMS computed from the logs differs from `run_info.txt` or the f
    `TableS3_gains.csv` (PID, SE(3) and NDOB gains, update rates) are read from `config/*.yaml` and
    `launch/sequential_sim.launch`. Run `scripts/fig_S2_downwash_field.m` for Fig. S2; it also reads
    the downwash parameters from the launch file.
+   Fig. 6 shows the applied downwash force of the main run (solid) together with the NDOB estimate of
+   the PID+NDOB run (dashed, same colour).
    Fig. 9 and `Table4_compensator_mismatch.csv` compare three ways of handling the downwash on the
    disturbed UAVs: no compensation, NDOB (the force is estimated by the observer) and the
    model-based feedforward. Table 4 also gives the increase over the disturbance-free run (`dRMSE`)

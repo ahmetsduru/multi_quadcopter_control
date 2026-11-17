@@ -16,8 +16,8 @@
 %   Fig. 1  Pozisyon (x, y, z) + z zoom                         -> main_ctrl
 %   Fig. 2  Anlık konum hatası (50 ms pencere RMS), 2-5 koşu   -> fig2_ctrls
 %   Fig. 3  Hız / Fig. 4 İvme / Fig. 5 Euler açıları            -> main_ctrl
-%   Fig. 6  Bozucu kuvvetler / Fig. 7 Thrust                    -> main_ctrl
-%   NDOB    NDOB bozucu kestirimi, 3 eksen, tüm İHA'lar          -> NDOB koşusu (mismatch_ctrls)
+%   Fig. 6  Bozucu kuvvetler (main_ctrl) ve NDOB kestirimi (mismatch_ctrls'deki NDOB koşusu)
+%   Fig. 7  Thrust                                              -> main_ctrl
 %   Fig. 8  Ablasyon: ileri besleme var / yok (50 ms pencere RMS) -> fig8_ctrls
 %   Fig. 9  Uyumsuz kompanzatör: downwash vs NDOB kestirimi ve konum hatası -> mismatch_ctrls
 %   Fig. S5 Drone 1 hibrit yörünge ve waypointler               -> main_ctrl + config/*.yaml
@@ -267,9 +267,19 @@ plotStateFigure(D, valid, "a_eul_ang.", "r_eul_ang.", ...
                 "\rm{}" + [string(char(966)), string(char(952)), string(char(968))] + "\bf (rad)", ...
                 phase_zones, c_phase, colors, S, out_folder, 'Fig5.svg', output_pdf, false);   % referans çizilmez
 
-%% === Fig. 6 - BOZUCU KUVVETLER ===
-fig = figure('Position', [100, 100, 1000, 900]);
-axs = stackedAxes(fig, 3);
+%% === Fig. 6 - BOZUCU KUVVETLER VE NDOB KESTİRİMİ ===
+% Düz çizgiler: ana koşuda (main_ctrl) uygulanan downwash kuvveti. Kesikli çizgiler (aynı renk): NDOB
+% kestirimi (PID+NDOB koşusu; kontrolcü downwash modelini kullanmaz, kestirim modellenmemiş diğer
+% etkileri de içerir). İki koşuda uygulanan kuvvetler neredeyse aynıdır (İHA konumları cm mertebesinde
+% farklıdır). NDOB koşusu yoksa yalnızca uygulanan kuvvetler çizilir.
+D_est = [];
+if hasNdobColumns(D)
+    D_est = D;
+elseif hasNdobColumns(D_obs)
+    D_est = D_obs;
+end
+fig = figure('Position', [100, 100, 1000, 950]);
+axs = stackedAxes(fig, 3, 130);          % üstte iki satırlık açıklama için yer
 lgd_handles = gobjects(0);
 for a = 1:3
     ax = axs(a); hold(ax, 'on');
@@ -277,8 +287,19 @@ for a = 1:3
     for i = valid
         v = D(i).Tp{:, "dist_f." + axis_names(a)};
         all_vals = [all_vals; v]; %#ok<AGROW>
-        h = plot(ax, D(i).tp, v, 'LineWidth', line_w, 'Color', colors(i,:), 'DisplayName', sprintf('Q %d', i));
+        h = plot(ax, D(i).tp, v, '-', 'LineWidth', line_w, 'Color', colors(i,:), 'DisplayName', sprintf('Q %d', i));
         if a == 1, lgd_handles(end+1) = h; else, h.HandleVisibility = 'off'; end %#ok<SAGROW>
+    end
+    if ~isempty(D_est)
+        for i = find([D_est.ok])
+            v = D_est(i).Tp{:, "ndob_f." + axis_names(a)};
+            all_vals = [all_vals; v]; %#ok<AGROW>
+            plot(ax, D_est(i).tp, v, '--', 'LineWidth', ref_w, 'Color', colors(i,:), 'HandleVisibility', 'off');
+        end
+        if a == 1                                 % çizgi tipi açıklaması
+            lgd_handles(end+1) = plot(ax, NaN, NaN, '-k', 'LineWidth', line_w, 'DisplayName', 'Applied'); %#ok<SAGROW>
+            lgd_handles(end+1) = plot(ax, NaN, NaN, '--k', 'LineWidth', ref_w, 'DisplayName', 'NDOB estimate'); %#ok<SAGROW>
+        end
     end
     ylim(ax, padLimits(all_vals, 0.1));
     addZones(ax, interact_zones, interact_cols);
@@ -287,41 +308,10 @@ for a = 1:3
            'FontSize', font_size, 'FontName', font_name);
     xlabel(ax, 't (s)', 'FontWeight', 'bold', 'FontSize', font_size, 'FontName', font_name);
 end
-addTopLegend(lgd_handles, [0.1 0.94 0.8 0.05], S);
+lgd = legend(lgd_handles, 'Orientation', 'horizontal', 'NumColumns', 4, 'FontSize', font_size, ...
+             'FontWeight', 'bold', 'Box', 'off', 'FontName', font_name);
+set(lgd, 'Position', [0.05 0.9 0.9 0.09]);
 saveFigure(fig, out_folder, 'Fig6.svg', output_pdf);
-
-%% === NDOB KESTİRİMİ (controller:=ndob koşusu, ndob_f sütunları) ===
-% Kaynak: ana koşu bir NDOB koşusuysa o, değilse mismatch_ctrls'deki gözlemci koşusu.
-D_est = [];
-if hasNdobColumns(D)
-    D_est = D;
-elseif hasNdobColumns(D_obs)
-    D_est = D_obs;
-end
-if ~isempty(D_est)
-    valid_est = find([D_est.ok]);
-    fig = figure('Position', [100, 100, 1000, 900]);
-    axs = stackedAxes(fig, 3);
-    lgd_handles = gobjects(0);
-    for a = 1:3
-        ax = axs(a); hold(ax, 'on');
-        all_vals = [];
-        for i = valid_est
-            v = D_est(i).Tp{:, "ndob_f." + axis_names(a)};
-            all_vals = [all_vals; v]; %#ok<AGROW>
-            h = plot(ax, D_est(i).tp, v, 'LineWidth', line_w, 'Color', colors(i,:), 'DisplayName', sprintf('Q %d', i));
-            if a == 1, lgd_handles(end+1) = h; else, h.HandleVisibility = 'off'; end %#ok<SAGROW>
-        end
-        ylim(ax, padLimits(all_vals, 0.1));
-        addZones(ax, interact_zones, interact_cols);
-        styleAxes(ax, S);
-        ylabel(ax, sprintf('\\Delta f_{%s} (N)', axis_names(a)), 'FontWeight', 'bold', ...
-               'FontSize', font_size, 'FontName', font_name);
-        xlabel(ax, 't (s)', 'FontWeight', 'bold', 'FontSize', font_size, 'FontName', font_name);
-    end
-    addTopLegend(lgd_handles, [0.1 0.94 0.8 0.05], S);
-    saveFigure(fig, out_folder, 'Fig_NDOB_estimate.svg', output_pdf);
-end
 
 %% === Fig. 7 - THRUST ===
 fig = figure;
@@ -773,11 +763,12 @@ function ls = ctrlLineStyle(name)
     if strcmp(ex.ctrl, 'se3'), ls = '--'; else, ls = '-'; end
 end
 
-function axs = stackedAxes(fig, n)
+function axs = stackedAxes(fig, n, top_px)
     % n satırlık dikey eksen düzeni; her eksenin kendi x etiketi sığsın diye satırlar arasında
-    % sabit piksel boşluğu bırakır (üstte ortak açıklama için yer).
+    % sabit piksel boşluğu bırakır (üstte ortak açıklama için top_px piksel yer, varsayılan 95).
+    if nargin < 3, top_px = 95; end
     H = fig.Position(4);
-    top = 1 - 95 / H; bottom = 85 / H; gap = 95 / H; left = 0.12; width = 0.85;
+    top = 1 - top_px / H; bottom = 85 / H; gap = 95 / H; left = 0.12; width = 0.85;
     h = (top - bottom - (n - 1) * gap) / n;
     axs = gobjects(n, 1);
     for a = 1:n
