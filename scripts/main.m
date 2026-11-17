@@ -68,7 +68,7 @@ s6_drone    = 2;      % Fig. S6 drone'u
 fig8_drones = [2 3];  % Fig. 8 drone'ları
 fig9_drones = [2 3];  % Fig. 9 drone'ları (downwash etkisindeki İHA'lar)
 ndob_est_drones = [2 3];                    % Fig. 6: NDOB kestirimi çizilen İHA'lar (downwash etkisindekiler)
-ndob_est_cols   = [0 0 0; 0.85 0 0.85];     % Fig. 6: kestirim renkleri (siyah, magenta), İHA renklerinden farklı
+ndob_est_cols   = [0 0 0; 0 0.7 0.85];      % Fig. 6: kestirim renkleri (siyah, camgöbeği), İHA renklerinden farklı
 s5_drone    = 1;      % Fig. S5 drone'u
 
 % Formasyon ölçütleri (Fig. F1, Table 3)

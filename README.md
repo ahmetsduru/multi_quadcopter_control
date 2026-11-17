@@ -213,7 +213,7 @@ and warns if the RMS computed from the logs differs from `run_info.txt` or the f
    `launch/sequential_sim.launch`. Run `scripts/fig_S2_downwash_field.m` for Fig. S2; it also reads
    the downwash parameters from the launch file.
    Fig. 6 shows the applied downwash force of the main run (solid) together with the NDOB estimate of
-   the PID+NDOB run for the disturbed UAVs (dashed; Q2 black, Q3 magenta).
+   the PID+NDOB run for the disturbed UAVs (dashed; Q2 black, Q3 cyan).
    Fig. 9 and `Table4_compensator_mismatch.csv` compare three ways of handling the downwash on the
    disturbed UAVs: no compensation, NDOB (the force is estimated by the observer) and the
    model-based feedforward. Table 4 also gives the increase over the disturbance-free run (`dRMSE`)
