@@ -13,8 +13,8 @@ clc; clear; close all;
 script_dir = fileparts(mfilename('fullpath'));
 if isempty(script_dir), script_dir = pwd; end
 pkg_dir    = fullfile(script_dir, '..');
-eps_folder = fullfile(script_dir, 'EPS_Results');
-if ~exist(eps_folder, 'dir'), mkdir(eps_folder); end
+out_folder = fullfile(script_dir, 'Figures');
+if ~exist(out_folder, 'dir'), mkdir(out_folder); end
 
 launch_txt = fileread(fullfile(pkg_dir, 'launch', 'sequential_sim.launch'));
 yaml_txt   = fileread(fullfile(pkg_dir, 'config', 'quadcopter_params_2.yaml'));
@@ -88,14 +88,13 @@ for k = 1:2
     set(ax, 'LineWidth', 2, 'FontSize', 14, 'FontWeight', 'bold', 'Box', 'on', 'FontName', font_name);
 end
 
-exportgraphics(fig, fullfile(eps_folder, 'FigS2.eps'), 'ContentType', 'vector');
 set(fig, 'PaperPositionMode', 'auto');
 try
-    print(fig, fullfile(eps_folder, 'FigS2.svg'), '-dsvg', '-vector');     % R2022b ve sonrası
+    print(fig, fullfile(out_folder, 'FigS2.svg'), '-dsvg', '-vector');     % R2022b ve sonrası
 catch
-    print(fig, fullfile(eps_folder, 'FigS2.svg'), '-dsvg', '-painters');   % eski sürümler
+    print(fig, fullfile(out_folder, 'FigS2.svg'), '-dsvg', '-painters');   % eski sürümler
 end
-fprintf('Fig. S2 kaydedildi: %s (.eps, .svg)\n', fullfile(eps_folder, 'FigS2'));
+fprintf('Fig. S2 kaydedildi: %s\n', fullfile(out_folder, 'FigS2.svg'));
 
 %% === YARDIMCI FONKSİYONLAR ===
 function v = launchParam(txt, name)

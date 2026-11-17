@@ -31,11 +31,11 @@
 %   Table S2 Simülasyon parametreleri (config/*.yaml + launch/sequential_sim.launch)
 %   Table S3 Kontrolcü kazançları (PID, SE(3), NDOB)                -> config/*.yaml
 %   (Fig. S2 için: fig_S2_downwash_field.m)
-% Her figür EPS ve Word için SVG (ikisi de vektör) olarak scripts/EPS_Results/<main_ctrl>/ klasörüne
+% Her figür SVG (vektör) olarak scripts/Figures/<main_ctrl>/ klasörüne
 % yazılır. Eksik koşulara bağlı grafikler uyarı verilerek atlanır.
 
 clear; clc; close all;
-warning('off', 'MATLAB:print:ContentTypeImageSuggested');   % vektör EPS isteniyor
+warning('off', 'MATLAB:print:ContentTypeImageSuggested');   % vektör çıktı isteniyor
 
 %% === AYARLAR ===
 num_drones = 5;
@@ -73,9 +73,8 @@ s5_drone    = 1;      % Fig. S5 drone'u
 % o anda komşudur (formasyon uçuş boyunca değiştiği için sabit bir graf kullanılmaz).
 neighbor_radius = 3.0;   % m
 
-eps_folder = fullfile(script_dir, 'EPS_Results', main_ctrl);   % her ana koşunun çıktıları ayrı klasörde
-output_pdf = fullfile(eps_folder, 'all_figures.pdf');
-save_svg   = true;   % Word için SVG (vektör) de yaz
+out_folder = fullfile(script_dir, 'Figures', main_ctrl);   % her ana koşunun çıktıları ayrı klasörde (SVG + CSV)
+output_pdf = fullfile(out_folder, 'all_figures.pdf');     % tüm figürler tek dosyada (göz atmak için)
 
 % Zaman ekseni (makaledeki gibi 0-60 s)
 t_axis_max = 60;
@@ -99,7 +98,7 @@ zoom_drones  = [2 3];
 % Çubuk grafikleri (Fig. 2, 8, S6): her sparse_factor örnekten biri (500 Hz log -> 0.6 s)
 sparse_factor = 300;
 
-% Çizgi grafikleri her plot_step örnekten birini çizer (500 Hz log -> 100 Hz). Vektör EPS dosyalarını
+% Çizgi grafikleri her plot_step örnekten birini çizer (500 Hz log -> 100 Hz). Vektör SVG dosyalarını
 % küçültür ve hızlandırır; metrikler (RMSE, ISE) ve çubuk grafikleri her zaman tam veriyi kullanır.
 plot_step = 5;
 
@@ -115,10 +114,9 @@ c_green  = [0.85 1 0.85];
 c_yellow = [1 1 0.9];
 
 %% === HAZIRLIK ===
-if ~exist(eps_folder, 'dir'), mkdir(eps_folder); end
+if ~exist(out_folder, 'dir'), mkdir(out_folder); end
 if isfile(output_pdf), delete(output_pdf); end
 
-setappdata(0, 'paper_save_svg', save_svg);   % saveFigure okur
 
 phase_zones    = [[0 t_switch]' [t_switch t_axis_max]'];
 axis_names     = ["x", "y", "z"];
@@ -220,7 +218,7 @@ for w = 1:size(zoom_windows, 1)
     set(ax_zoom, 'FontSize', 9, 'FontName', font_name, 'XTick', [], 'YTick', [], 'LineWidth', 1.5);
 end
 addTopLegend(lgd_handles, [0.1 0.94 0.8 0.05], S);
-saveFigure(fig, eps_folder, 'Fig1.eps', output_pdf);
+saveFigure(fig, out_folder, 'Fig1.svg', output_pdf);
 
 %% === Fig. 2 - ANLIK KONUM HATASI: fig2_ctrls (2-5 koşu, 50 ms pencere RMS) ===
 if numel(fig2_ctrls) < 2 || numel(fig2_ctrls) > 5
@@ -260,23 +258,23 @@ if all(f2_ok)
     lgd = legend(hs(isgraphics(hs)), f2_labels(isgraphics(hs)), 'FontSize', 18, 'FontWeight', 'bold', ...
                  'FontName', font_name, 'Box', 'on');
     lgd.Layout.Tile = num_drones + 1;
-    saveFigure(fig, eps_folder, 'Fig2.eps', output_pdf);
+    saveFigure(fig, out_folder, 'Fig2.svg', output_pdf);
 else
     warning('Fig. 2 / Table 1 atlandı: %s logları bulunamadı (log/ altında).', strjoin(fig2_ctrls(~f2_ok), ', '));
 end
 
 %% === Fig. 3 - HIZ ===
 plotStateFigure(D, valid, "a_vel.", "r_vel.", ["v_x (m/s)", "v_y (m/s)", "v_z (m/s)"], ...
-                phase_zones, c_phase, colors, S, eps_folder, 'Fig3.eps', output_pdf);
+                phase_zones, c_phase, colors, S, out_folder, 'Fig3.svg', output_pdf);
 
 %% === Fig. 4 - İVME ===
 % Not: a_z gerçekten "a_acc.z" sütunundan okunur (eski script bu panele z konumunu çiziyordu).
 plotStateFigure(D, valid, "a_acc.", "r_acc.", ["a_x (m/s^2)", "a_y (m/s^2)", "a_z (m/s^2)"], ...
-                phase_zones, c_phase, colors, S, eps_folder, 'Fig4.eps', output_pdf);
+                phase_zones, c_phase, colors, S, out_folder, 'Fig4.svg', output_pdf);
 
 %% === Fig. 5 - EULER AÇILARI ===
 plotStateFigure(D, valid, "a_eul_ang.", "r_eul_ang.", ["\phi (rad)", "\theta (rad)", "\psi (rad)"], ...
-                phase_zones, c_phase, colors, S, eps_folder, 'Fig5.eps', output_pdf);
+                phase_zones, c_phase, colors, S, out_folder, 'Fig5.svg', output_pdf);
 
 %% === Fig. 6 - BOZUCU KUVVETLER ===
 fig = figure('Position', [100, 100, 1000, 900]);
@@ -299,7 +297,7 @@ for a = 1:3
     xlabel(ax, 't (s)', 'FontWeight', 'bold', 'FontSize', font_size, 'FontName', font_name);
 end
 addTopLegend(lgd_handles, [0.1 0.94 0.8 0.05], S);
-saveFigure(fig, eps_folder, 'Fig6.eps', output_pdf);
+saveFigure(fig, out_folder, 'Fig6.svg', output_pdf);
 
 %% === NDOB KESTİRİMİ (controller:=ndob koşusu, ndob_f sütunları) ===
 % Kaynak: ana koşu bir NDOB koşusuysa o, değilse mismatch_ctrls'deki gözlemci koşusu.
@@ -331,7 +329,7 @@ if ~isempty(D_est)
         xlabel(ax, 't (s)', 'FontWeight', 'bold', 'FontSize', font_size, 'FontName', font_name);
     end
     addTopLegend(lgd_handles, [0.1 0.94 0.8 0.05], S);
-    saveFigure(fig, eps_folder, 'Fig_NDOB_estimate.eps', output_pdf);
+    saveFigure(fig, out_folder, 'Fig_NDOB_estimate.svg', output_pdf);
 end
 
 %% === Fig. 7 - THRUST ===
@@ -351,7 +349,7 @@ styleAxes(ax, S);
 xlabel(ax, 't (s)', 'FontWeight', 'bold', 'FontSize', font_size, 'FontName', font_name);
 ylabel(ax, '||f_{thrust}|| (N)', 'FontWeight', 'bold', 'FontSize', font_size, 'FontName', font_name);
 addTopLegend(lgd_handles, [0.15 0.94 0.7 0.05], S);
-saveFigure(fig, eps_folder, 'Fig7.eps', output_pdf);
+saveFigure(fig, out_folder, 'Fig7.svg', output_pdf);
 
 %% === Fig. 8 - ABLASYON: FEEDFORWARD AKTİF vs PASİF ===
 if any([D_abl.ok]) && ~strcmp(ablation_ctrl, main_ctrl)
@@ -366,7 +364,7 @@ if any([D_abl.ok]) && ~strcmp(ablation_ctrl, main_ctrl)
         xlabel(ax, 't (s)', 'FontWeight', 'bold', 'FontSize', 22, 'FontName', font_name);
         ylabel(ax, '||e_p|| (m)', 'FontWeight', 'bold', 'FontSize', 22, 'FontName', font_name);
     end
-    saveFigure(fig, eps_folder, 'Fig8.eps', output_pdf);
+    saveFigure(fig, out_folder, 'Fig8.svg', output_pdf);
 else
     warning('Fig. 8 / Table 2 atlandı: ablasyon logları (%s) bulunamadı ya da ana koşuyla aynı.', ablation_log_dir);
 end
@@ -406,7 +404,7 @@ if hasNdobColumns(D_obs) && any([D_none.ok]) && any([D_ff.ok])
         xlabel(ax, 't (s)', 'FontWeight', 'bold', 'FontSize', 16, 'FontName', font_name);
         ylabel(ax, '||e_p|| (m)', 'FontWeight', 'bold', 'FontSize', 16, 'FontName', font_name);
     end
-    saveFigure(fig, eps_folder, 'Fig9.eps', output_pdf);
+    saveFigure(fig, out_folder, 'Fig9.svg', output_pdf);
 else
     warning('Fig. 9 atlandı: %s logları bulunamadı (log/ altında).', strjoin(mismatch_ctrls, ', '));
 end
@@ -419,7 +417,7 @@ catch err
     warning('Fig. S5 atlandı: waypointler okunamadı (%s).', err.message);
 end
 if ~isempty(wp) && D(s5_drone).ok
-    plotFigS5(D(s5_drone), wp, colors(s5_drone,:), font_name, eps_folder, output_pdf);
+    plotFigS5(D(s5_drone), wp, colors(s5_drone,:), font_name, out_folder, output_pdf);
 end
 
 %% === Fig. S6 - DRONE 2 YÖNELİM HATASI (DCM), BETA KARŞILAŞTIRMASI ===
@@ -442,7 +440,7 @@ if D(s6_drone).ok && D_beta(s6_drone).ok
     ylabel(ax, 'Orientation Error (rad)', 'FontWeight', 'bold', 'FontSize', 16, 'FontName', font_name);
     legend(ax, hs, {sprintf('\\beta = %g', beta_main), sprintf('\\beta = %g', beta_alt)}, ...
            'Location', 'NorthEast', 'FontSize', 12, 'FontWeight', 'bold', 'Box', 'on');
-    saveFigure(fig, eps_folder, 'FigS6.eps', output_pdf);
+    saveFigure(fig, out_folder, 'FigS6.svg', output_pdf);
 else
     warning('Fig. S6 atlandı: beta logları bulunamadı (%s).', beta_log_dir);
 end
@@ -485,7 +483,7 @@ for a = 1:2
     xlabel(ax, 't (s)', 'FontWeight', 'bold', 'FontSize', font_size, 'FontName', font_name);
 end
 addTopLegend(hs(isgraphics(hs)), [0.1 0.94 0.8 0.05], S);   % açıklama formation_ctrls sırasıyla
-saveFigure(fig, eps_folder, 'FigF1_formation_error.eps', output_pdf);
+saveFigure(fig, out_folder, 'FigF1_formation_error.svg', output_pdf);
 
 % Table 3: İHA çiftleri matrisi (her kontrolcü için). Satır/sütun Q1..Q5;
 %   köşegenin üstü: formasyon hatası RMS ||e_ij|| (m) ve parantez içinde baskın yönü:
@@ -515,7 +513,7 @@ for r = avail_F
     fprintf('  üst üçgen: formasyon hatası RMS (baskın yön: xy yatay, z dikey)\n');
     fprintf('  alt üçgen: bağıl mesafe hatası RMS (işaretli ortalama: + istenenden uzak, - istenenden yakın)\n');
     disp(tbl3);
-    writetable(tbl3, fullfile(eps_folder, sprintf('Table3_formation_%s.csv', file_tag{r})), 'WriteRowNames', true);
+    writetable(tbl3, fullfile(out_folder, sprintf('Table3_formation_%s.csv', file_tag{r})), 'WriteRowNames', true);
 end
 
 %% === Table 1 / Table 2 - PERFORMANS METRİKLERİ ===
@@ -536,13 +534,13 @@ if all(f2_ok)
                                 cellfun(@ctrlVar, fig2_ctrls, 'UniformOutput', false));
     fprintf('\nTable 1: %s (fark %% = (diğeri - %s) / diğeri * 100)\n', strjoin(f2_labels, ' vs '), f2_labels{1});
     disp(tbl1);
-    writetable(tbl1, fullfile(eps_folder, 'Table1.csv'));
+    writetable(tbl1, fullfile(out_folder, 'Table1.csv'));
 end
 if any([D_abl.ok]) && ~strcmp(ablation_ctrl, main_ctrl)
     tbl2 = comparisonTable(M, metrics(D_abl), ctrlVar(main_ctrl), ctrlVar(ablation_ctrl));
     fprintf('\nTable 2: Ablasyon - %s vs %s\n', ctrlLabel(main_ctrl), ctrlLabel(ablation_ctrl));
     disp(tbl2);
-    writetable(tbl2, fullfile(eps_folder, 'Table2.csv'));
+    writetable(tbl2, fullfile(out_folder, 'Table2.csv'));
 end
 
 %% === Table 4 - UYUMSUZ KOMPANZATÖR (Hakem 1) ===
@@ -578,7 +576,7 @@ if any([D_none.ok]) && any([D_obs.ok]) && any([D_ff.ok])
                                    [v{3} '_residual_pct']});
     fprintf('\nTable 4: Uyumsuz kompanzatör - %s\n', strjoin(cellfun(@ctrlLabel, mismatch_ctrls, 'UniformOutput', false), ' / '));
     disp(tbl4);
-    writetable(tbl4, fullfile(eps_folder, 'Table4_compensator_mismatch.csv'));
+    writetable(tbl4, fullfile(out_folder, 'Table4_compensator_mismatch.csv'));
 
     % NDOB kestirim hatası (z), downwash etkinken (|f_dist,z| > 0.05 N)
     if hasNdobColumns(D_obs)
@@ -603,16 +601,16 @@ try
     [tblS2, tblS3] = parameterTables(config_dir, fullfile(pkg_dir, 'launch', 'sequential_sim.launch'));
     fprintf('\nTable S2: Simülasyon parametreleri\n');
     disp(tblS2);
-    writetable(tblS2, fullfile(eps_folder, 'TableS2_parameters.csv'));
+    writetable(tblS2, fullfile(out_folder, 'TableS2_parameters.csv'));
     fprintf('\nTable S3: Kontrolcü kazançları\n');
     disp(tblS3);
-    writetable(tblS3, fullfile(eps_folder, 'TableS3_gains.csv'));
+    writetable(tblS3, fullfile(out_folder, 'TableS3_gains.csv'));
 catch err
     warning('Table S2 / S3 atlandı: %s', err.message);
 end
 
 fprintf('=====================================================================\n');
-fprintf('Grafikler "%s" klasörüne ve "%s" dosyasına kaydedildi.\n', eps_folder, output_pdf);
+fprintf('Grafikler "%s" klasörüne ve "%s" dosyasına kaydedildi.\n', out_folder, output_pdf);
 
 
 %% =====================================================================
@@ -864,7 +862,7 @@ function barLegend(ax, hs, names, ttl, font_name)
 end
 
 function plotStateFigure(D, valid, act_prefix, ref_prefix, ylabels, zones, zone_cols, colors, S, ...
-                         eps_folder, eps_name, output_pdf)
+                         out_folder, out_name, output_pdf)
     % 3 eksenli gerçek (renkli) + istenen (siyah noktalı) zaman grafiği
     fig = figure('Position', [100, 100, 1000, 900]);
     axs = stackedAxes(fig, 3);
@@ -897,7 +895,7 @@ function plotStateFigure(D, valid, act_prefix, ref_prefix, ylabels, zones, zone_
         xlabel(ax, 't (s)', 'FontWeight', 'bold', 'FontSize', S.font_size, 'FontName', S.font_name);
     end
     addTopLegend(lgd_handles, [0.1 0.94 0.8 0.05], S);
-    saveFigure(fig, eps_folder, eps_name, output_pdf);
+    saveFigure(fig, out_folder, out_name, output_pdf);
 end
 
 function wp = loadWaypointSets(config_dir, drone)
@@ -926,7 +924,7 @@ function v = yamlArray(txt, key)
     v = str2double(strsplit(strtrim(tok{1}), ','));
 end
 
-function plotFigS5(Dd, wp, path_color, font_name, eps_folder, output_pdf)
+function plotFigS5(Dd, wp, path_color, font_name, out_folder, output_pdf)
     % Hibrit yörünge: 3B ve XY görünüm, waypoint setleri ve atlanan ara noktalar (numaralı)
     wp_colors = {[1 0.2 0.2], [0.2 0.6 1], [0.2 0.8 0.2], [0.9 0.8 0]};
     T = Dd.Tp;
@@ -983,7 +981,7 @@ function plotFigS5(Dd, wp, path_color, font_name, eps_folder, output_pdf)
         grid(ax, 'on'); axis(ax, 'equal'); axis(ax, 'tight');
         set(ax, 'FontName', font_name, 'FontSize', 20, 'FontWeight', 'bold', 'LineWidth', 2.0);
     end
-    saveFigure(fig, eps_folder, 'FigS5.eps', output_pdf);
+    saveFigure(fig, out_folder, 'FigS5.svg', output_pdf);
 end
 
 function F = formationMetrics(D, r_N)
@@ -1223,18 +1221,15 @@ function addTopLegend(handles, position, S)
     set(lgd, 'Position', position);
 end
 
-function saveFigure(fig, eps_folder, eps_name, output_pdf)
-    exportgraphics(fig, fullfile(eps_folder, eps_name), 'ContentType', 'vector');
-    save_svg = getappdata(0, 'paper_save_svg');
-    if ~isempty(save_svg) && save_svg                     % Word için SVG (exportgraphics SVG yazamaz)
-        [~, base] = fileparts(eps_name);
-        svg_file = fullfile(eps_folder, [base '.svg']);
-        set(fig, 'PaperPositionMode', 'auto');            % ekrandaki boyut korunsun
-        try
-            print(fig, svg_file, '-dsvg', '-vector');     % R2022b ve sonrası
-        catch
-            print(fig, svg_file, '-dsvg', '-painters');   % eski sürümler
-        end
+function saveFigure(fig, out_folder, out_name, output_pdf)
+    % Figürü SVG (vektör) olarak kaydeder; exportgraphics SVG yazamadığı için print kullanılır.
+    [~, base] = fileparts(out_name);
+    svg_file = fullfile(out_folder, [base '.svg']);
+    set(fig, 'PaperPositionMode', 'auto');                % ekrandaki boyut korunsun
+    try
+        print(fig, svg_file, '-dsvg', '-vector');         % R2022b ve sonrası
+    catch
+        print(fig, svg_file, '-dsvg', '-painters');       % eski sürümler
     end
     exportgraphics(fig, output_pdf, 'Append', true);
     close(fig);
