@@ -106,7 +106,8 @@ plot_step = 5;
 font_name = 'Times New Roman';
 font_size = 20;
 line_w    = 3;     % gerçek değer çizgileri
-ref_w     = 2;     % istenen (siyah noktalı) çizgiler; daha ince, kalın renkli çizginin üstünde görünür
+ref_w     = 2;     % istenen değer çizgileri: ince, açık gri ve gerçek değerlerin ALTINDA
+ref_col   = [0.62 0.62 0.62];
 colors    = lines(num_drones);
 dark_gray = [0.2 0.2 0.2];
 
@@ -123,7 +124,7 @@ phase_zones    = [[0 t_switch]' [t_switch t_axis_max]'];
 axis_names     = ["x", "y", "z"];
 
 S = struct('font_name', font_name, 'font_size', font_size, 'line_w', line_w, 'ref_w', ref_w, ...
-           't_max', t_axis_max);
+           'ref_col', ref_col, 't_max', t_axis_max);
 
 %% === VERİ OKUMA (gereken her koşu bir kez) ===
 % Her koşu log/<koşu>/ klasöründen okunur ve run_info.txt ile beklenen kontrolcü, bozucu ve beta
@@ -168,14 +169,17 @@ lgd_handles = gobjects(0);
 for a = 1:3
     ax = axs(a); hold(ax, 'on');
     if a == 1
-        lgd_handles(end+1) = plot(ax, NaN, NaN, ':k', 'LineWidth', ref_w, 'DisplayName', 'Desired'); %#ok<SAGROW>
+        lgd_handles(end+1) = plot(ax, NaN, NaN, '-', 'Color', ref_col, 'LineWidth', ref_w, ...
+                                  'DisplayName', 'Desired'); %#ok<SAGROW>
+    end
+    for i = valid                                 % önce istenen değerler (altta)
+        plot(ax, D(i).tp, D(i).Tp{:, "r_pos." + axis_names(a)}, '-', 'Color', ref_col, 'LineWidth', ref_w, ...
+             'HandleVisibility', 'off');
     end
     for i = valid
         h = plot(ax, D(i).tp, D(i).Tp{:, "a_pos." + axis_names(a)}, '-', 'Color', colors(i,:), ...
                  'LineWidth', line_w, 'DisplayName', sprintf('Q %d', i));
         if a == 1, lgd_handles(end+1) = h; else, h.HandleVisibility = 'off'; end %#ok<SAGROW>
-        plot(ax, D(i).tp, D(i).Tp{:, "r_pos." + axis_names(a)}, ':k', 'LineWidth', ref_w, ...
-             'HandleVisibility', 'off');
     end
     yl = ylim(ax);
     if a < 3
@@ -212,8 +216,10 @@ for w = 1:size(zoom_windows, 1)
     ax_zoom = axes(fig, 'Position', [main_pos(1) + inset_x(w), inset_y, main_pos(3) * 0.25, inset_height]);
     box(ax_zoom, 'on'); hold(ax_zoom, 'on');
     for i = valid
+        plot(ax_zoom, D(i).tp, D(i).Tp{:, "r_pos.z"}, '-', 'Color', ref_col, 'LineWidth', ref_w);
+    end
+    for i = valid
         plot(ax_zoom, D(i).tp, D(i).Tp{:, "a_pos.z"}, 'Color', colors(i,:), 'LineWidth', line_w);
-        plot(ax_zoom, D(i).tp, D(i).Tp{:, "r_pos.z"}, ':k', 'LineWidth', ref_w);
     end
     xlim(ax_zoom, zoom_windows(w, :));
     ylim(ax_zoom, zoom_zlim(w, :));
@@ -276,11 +282,11 @@ plotStateFigure(D, valid, "a_acc.", "r_acc.", ["a_x (m/s^2)", "a_y (m/s^2)", "a_
                 phase_zones, c_phase, colors, S, out_folder, 'Fig4.svg', output_pdf);
 
 %% === Fig. 5 - EULER AÇILARI ===
-% Açı sembolleri dik yazılsın diye TeX (\phi) yerine Unicode karakterleri: φ, θ, ψ.
-% İstenen açılar gerçek açıların altında açık gri çizgiyle çizilir (bkz. plotStateFigure, ref_below).
+% Açı sembolleri skaler: dik ve kalın değil. TeX'in \phi'si yerine Unicode φ, θ, ψ; "\rm{}" sembolü normal,
+% "\bf" birimi diğer etiketler gibi kalın yazar ("{}" komut adını sembolden ayırır).
 plotStateFigure(D, valid, "a_eul_ang.", "r_eul_ang.", ...
-                [string(char(966)), string(char(952)), string(char(968))] + " (rad)", ...
-                phase_zones, c_phase, colors, S, out_folder, 'Fig5.svg', output_pdf, true);
+                "\rm{}" + [string(char(966)), string(char(952)), string(char(968))] + "\bf (rad)", ...
+                phase_zones, c_phase, colors, S, out_folder, 'Fig5.svg', output_pdf);
 
 %% === Fig. 6 - BOZUCU KUVVETLER ===
 fig = figure('Position', [100, 100, 1000, 900]);
@@ -868,13 +874,9 @@ function barLegend(ax, hs, names, ttl, font_name)
 end
 
 function plotStateFigure(D, valid, act_prefix, ref_prefix, ylabels, zones, zone_cols, colors, S, ...
-                         out_folder, out_name, output_pdf, ref_below)
-    % ref_below = true: istenen değerler gerçek değerlerin ALTINDA açık gri ince çizgiyle çizilir
-    % (Fig. 5: istenen roll/pitch 20 Hz referansla titrer; üstte siyah noktalı çizilince gerçek açıları örter).
-    % false (varsayılan): istenen değerler üstte siyah noktalı.
-    if nargin < 13, ref_below = false; end
-    ref_col = [0.62 0.62 0.62];
-    % 3 eksenli gerçek (renkli) + istenen (siyah noktalı) zaman grafiği
+                         out_folder, out_name, output_pdf)
+    % İstenen değerler gerçek değerlerin ALTINDA açık gri ince çizgiyle çizilir (S.ref_col, S.ref_w).
+    % 3 eksenli gerçek (renkli) + istenen (gri, altta) zaman grafiği
     fig = figure('Position', [100, 100, 1000, 900]);
     axs = stackedAxes(fig, 3);
     axis_names = ["x", "y", "z"];
@@ -882,14 +884,11 @@ function plotStateFigure(D, valid, act_prefix, ref_prefix, ylabels, zones, zone_
     for a = 1:3
         ax = axs(a); hold(ax, 'on');
         if a == 1
-            if ref_below
-                lgd_handles(end+1) = plot(ax, NaN, NaN, '-', 'Color', ref_col, 'LineWidth', S.ref_w, ...
-                                          'DisplayName', 'Desired'); %#ok<AGROW>
-            else
-                lgd_handles(end+1) = plot(ax, NaN, NaN, ':k', 'LineWidth', S.ref_w, 'DisplayName', 'Desired'); %#ok<AGROW>
-            end
+            lgd_handles(end+1) = plot(ax, NaN, NaN, '-', 'Color', S.ref_col, 'LineWidth', S.ref_w, ...
+                                      'DisplayName', 'Desired'); %#ok<AGROW>
         end
         all_vals = [];
+        V = cell(1, numel(D)); R = V;
         for i = valid
             v = D(i).Tp{:, act_prefix + axis_names(a)};
             r = D(i).Tp{:, ref_prefix + axis_names(a)};
@@ -898,22 +897,16 @@ function plotStateFigure(D, valid, act_prefix, ref_prefix, ylabels, zones, zone_
                 v = unwrap(v); r = unwrap(r);
                 k0 = round((r(1) - v(1)) / (2 * pi)); v = v + 2 * pi * k0;
             end
+            V{i} = v; R{i} = r;
             all_vals = [all_vals; v; r]; %#ok<AGROW>
-            if ref_below
-                plot(ax, D(i).tp, r, '-', 'Color', ref_col, 'LineWidth', S.ref_w, 'HandleVisibility', 'off');
-            end
-            h = plot(ax, D(i).tp, v, '-', 'Color', colors(i,:), 'LineWidth', S.line_w, ...
+        end
+        for i = valid                             % önce istenen değerler (altta)
+            plot(ax, D(i).tp, R{i}, '-', 'Color', S.ref_col, 'LineWidth', S.ref_w, 'HandleVisibility', 'off');
+        end
+        for i = valid
+            h = plot(ax, D(i).tp, V{i}, '-', 'Color', colors(i,:), 'LineWidth', S.line_w, ...
                      'DisplayName', sprintf('Q %d', i));
             if a == 1, lgd_handles(end+1) = h; else, h.HandleVisibility = 'off'; end %#ok<AGROW>
-            if ~ref_below
-                plot(ax, D(i).tp, r, ':k', 'LineWidth', S.ref_w, 'HandleVisibility', 'off');
-            end
-        end
-        if ref_below
-            % istenen çizgiler tüm gerçek çizgilerin altında kalsın (faz bölgeleri yine en altta)
-            ch = ax.Children;
-            is_ref = arrayfun(@(c) isprop(c, 'Color') && isequal(c.Color, ref_col), ch);
-            ax.Children = [ch(~is_ref); ch(is_ref)];
         end
         ylim(ax, padLimits(all_vals, 0.1));
         addZones(ax, zones, zone_cols);
