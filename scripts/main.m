@@ -280,8 +280,8 @@ if hasNdobColumns(D)
 elseif hasNdobColumns(D_obs)
     D_est = D_obs;
 end
-fig = figure('Position', [100, 100, 1000, 950]);
-axs = stackedAxes(fig, 3, 130);          % üstte iki satırlık açıklama için yer
+fig = figure('Position', [100, 100, 1000, 900]);
+axs = stackedAxes(fig, 3);
 lgd_handles = gobjects(0);
 for a = 1:3
     ax = axs(a); hold(ax, 'on');
@@ -312,9 +312,11 @@ for a = 1:3
            'FontSize', font_size, 'FontName', font_name);
     xlabel(ax, 't (s)', 'FontWeight', 'bold', 'FontSize', font_size, 'FontName', font_name);
 end
-lgd = legend(lgd_handles, 'Orientation', 'horizontal', 'NumColumns', 4, 'FontSize', font_size, ...
-             'FontWeight', 'bold', 'Box', 'off', 'FontName', font_name);
-set(lgd, 'Position', [0.05 0.9 0.9 0.09]);
+% Açıklama tek satırda: yazı 18 pt, kısa çizgi örnekleri; doğal boyutunda, üstte ortalanır
+lgd = legend(lgd_handles, 'Orientation', 'horizontal', 'FontSize', 18, 'FontWeight', 'bold', ...
+             'Box', 'off', 'FontName', font_name, 'ItemTokenSize', [22 18]);
+lp = lgd.Position;
+lgd.Position = [(1 - lp(3)) / 2, 0.99 - lp(4), lp(3), lp(4)];
 saveFigure(fig, out_folder, 'Fig6.svg', output_pdf);
 
 %% === Fig. 7 - THRUST ===
