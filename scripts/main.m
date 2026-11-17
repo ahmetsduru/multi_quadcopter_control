@@ -1279,7 +1279,7 @@ function styleAxes(ax, S)
     grid(ax, 'off');
     xlim(ax, [0 S.t_max]);
     set(ax, 'FontName', S.font_name, 'FontSize', S.font_size, 'FontWeight', 'bold', ...
-        'LineWidth', S.line_w, 'Box', 'on', 'Layer', 'top');
+        'LineWidth', 2, 'Box', 'on', 'Layer', 'top');     % eksen çerçevesi 2 pt (veri çizgileri S.line_w)
 end
 
 function addTopLegend(handles, ~, S)
