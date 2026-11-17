@@ -465,8 +465,9 @@ hs = gobjects(1, numel(formation_ctrls));
 for a = 1:2
     ax = axs(a); hold(ax, 'on');
     for r = avail_F(ord_F)
-        idx = 1:plot_step:numel(F{r}.t);
-        h = plot(ax, F{r}.t(idx), F{r}.(fields_F{a})(idx), ctrlLineStyle(formation_ctrls{r}), ...
+        % 50 ms pencere RMS'i (Fig. 2 gibi): 20 Hz referansın testere dişi eğriyi bant gibi gösterir
+        [tb, eb] = windowRmsSignal(F{r}.t, F{r}.(fields_F{a}), fig2_window);
+        h = plot(ax, tb, eb, ctrlLineStyle(formation_ctrls{r}), ...
                  'LineWidth', ctrlLineWidth(formation_ctrls{r}), 'Color', cols_F{r}, ...
                  'DisplayName', labels_F{r});
         if a == 1, hs(r) = h; end
