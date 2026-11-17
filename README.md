@@ -196,10 +196,10 @@ and warns if the RMS computed from the logs differs from `run_info.txt` or the f
 
    | Setting | Default | Used by |
    |---|---|---|
-   | `main_ctrl` | `pid_ff` | Fig. 1, 3-7, S5, S6, Table 1-2 |
-   | `compare_ctrl` | `se3_ff` | Fig. 2, Table 1 |
+   | `main_ctrl` | `pid_ff` | Fig. 1, 3-7, S5, S6, Table 2 |
+   | `fig2_ctrls` | `pid_ff`, `se3_ff`, `ndob` | Fig. 2, Table 1 (2 or 3 runs drawn on top of each other; the first is the reference) |
    | `ablation_ctrl` | `main_ctrl` without `_ff` | Fig. 8, Table 2 |
-   | `formation_ctrls` | main, ablation, compare | Fig. F1, Table 3 |
+   | `formation_ctrls` | main, ablation, `se3_ff` | Fig. F1, Table 3 |
    | `mismatch_ctrls` | `pid`, `ndob`, `pid_ff` | Fig. 9, Table 4 (no compensation / observer / model feedforward) |
    | `nominal_run` | `pid_nominal` | Table 4 (disturbance-free reference) |
 
