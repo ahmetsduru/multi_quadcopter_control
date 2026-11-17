@@ -14,7 +14,7 @@
 % Hangi grafiğin hangi koşuyu kullanacağı AYARLAR bölümünde seçilir (main_ctrl, fig2_ctrls, ...).
 % Varsayılanlarla makaledeki ve ek materyaldeki grafik ve tablolar üretilir:
 %   Fig. 1  Pozisyon (x, y, z) + z zoom                         -> main_ctrl
-%   Fig. 2  Anlık konum hatası (2 ya da 3 koşu üst üste)        -> fig2_ctrls
+%   Fig. 2  Anlık konum hatası (50 ms pencere RMS), 2-4 koşu   -> fig2_ctrls
 %   Fig. 3  Hız / Fig. 4 İvme / Fig. 5 Euler açıları            -> main_ctrl
 %   Fig. 6  Bozucu kuvvetler / Fig. 7 Thrust                    -> main_ctrl
 %   NDOB    NDOB bozucu kestirimi, 3 eksen, tüm İHA'lar          -> NDOB koşusu (mismatch_ctrls)
@@ -47,9 +47,11 @@ pkg_dir    = fullfile(script_dir, '..');
 % --- Hangi grafik hangi koşuyu kullanır? (koşu adı = log/ altındaki klasör adı) ---
 % Kontrolcüler: pid_ff (PID+FF), pid (PID), ndob (PID+NDOB), se3 (SE(3)), se3_ff (SE(3)+FF)
 main_ctrl       = 'pid_ff';                    % Fig. 1, 3-7, S5, S6, Table 2'nin ana koşusu
-fig2_ctrls      = {'pid_ff', 'se3_ff', 'ndob'};  % Fig. 2 / Table 1: üst üste çizilen 2-3 koşu (ilki referans;
-                                               % çubuklar: ilki geniş/İHA rengi, ikincisi orta/koyu gri,
-                                               % üçüncüsü dar/kırmızı)
+fig2_ctrls      = {'pid_ff', 'se3_ff', 'ndob', 'pid'};  % Fig. 2 / Table 1: 2-4 koşu (ilki referans: Table 1'deki
+                                                       % fark % buna göre; çizgilerde en üstte). Renkler: ctrlColor
+fig2_window     = 0.05;   % s; Fig. 2'deki hata bu pencerelerdeki RMS'tir. Referans 20 Hz'de (50 ms) güncellendiği
+                          % için ham hata her periyotta testere dişi çizer; 50 ms RMS bunu düzler ve karesel
+                          % ortalaması tablodaki RMSE'ye eşittir.
 ablation_ctrl   = erase(main_ctrl, '_ff');     % Fig. 8 / Table 2: ana koşunun ileri beslemesiz hali
 formation_ctrls = {main_ctrl, ablation_ctrl, 'se3_ff'};   % Fig. F1 / Table 3
 mismatch_ctrls  = {'pid', 'ndob', 'pid_ff'};   % Fig. 9 / Table 4: kompanzasyon yok / gözlemci / model FF
@@ -64,7 +66,7 @@ config_dir = fullfile(pkg_dir, 'config');      % Fig. S5 waypointleri
 s6_drone    = 2;      % Fig. S6 drone'u
 fig8_drones = [2 3];  % Fig. 8 drone'ları
 fig9_drones = [2 3];  % Fig. 9 drone'ları (downwash etkisindeki İHA'lar)
-c_ndob      = [0.80 0.10 0.10];   % Fig. 2 ve Fig. 9: NDOB (ve Fig. 2'deki 3. koşu) rengi
+c_ndob      = [0.80 0.10 0.10];   % PID+NDOB rengi (Fig. 2, Fig. 9)
 s5_drone    = 1;      % Fig. S5 drone'u
 
 % Formasyon ölçütleri (Fig. F1, Table 3)
@@ -161,10 +163,11 @@ interact_cols  = interact_cols(1:size(interact_zones, 1), :);
 fprintf('Downwash etkileşim bölgeleri (s): %s\n', mat2str(interact_zones));
 
 %% === Fig. 1 - POZİSYON + Z ZOOM ===
-fig = figure;
+fig = figure('Position', [100, 100, 1000, 900]);
+axs = stackedAxes(fig, 3);
 lgd_handles = gobjects(0);
 for a = 1:3
-    ax = subplot(3, 1, a); hold(ax, 'on');
+    ax = axs(a); hold(ax, 'on');
     if a == 1
         lgd_handles(end+1) = plot(ax, NaN, NaN, ':k', 'LineWidth', line_w, 'DisplayName', 'Desired'); %#ok<SAGROW>
     end
@@ -180,8 +183,8 @@ for a = 1:3
         ylim(ax, [yl(1) - 1, yl(2) + 1]);
     else
         ylim(ax, [yl(1) - 0.4, yl(2) + 0.2]);   % altta zoom inset'leri için boşluk
-        xlabel(ax, 't (s)', 'FontWeight', 'bold', 'FontSize', font_size, 'FontName', font_name);
     end
+    xlabel(ax, 't (s)', 'FontWeight', 'bold', 'FontSize', font_size, 'FontName', font_name);
     addZones(ax, phase_zones, c_phase);
     styleAxes(ax, S);
     ylabel(ax, sprintf('%s (m)', axis_names(a)), 'FontWeight', 'bold', 'FontSize', font_size, ...
@@ -220,26 +223,37 @@ end
 addTopLegend(lgd_handles, [0.1 0.94 0.8 0.05], S);
 saveFigure(fig, eps_folder, 'Fig1.eps', output_pdf);
 
-%% === Fig. 2 - ANLIK KONUM HATASI: fig2_ctrls (2-3 koşu üst üste) ===
-if numel(fig2_ctrls) < 2 || numel(fig2_ctrls) > 3
-    error('fig2_ctrls 2 ya da 3 koşu içermeli (şu an %d).', numel(fig2_ctrls));
+%% === Fig. 2 - ANLIK KONUM HATASI: fig2_ctrls (2-4 koşu, 50 ms pencere RMS) ===
+if numel(fig2_ctrls) < 2 || numel(fig2_ctrls) > 4
+    error('fig2_ctrls 2-4 koşu içermeli (şu an %d).', numel(fig2_ctrls));
 end
 f2_labels = cellfun(@ctrlLabel, fig2_ctrls, 'UniformOutput', false);
 if all(f2_ok)
-    f2_cols = {[], dark_gray, c_ndob};          % 1.: İHA rengi (aşağıda), 2.: koyu gri, 3.: kırmızı
-    f2_cols = f2_cols(1:numel(fig2_ctrls));
-    fig = figure('Position', [100, 100, 1200, 800]);
+    fig = figure('Position', [100, 100, 1200, 1000]);
     tl = tiledlayout(fig, 3, 2, 'TileSpacing', 'compact', 'Padding', 'compact');
+    hs = gobjects(1, numel(fig2_ctrls));
     for i = 1:num_drones
         ax = nexttile(tl); hold(ax, 'on'); box(ax, 'on');
-        runs_i = cellfun(@(x) x(i), D_f2, 'UniformOutput', false);
-        cols_i = f2_cols; cols_i{1} = colors(i,:);
-        [hs, names] = errorBars(ax, runs_i, cols_i, f2_labels, sparse_factor);
-        finishBarAxes(ax, phase_zones, c_phase, S, 16);
-        barLegend(ax, hs, names, sprintf('Q %d', i), font_name);
+        for k = numel(fig2_ctrls):-1:1                 % ilk koşu (referans) en üstte çizilir
+            Dk = D_f2{k}(i);
+            if ~Dk.ok, continue; end
+            [tb, eb] = windowRms(Dk, fig2_window);
+            hs(k) = plot(ax, tb, eb, '-', 'Color', ctrlColor(fig2_ctrls{k}, dark_gray, c_ndob), ...
+                         'LineWidth', line_w);
+        end
+        yl = ylim(ax); ylim(ax, [0 yl(2) * 1.05]);
+        addZones(ax, phase_zones, c_phase);
+        xlim(ax, [0 t_axis_max]);
+        set(ax, 'XTick', 0:10:t_axis_max, 'FontName', font_name, 'FontSize', 16, 'FontWeight', 'bold', ...
+            'LineWidth', 1.5, 'Layer', 'top', 'Box', 'on');
+        title(ax, sprintf('Q %d', i), 'FontWeight', 'bold', 'FontSize', 18, 'FontName', font_name);
+        xlabel(ax, 't (s)', 'FontWeight', 'bold', 'FontSize', 18, 'FontName', font_name);
+        ylabel(ax, '||e_p|| (m)', 'FontWeight', 'bold', 'FontSize', 18, 'FontName', font_name);
     end
-    xlabel(tl, 't (s)', 'FontWeight', 'bold', 'FontSize', font_size, 'FontName', font_name);
-    ylabel(tl, '||e_p|| (m)', 'FontWeight', 'bold', 'FontSize', font_size, 'FontName', font_name);
+    % Ortak açıklama, boş kalan son kutuda
+    lgd = legend(hs(isgraphics(hs)), f2_labels(isgraphics(hs)), 'FontSize', 18, 'FontWeight', 'bold', ...
+                 'FontName', font_name, 'Box', 'on');
+    lgd.Layout.Tile = num_drones + 1;
     saveFigure(fig, eps_folder, 'Fig2.eps', output_pdf);
 else
     warning('Fig. 2 / Table 1 atlandı: %s logları bulunamadı (log/ altında).', strjoin(fig2_ctrls(~f2_ok), ', '));
@@ -259,10 +273,11 @@ plotStateFigure(D, valid, "a_eul_ang.", "r_eul_ang.", ["\phi (rad)", "\theta (ra
                 phase_zones, c_phase, colors, S, eps_folder, 'Fig5.eps', output_pdf);
 
 %% === Fig. 6 - BOZUCU KUVVETLER ===
-fig = figure;
+fig = figure('Position', [100, 100, 1000, 900]);
+axs = stackedAxes(fig, 3);
 lgd_handles = gobjects(0);
 for a = 1:3
-    ax = subplot(3, 1, a); hold(ax, 'on');
+    ax = axs(a); hold(ax, 'on');
     all_vals = [];
     for i = valid
         v = D(i).Tp{:, "dist_f." + axis_names(a)};
@@ -275,9 +290,7 @@ for a = 1:3
     styleAxes(ax, S);
     ylabel(ax, sprintf('f_{dist,%s} (N)', axis_names(a)), 'FontWeight', 'bold', ...
            'FontSize', font_size, 'FontName', font_name);
-    if a == 3
-        xlabel(ax, 't (s)', 'FontWeight', 'bold', 'FontSize', font_size, 'FontName', font_name);
-    end
+    xlabel(ax, 't (s)', 'FontWeight', 'bold', 'FontSize', font_size, 'FontName', font_name);
 end
 addTopLegend(lgd_handles, [0.1 0.94 0.8 0.05], S);
 saveFigure(fig, eps_folder, 'Fig6.eps', output_pdf);
@@ -292,10 +305,11 @@ elseif hasNdobColumns(D_obs)
 end
 if ~isempty(D_est)
     valid_est = find([D_est.ok]);
-    fig = figure;
+    fig = figure('Position', [100, 100, 1000, 900]);
+    axs = stackedAxes(fig, 3);
     lgd_handles = gobjects(0);
     for a = 1:3
-        ax = subplot(3, 1, a); hold(ax, 'on');
+        ax = axs(a); hold(ax, 'on');
         all_vals = [];
         for i = valid_est
             v = D_est(i).Tp{:, "ndob_f." + axis_names(a)};
@@ -308,9 +322,7 @@ if ~isempty(D_est)
         styleAxes(ax, S);
         ylabel(ax, sprintf('\\Delta f_{%s} (N)', axis_names(a)), 'FontWeight', 'bold', ...
                'FontSize', font_size, 'FontName', font_name);
-        if a == 3
-            xlabel(ax, 't (s)', 'FontWeight', 'bold', 'FontSize', font_size, 'FontName', font_name);
-        end
+        xlabel(ax, 't (s)', 'FontWeight', 'bold', 'FontSize', font_size, 'FontName', font_name);
     end
     addTopLegend(lgd_handles, [0.1 0.94 0.8 0.05], S);
     saveFigure(fig, eps_folder, 'Fig_NDOB_estimate.eps', output_pdf);
@@ -345,9 +357,9 @@ if any([D_abl.ok]) && ~strcmp(ablation_ctrl, main_ctrl)
                                 {ctrlLabel(ablation_ctrl), ctrlLabel(main_ctrl)}, sparse_factor);
         finishBarAxes(ax, phase_zones, c_phase, S, font_size);
         barLegend(ax, hs, names, sprintf('Q %d', i), font_name);
+        xlabel(ax, 't (s)', 'FontWeight', 'bold', 'FontSize', 22, 'FontName', font_name);
+        ylabel(ax, '||e_p|| (m)', 'FontWeight', 'bold', 'FontSize', 22, 'FontName', font_name);
     end
-    xlabel(tl, 't (s)', 'FontWeight', 'bold', 'FontSize', 24, 'FontName', font_name);
-    ylabel(tl, '||e_p|| (m)', 'FontWeight', 'bold', 'FontSize', 24, 'FontName', font_name);
     saveFigure(fig, eps_folder, 'Fig8.eps', output_pdf);
 else
     warning('Fig. 8 / Table 2 atlandı: ablasyon logları (%s) bulunamadı ya da ana koşuyla aynı.', ablation_log_dir);
@@ -372,9 +384,8 @@ if hasNdobColumns(D_obs) && any([D_none.ok]) && any([D_ff.ok])
         addZones(ax, interact_zones, interact_cols);
         styleAxes(ax, S);
         set(ax, 'FontSize', 16, 'XTick', 0:10:t_axis_max);
-        if c == 1
-            ylabel(ax, 'f_{dist,z} (N)', 'FontWeight', 'bold', 'FontSize', 16, 'FontName', font_name);
-        end
+        xlabel(ax, 't (s)', 'FontWeight', 'bold', 'FontSize', 16, 'FontName', font_name);
+        ylabel(ax, 'f_{dist,z} (N)', 'FontWeight', 'bold', 'FontSize', 16, 'FontName', font_name);
         lgd = legend(ax, [h1 h2], {'Applied downwash', 'NDOB estimate'}, 'Location', 'SouthWest', ...
                      'FontSize', 12, 'FontWeight', 'bold', 'FontName', font_name, 'Box', 'on');
         title(lgd, sprintf('Q %d', i));
@@ -386,11 +397,9 @@ if hasNdobColumns(D_obs) && any([D_none.ok]) && any([D_ff.ok])
                                 cellfun(@ctrlLabel, mismatch_ctrls, 'UniformOutput', false), sparse_factor);
         finishBarAxes(ax, interact_zones, interact_cols, S, 16);
         barLegend(ax, hs, names, sprintf('Q %d', i), font_name);
-        if c == 1
-            ylabel(ax, '||e_p|| (m)', 'FontWeight', 'bold', 'FontSize', 16, 'FontName', font_name);
-        end
+        xlabel(ax, 't (s)', 'FontWeight', 'bold', 'FontSize', 16, 'FontName', font_name);
+        ylabel(ax, '||e_p|| (m)', 'FontWeight', 'bold', 'FontSize', 16, 'FontName', font_name);
     end
-    xlabel(tl, 't (s)', 'FontWeight', 'bold', 'FontSize', font_size, 'FontName', font_name);
     saveFigure(fig, eps_folder, 'Fig9.eps', output_pdf);
 else
     warning('Fig. 9 atlandı: %s logları bulunamadı (log/ altında).', strjoin(mismatch_ctrls, ', '));
@@ -448,12 +457,13 @@ for r = 1:3
 end
 avail_F = find(~cellfun(@isempty, F));
 
-fig = figure;
+fig = figure('Position', [100, 100, 1000, 700]);
+axs = stackedAxes(fig, 2);
 fields_F  = {'Ed', 'EF'};
 ylabels_F = {'E_d (m)', 'E_F (m)'};
 hs = gobjects(0);
 for a = 1:2
-    ax = subplot(2, 1, a); hold(ax, 'on');
+    ax = axs(a); hold(ax, 'on');
     for r = avail_F
         idx = 1:plot_step:numel(F{r}.t);
         h = plot(ax, F{r}.t(idx), F{r}.(fields_F{a})(idx), 'LineWidth', line_w, 'Color', cols_F{r}, ...
@@ -464,9 +474,7 @@ for a = 1:2
     addZones(ax, phase_zones, c_phase);
     styleAxes(ax, S);
     ylabel(ax, ylabels_F{a}, 'FontWeight', 'bold', 'FontSize', font_size, 'FontName', font_name);
-    if a == 2
-        xlabel(ax, 't (s)', 'FontWeight', 'bold', 'FontSize', font_size, 'FontName', font_name);
-    end
+    xlabel(ax, 't (s)', 'FontWeight', 'bold', 'FontSize', font_size, 'FontName', font_name);
 end
 addTopLegend(hs, [0.1 0.94 0.8 0.05], S);
 saveFigure(fig, eps_folder, 'FigF1_formation_error.eps', output_pdf);
@@ -726,6 +734,43 @@ function tbl = comparisonTable(A, B, nameA, nameB)
                                   [nameB '_RMSE_m'], [nameB '_ISE'], 'RMSE_Improvement_pct', 'ISE_Improvement_pct'});
 end
 
+function [t_b, e_b] = windowRms(D1, window)
+    % Konum hatasının ardışık, örtüşmeyen pencerelerdeki RMS'i (pencere ortası zamanında).
+    % Pencere referansın güncelleme periyoduna eşitse (20 Hz -> 0.05 s) testere dişi düzlenir ve
+    % pencere RMS'lerinin karesel ortalaması RMSE'ye eşit olur.
+    e  = positionError(D1.T);
+    dt = median(diff(D1.t));
+    N  = max(1, round(window / dt));
+    n  = floor(numel(e) / N);
+    e_b = sqrt(mean(reshape(e(1:n * N).^2, N, n), 1))';
+    t_b = mean(reshape(D1.t(1:n * N), N, n), 1)';
+end
+
+function c = ctrlColor(name, dark_gray, c_ndob)
+    % Kontrolcü başına sabit çizgi rengi (Fig. 2)
+    ex = expectedRun(name, NaN);
+    switch ex.ctrl
+        case 'pid_ff', c = [0 0.4470 0.7410];        % mavi
+        case 'se3_ff', c = dark_gray;                % koyu gri
+        case 'ndob',   c = c_ndob;                   % kırmızı
+        case 'pid',    c = [0.4940 0.1840 0.5560];   % mor
+        case 'se3',    c = [0.4660 0.6740 0.1880];   % yeşil
+        otherwise,     c = [0 0 0];
+    end
+end
+
+function axs = stackedAxes(fig, n)
+    % n satırlık dikey eksen düzeni; her eksenin kendi x etiketi sığsın diye satırlar arasında
+    % sabit piksel boşluğu bırakır (üstte ortak açıklama için yer).
+    H = fig.Position(4);
+    top = 1 - 95 / H; bottom = 85 / H; gap = 95 / H; left = 0.12; width = 0.85;
+    h = (top - bottom - (n - 1) * gap) / n;
+    axs = gobjects(n, 1);
+    for a = 1:n
+        axs(a) = axes(fig, 'Position', [left, top - a * h - (a - 1) * gap, width, h]);
+    end
+end
+
 function tbl = multiComparisonTable(Ms, names)
     % Her koşunun RMSE/ISE'si ve ilk koşunun diğerlerine göre iyileşmesi (%) = (B - A) / B * 100
     n = numel(Ms{1}.rmse);
@@ -792,11 +837,12 @@ end
 function plotStateFigure(D, valid, act_prefix, ref_prefix, ylabels, zones, zone_cols, colors, S, ...
                          eps_folder, eps_name, output_pdf)
     % 3 eksenli gerçek (renkli) + istenen (siyah noktalı) zaman grafiği
-    fig = figure;
+    fig = figure('Position', [100, 100, 1000, 900]);
+    axs = stackedAxes(fig, 3);
     axis_names = ["x", "y", "z"];
     lgd_handles = gobjects(0);
     for a = 1:3
-        ax = subplot(3, 1, a); hold(ax, 'on');
+        ax = axs(a); hold(ax, 'on');
         if a == 1
             lgd_handles(end+1) = plot(ax, NaN, NaN, ':k', 'LineWidth', S.line_w, 'DisplayName', 'Desired'); %#ok<AGROW>
         end
@@ -819,9 +865,7 @@ function plotStateFigure(D, valid, act_prefix, ref_prefix, ylabels, zones, zone_
         addZones(ax, zones, zone_cols);
         styleAxes(ax, S);
         ylabel(ax, ylabels(a), 'FontWeight', 'bold', 'FontSize', S.font_size, 'FontName', S.font_name);
-        if a == 3
-            xlabel(ax, 't (s)', 'FontWeight', 'bold', 'FontSize', S.font_size, 'FontName', S.font_name);
-        end
+        xlabel(ax, 't (s)', 'FontWeight', 'bold', 'FontSize', S.font_size, 'FontName', S.font_name);
     end
     addTopLegend(lgd_handles, [0.1 0.94 0.8 0.05], S);
     saveFigure(fig, eps_folder, eps_name, output_pdf);
