@@ -249,7 +249,10 @@ if all(f2_ok)
         xlim(ax, [0 t_axis_max]);
         set(ax, 'XTick', 0:10:t_axis_max, 'FontName', font_name, 'FontSize', 16, 'FontWeight', 'bold', ...
             'LineWidth', 1.5, 'Layer', 'top', 'Box', 'on');
-        title(ax, sprintf('Q %d', i), 'FontWeight', 'bold', 'FontSize', 18, 'FontName', font_name);
+        % İHA etiketi grafiğin içinde (sol üst; ilk saniyelerde hata küçük olduğundan eğrilerle çakışmaz)
+        text(ax, 0.015, 0.96, sprintf('Q %d', i), 'Units', 'normalized', 'HorizontalAlignment', 'left', ...
+             'VerticalAlignment', 'top', 'FontWeight', 'bold', 'FontSize', 18, 'FontName', font_name, ...
+             'BackgroundColor', 'w', 'EdgeColor', 'k', 'LineWidth', 1, 'Margin', 2);
         xlabel(ax, 't (s)', 'FontWeight', 'bold', 'FontSize', 18, 'FontName', font_name);
         ylabel(ax, '||e_p|| (m)', 'FontWeight', 'bold', 'FontSize', 18, 'FontName', font_name);
     end
