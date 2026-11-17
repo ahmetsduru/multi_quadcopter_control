@@ -67,6 +67,8 @@ config_dir = fullfile(pkg_dir, 'config');      % Fig. S5 waypointleri
 s6_drone    = 2;      % Fig. S6 drone'u
 fig8_drones = [2 3];  % Fig. 8 drone'ları
 fig9_drones = [2 3];  % Fig. 9 drone'ları (downwash etkisindeki İHA'lar)
+ndob_est_drones = [2 3];                    % Fig. 6: NDOB kestirimi çizilen İHA'lar (downwash etkisindekiler)
+ndob_est_cols   = [0 0 0; 0.85 0 0.85];     % Fig. 6: kestirim renkleri (siyah, magenta), İHA renklerinden farklı
 s5_drone    = 1;      % Fig. S5 drone'u
 
 % Formasyon ölçütleri (Fig. F1, Table 3)
@@ -268,7 +270,7 @@ plotStateFigure(D, valid, "a_eul_ang.", "r_eul_ang.", ...
                 phase_zones, c_phase, colors, S, out_folder, 'Fig5.svg', output_pdf, false);   % referans çizilmez
 
 %% === Fig. 6 - BOZUCU KUVVETLER VE NDOB KESTİRİMİ ===
-% Düz çizgiler: ana koşuda (main_ctrl) uygulanan downwash kuvveti. Siyah kesikli çizgiler: NDOB
+% Düz çizgiler: ana koşuda (main_ctrl) uygulanan downwash kuvveti. Kesikli çizgiler (ndob_est_cols): NDOB
 % kestirimi (PID+NDOB koşusu; kontrolcü downwash modelini kullanmaz, kestirim modellenmemiş diğer
 % etkileri de içerir). İki koşuda uygulanan kuvvetler neredeyse aynıdır (İHA konumları cm mertebesinde
 % farklıdır). NDOB koşusu yoksa yalnızca uygulanan kuvvetler çizilir.
@@ -291,14 +293,16 @@ for a = 1:3
         if a == 1, lgd_handles(end+1) = h; else, h.HandleVisibility = 'off'; end %#ok<SAGROW>
     end
     if ~isempty(D_est)
-        for i = find([D_est.ok])
+        % yalnızca downwash etkisindeki İHA'ların kestirimi; her biri ayrı renkte kesikli
+        for k = 1:numel(ndob_est_drones)
+            i = ndob_est_drones(k);
+            if ~D_est(i).ok, continue; end
             v = D_est(i).Tp{:, "ndob_f." + axis_names(a)};
             all_vals = [all_vals; v]; %#ok<AGROW>
-            plot(ax, D_est(i).tp, v, '--', 'LineWidth', ref_w, 'Color', [0 0 0], 'HandleVisibility', 'off');
-        end
-        if a == 1                                 % çizgi tipi açıklaması
-            lgd_handles(end+1) = plot(ax, NaN, NaN, '-k', 'LineWidth', line_w, 'DisplayName', 'Applied'); %#ok<SAGROW>
-            lgd_handles(end+1) = plot(ax, NaN, NaN, '--k', 'LineWidth', ref_w, 'DisplayName', 'NDOB estimate'); %#ok<SAGROW>
+            h = plot(ax, D_est(i).tp, v, '--', 'LineWidth', ref_w, ...
+                     'Color', ndob_est_cols(mod(k - 1, size(ndob_est_cols, 1)) + 1, :), ...
+                     'DisplayName', sprintf('NDOB (Q %d)', i));
+            if a == 1, lgd_handles(end+1) = h; else, h.HandleVisibility = 'off'; end %#ok<SAGROW>
         end
     end
     ylim(ax, padLimits(all_vals, 0.1));
