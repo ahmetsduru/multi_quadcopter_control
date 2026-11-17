@@ -268,7 +268,7 @@ plotStateFigure(D, valid, "a_eul_ang.", "r_eul_ang.", ...
                 phase_zones, c_phase, colors, S, out_folder, 'Fig5.svg', output_pdf, false);   % referans çizilmez
 
 %% === Fig. 6 - BOZUCU KUVVETLER VE NDOB KESTİRİMİ ===
-% Düz çizgiler: ana koşuda (main_ctrl) uygulanan downwash kuvveti. Kesikli çizgiler (aynı renk): NDOB
+% Düz çizgiler: ana koşuda (main_ctrl) uygulanan downwash kuvveti. Siyah kesikli çizgiler: NDOB
 % kestirimi (PID+NDOB koşusu; kontrolcü downwash modelini kullanmaz, kestirim modellenmemiş diğer
 % etkileri de içerir). İki koşuda uygulanan kuvvetler neredeyse aynıdır (İHA konumları cm mertebesinde
 % farklıdır). NDOB koşusu yoksa yalnızca uygulanan kuvvetler çizilir.
@@ -294,7 +294,7 @@ for a = 1:3
         for i = find([D_est.ok])
             v = D_est(i).Tp{:, "ndob_f." + axis_names(a)};
             all_vals = [all_vals; v]; %#ok<AGROW>
-            plot(ax, D_est(i).tp, v, '--', 'LineWidth', ref_w, 'Color', colors(i,:), 'HandleVisibility', 'off');
+            plot(ax, D_est(i).tp, v, '--', 'LineWidth', ref_w, 'Color', [0 0 0], 'HandleVisibility', 'off');
         end
         if a == 1                                 % çizgi tipi açıklaması
             lgd_handles(end+1) = plot(ax, NaN, NaN, '-k', 'LineWidth', line_w, 'DisplayName', 'Applied'); %#ok<SAGROW>
