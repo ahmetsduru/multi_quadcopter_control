@@ -47,7 +47,7 @@ pkg_dir    = fullfile(script_dir, '..');
 % --- Hangi grafik hangi koşuyu kullanır? (koşu adı = log/ altındaki klasör adı) ---
 % Kontrolcüler: pid_ff (PID+FF), pid (PID), ndob (PID+NDOB), se3 (SE(3)), se3_ff (SE(3)+FF)
 main_ctrl       = 'pid_ff';                    % Fig. 1, 3-7, S5, S6, Table 2'nin ana koşusu
-fig2_ctrls      = {'pid_ff', 'se3_ff', 'ndob', 'pid', 'se3'};  % Fig. 2 / Table 1: 2-5 koşu (ilki referans: Table 1'deki
+fig2_ctrls      = {'pid_ff', 'se3_ff', 'ndob'};  % Fig. 2 / Table 1: 2-5 koşu (ilki referans: Table 1'deki
                                                        % fark % buna göre; çizgilerde en üstte). Renkler: ctrlColor
 fig2_window     = 0.05;   % s; Fig. 2'deki hata bu pencerelerdeki RMS'tir. Referans 20 Hz'de (50 ms) güncellendiği
                           % için ham hata her periyotta testere dişi çizer; 50 ms RMS bunu düzler ve karesel

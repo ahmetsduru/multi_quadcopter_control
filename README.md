@@ -197,7 +197,7 @@ and warns if the RMS computed from the logs differs from `run_info.txt` or the f
    | Setting | Default | Used by |
    |---|---|---|
    | `main_ctrl` | `pid_ff` | Fig. 1, 3-7, S5, S6, Table 2 |
-   | `fig2_ctrls` | `pid_ff`, `se3_ff`, `ndob`, `pid`, `se3` | Fig. 2, Table 1 (2-5 runs; the first is the reference). Fig. 2 plots the RMS of the position error over each 50 ms reference update period (`fig2_window`) |
+   | `fig2_ctrls` | `pid_ff`, `se3_ff`, `ndob` | Fig. 2, Table 1 (2-5 runs; the first is the reference). Fig. 2 plots the RMS of the position error over each 50 ms reference update period (`fig2_window`) |
    | `ablation_ctrl` | `main_ctrl` without `_ff` | Fig. 8, Table 2 |
    | `formation_ctrls` | main, ablation, `se3_ff` | Fig. F1, Table 3 |
    | `mismatch_ctrls` | `pid`, `ndob`, `pid_ff` | Fig. 9, Table 4 (no compensation / observer / model feedforward) |
