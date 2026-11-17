@@ -312,20 +312,19 @@ for a = 1:3
            'FontSize', font_size, 'FontName', font_name);
     xlabel(ax, 't (s)', 'FontWeight', 'bold', 'FontSize', font_size, 'FontName', font_name);
 end
-% Açıklama tek satırda: yazı 18 pt, kısa çizgi örnekleri; doğal boyutunda, üstte ortalanır
+% Açıklama tek satırda: yazı 18 pt, kısa çizgi örnekleri; doğal boyutunda, grafiklerin hemen üstünde
 lgd = legend(lgd_handles, displayNames(lgd_handles), 'Orientation', 'horizontal', 'FontSize', 18, ...
              'FontWeight', 'bold', 'Box', 'off', 'FontName', font_name);
 try
     lgd.ItemTokenSize = [22 18];         % kısa çizgi örnekleri (eski sürümlerde yoksa atlanır)
 catch
 end
-lp = lgd.Position;
-lgd.Position = [(1 - lp(3)) / 2, 0.99 - lp(4), lp(3), lp(4)];
+placeAboveAxes(lgd);
 saveFigure(fig, out_folder, 'Fig6.svg', output_pdf);
 
 %% === Fig. 7 - THRUST ===
-fig = figure;
-ax = axes(fig); hold(ax, 'on');
+fig = figure('Position', [100, 100, 1000, 600]);
+ax = stackedAxes(fig, 1); hold(ax, 'on');
 lgd_handles = gobjects(0);
 all_vals = [];
 for i = valid
@@ -775,8 +774,8 @@ end
 
 function axs = stackedAxes(fig, n, top_px)
     % n satırlık dikey eksen düzeni; her eksenin kendi x etiketi sığsın diye satırlar arasında
-    % sabit piksel boşluğu bırakır (üstte ortak açıklama için top_px piksel yer, varsayılan 95).
-    if nargin < 3, top_px = 95; end
+    % sabit piksel boşluğu bırakır (üstte tek satırlık ortak açıklama için top_px piksel yer, varsayılan 60).
+    if nargin < 3, top_px = 60; end
     H = fig.Position(4);
     top = 1 - top_px / H; bottom = 85 / H; gap = 95 / H; left = 0.12; width = 0.85;
     h = (top - bottom - (n - 1) * gap) / n;
@@ -1262,10 +1261,28 @@ function styleAxes(ax, S)
         'LineWidth', S.line_w, 'Box', 'on', 'Layer', 'top');
 end
 
-function addTopLegend(handles, position, S)
+function addTopLegend(handles, ~, S)
+    % Yatay açıklama, en üstteki grafiğin hemen üstünde ortalanır (ikinci argüman eski çağrılar için, kullanılmaz)
     lgd = legend(handles, displayNames(handles), 'Orientation', 'horizontal', 'FontSize', S.font_size, ...
                  'FontWeight', 'bold', 'Box', 'off', 'FontName', S.font_name);
-    set(lgd, 'Position', position);
+    placeAboveAxes(lgd);
+end
+
+function placeAboveAxes(lgd)
+    % Açıklamayı doğal boyutunda, figürdeki en üstteki eksenin 6 piksel üstüne ortalar
+    % (figürün dışına taşacaksa üst kenara dayanır)
+    fig = ancestor(lgd, 'figure');
+    drawnow;                                      % açıklamanın boyutu hesaplansın
+    axs = findobj(fig, 'Type', 'axes');
+    top = 0;
+    for k = 1:numel(axs)
+        p = get(axs(k), 'Position');
+        top = max(top, p(2) + p(4));
+    end
+    H  = fig.Position(4);
+    lp = lgd.Position;
+    y  = min(top + 6 / H, 1 - lp(4));
+    lgd.Position = [(1 - lp(3)) / 2, y, lp(3), lp(4)];
 end
 
 function names = displayNames(handles)
