@@ -14,7 +14,7 @@
 % Hangi grafiğin hangi koşuyu kullanacağı AYARLAR bölümünde seçilir (main_ctrl, fig2_ctrls, ...).
 % Varsayılanlarla makaledeki ve ek materyaldeki grafik ve tablolar üretilir:
 %   Fig. 1  Pozisyon (x, y, z) + z zoom                         -> main_ctrl
-%   Fig. 2  Anlık konum hatası (50 ms pencere RMS), 2-4 koşu   -> fig2_ctrls
+%   Fig. 2  Anlık konum hatası (50 ms pencere RMS), 2-5 koşu   -> fig2_ctrls
 %   Fig. 3  Hız / Fig. 4 İvme / Fig. 5 Euler açıları            -> main_ctrl
 %   Fig. 6  Bozucu kuvvetler / Fig. 7 Thrust                    -> main_ctrl
 %   NDOB    NDOB bozucu kestirimi, 3 eksen, tüm İHA'lar          -> NDOB koşusu (mismatch_ctrls)
@@ -47,7 +47,7 @@ pkg_dir    = fullfile(script_dir, '..');
 % --- Hangi grafik hangi koşuyu kullanır? (koşu adı = log/ altındaki klasör adı) ---
 % Kontrolcüler: pid_ff (PID+FF), pid (PID), ndob (PID+NDOB), se3 (SE(3)), se3_ff (SE(3)+FF)
 main_ctrl       = 'pid_ff';                    % Fig. 1, 3-7, S5, S6, Table 2'nin ana koşusu
-fig2_ctrls      = {'pid_ff', 'se3_ff', 'ndob', 'pid'};  % Fig. 2 / Table 1: 2-4 koşu (ilki referans: Table 1'deki
+fig2_ctrls      = {'pid_ff', 'se3_ff', 'ndob', 'pid', 'se3'};  % Fig. 2 / Table 1: 2-5 koşu (ilki referans: Table 1'deki
                                                        % fark % buna göre; çizgilerde en üstte). Renkler: ctrlColor
 fig2_window     = 0.05;   % s; Fig. 2'deki hata bu pencerelerdeki RMS'tir. Referans 20 Hz'de (50 ms) güncellendiği
                           % için ham hata her periyotta testere dişi çizer; 50 ms RMS bunu düzler ve karesel
@@ -66,7 +66,6 @@ config_dir = fullfile(pkg_dir, 'config');      % Fig. S5 waypointleri
 s6_drone    = 2;      % Fig. S6 drone'u
 fig8_drones = [2 3];  % Fig. 8 drone'ları
 fig9_drones = [2 3];  % Fig. 9 drone'ları (downwash etkisindeki İHA'lar)
-c_ndob      = [0.80 0.10 0.10];   % PID+NDOB rengi (Fig. 2, Fig. 9)
 s5_drone    = 1;      % Fig. S5 drone'u
 
 % Formasyon ölçütleri (Fig. F1, Table 3)
@@ -223,9 +222,9 @@ end
 addTopLegend(lgd_handles, [0.1 0.94 0.8 0.05], S);
 saveFigure(fig, eps_folder, 'Fig1.eps', output_pdf);
 
-%% === Fig. 2 - ANLIK KONUM HATASI: fig2_ctrls (2-4 koşu, 50 ms pencere RMS) ===
-if numel(fig2_ctrls) < 2 || numel(fig2_ctrls) > 4
-    error('fig2_ctrls 2-4 koşu içermeli (şu an %d).', numel(fig2_ctrls));
+%% === Fig. 2 - ANLIK KONUM HATASI: fig2_ctrls (2-5 koşu, 50 ms pencere RMS) ===
+if numel(fig2_ctrls) < 2 || numel(fig2_ctrls) > 5
+    error('fig2_ctrls 2-5 koşu içermeli (şu an %d).', numel(fig2_ctrls));
 end
 f2_labels = cellfun(@ctrlLabel, fig2_ctrls, 'UniformOutput', false);
 if all(f2_ok)
@@ -234,11 +233,15 @@ if all(f2_ok)
     hs = gobjects(1, numel(fig2_ctrls));
     for i = 1:num_drones
         ax = nexttile(tl); hold(ax, 'on'); box(ax, 'on');
-        for k = numel(fig2_ctrls):-1:1                 % ilk koşu (referans) en üstte çizilir
+        % Çizim sırası: düz çizgiler sondan başa (ilk koşu/referans en üstte), kesikli çizgiler en üstte;
+        % böylece üst üste binen eğriler (ör. PID ve SE(3)) birlikte görünür.
+        is_dash  = cellfun(@(n) strcmp(ctrlLineStyle(n), '--'), fig2_ctrls);
+        f2_order = [fliplr(find(~is_dash)), find(is_dash)];
+        for k = f2_order
             Dk = D_f2{k}(i);
             if ~Dk.ok, continue; end
             [tb, eb] = windowRms(Dk, fig2_window);
-            hs(k) = plot(ax, tb, eb, '-', 'Color', ctrlColor(fig2_ctrls{k}, dark_gray, c_ndob), ...
+            hs(k) = plot(ax, tb, eb, ctrlLineStyle(fig2_ctrls{k}), 'Color', ctrlColor(fig2_ctrls{k}), ...
                          'LineWidth', line_w);
         end
         yl = ylim(ax); ylim(ax, [0 yl(2) * 1.05]);
@@ -353,7 +356,7 @@ if any([D_abl.ok]) && ~strcmp(ablation_ctrl, main_ctrl)
     tl = tiledlayout(fig, 1, numel(fig8_drones), 'TileSpacing', 'compact', 'Padding', 'compact');
     for i = fig8_drones
         ax = nexttile(tl); hold(ax, 'on'); box(ax, 'on');
-        [hs, names] = errorBars(ax, {D_abl(i), D(i)}, {colors(i,:), dark_gray}, ...
+        [hs, names] = errorBars(ax, {D_abl(i), D(i)}, {ctrlColor(ablation_ctrl), ctrlColor(main_ctrl)}, ...
                                 {ctrlLabel(ablation_ctrl), ctrlLabel(main_ctrl)}, sparse_factor);
         finishBarAxes(ax, phase_zones, c_phase, S, font_size);
         barLegend(ax, hs, names, sprintf('Q %d', i), font_name);
@@ -368,7 +371,7 @@ end
 %% === Fig. 9 - UYUMSUZ KOMPANZATÖR: NDOB (Hakem 1) ===
 % Üst satır: NDOB koşusunda simülatörün uyguladığı downwash kuvveti (dist_f.z) ve NDOB kestirimi (ndob_f.z).
 %   NDOB downwash modelini kullanmaz; kestirim, modellenmemiş diğer etkileri (sürükleme vb.) de içerir.
-% Alt satır: konum hatası; PID (geniş, renkli), PID+NDOB (orta, kırmızı), PID+FF (dar, koyu).
+% Alt satır: konum hatası; PID (geniş), PID+NDOB (orta), PID+FF (dar); renkler ctrlColor'dan.
 if hasNdobColumns(D_obs) && any([D_none.ok]) && any([D_ff.ok])
     fig = figure('Position', [100, 100, 1200, 800]);
     nc = numel(fig9_drones);
@@ -378,8 +381,8 @@ if hasNdobColumns(D_obs) && any([D_none.ok]) && any([D_ff.ok])
         ax = nexttile(tl, c); hold(ax, 'on'); box(ax, 'on');
         f_true = D_obs(i).Tp{:, "dist_f.z"};
         f_est  = D_obs(i).Tp{:, "ndob_f.z"};
-        h1 = plot(ax, D_obs(i).tp, f_true, '-', 'Color', colors(i,:), 'LineWidth', line_w);
-        h2 = plot(ax, D_obs(i).tp, f_est, '--', 'Color', dark_gray, 'LineWidth', line_w);
+        h1 = plot(ax, D_obs(i).tp, f_true, '-', 'Color', [0 0 0], 'LineWidth', line_w);
+        h2 = plot(ax, D_obs(i).tp, f_est, '--', 'Color', ctrlColor(mismatch_ctrls{2}), 'LineWidth', line_w);
         ylim(ax, padLimits([f_true; f_est], 0.1));
         addZones(ax, interact_zones, interact_cols);
         styleAxes(ax, S);
@@ -393,7 +396,7 @@ if hasNdobColumns(D_obs) && any([D_none.ok]) && any([D_ff.ok])
     for c = 1:nc
         i = fig9_drones(c);
         ax = nexttile(tl, nc + c); hold(ax, 'on'); box(ax, 'on');
-        [hs, names] = errorBars(ax, {D_none(i), D_obs(i), D_ff(i)}, {colors(i,:), c_ndob, dark_gray}, ...
+        [hs, names] = errorBars(ax, {D_none(i), D_obs(i), D_ff(i)}, cellfun(@ctrlColor, mismatch_ctrls, 'UniformOutput', false), ...
                                 cellfun(@ctrlLabel, mismatch_ctrls, 'UniformOutput', false), sparse_factor);
         finishBarAxes(ax, interact_zones, interact_cols, S, 16);
         barLegend(ax, hs, names, sprintf('Q %d', i), font_name);
@@ -448,7 +451,7 @@ end
 % Her an komşu çiftler üzerinden RMS alınır: E_d(t), E_F(t).
 runs_F   = cellfun(@(n) run_data(n), formation_ctrls, 'UniformOutput', false);
 labels_F = cellfun(@ctrlLabel, formation_ctrls, 'UniformOutput', false);
-cols_F   = {[0 0.4470 0.7410], [0.8500 0.3250 0.0980], dark_gray};
+cols_F   = cellfun(@ctrlColor, formation_ctrls, 'UniformOutput', false);
 F = cell(1, 3);
 for r = 1:3
     if all([runs_F{r}.ok])
@@ -466,7 +469,8 @@ for a = 1:2
     ax = axs(a); hold(ax, 'on');
     for r = avail_F
         idx = 1:plot_step:numel(F{r}.t);
-        h = plot(ax, F{r}.t(idx), F{r}.(fields_F{a})(idx), 'LineWidth', line_w, 'Color', cols_F{r}, ...
+        h = plot(ax, F{r}.t(idx), F{r}.(fields_F{a})(idx), ctrlLineStyle(formation_ctrls{r}), ...
+                 'LineWidth', line_w, 'Color', cols_F{r}, ...
                  'DisplayName', labels_F{r});
         if a == 1, hs(end+1) = h; end %#ok<SAGROW>
     end
@@ -746,17 +750,24 @@ function [t_b, e_b] = windowRms(D1, window)
     t_b = mean(reshape(D1.t(1:n * N), N, n), 1)';
 end
 
-function c = ctrlColor(name, dark_gray, c_ndob)
-    % Kontrolcü başına sabit çizgi rengi (Fig. 2)
+function c = ctrlColor(name)
+    % Kontrolcü başına sabit çizgi rengi (Fig. 2, 9, F1). Okabe-Ito paleti: birbirinden ve renk körlüğünde
+    % ayırt edilebilir, açık renkli faz bölgelerinin üstünde de belirgin.
     ex = expectedRun(name, NaN);
     switch ex.ctrl
-        case 'pid_ff', c = [0 0.4470 0.7410];        % mavi
-        case 'se3_ff', c = dark_gray;                % koyu gri
-        case 'ndob',   c = c_ndob;                   % kırmızı
-        case 'pid',    c = [0.4940 0.1840 0.5560];   % mor
-        case 'se3',    c = [0.4660 0.6740 0.1880];   % yeşil
-        otherwise,     c = [0 0 0];
+        case 'pid_ff', c = [0.000 0.447 0.698];   % mavi
+        case 'se3_ff', c = [0.000 0.000 0.000];   % siyah
+        case 'ndob',   c = [0.835 0.369 0.000];   % turuncu-kırmızı (vermilion)
+        case 'pid',    c = [0.000 0.620 0.451];   % yeşil
+        case 'se3',    c = [0.800 0.475 0.655];   % pembe-mor (kesikli çizilir)
+        otherwise,     c = [0.337 0.706 0.914];   % açık mavi
     end
+end
+
+function ls = ctrlLineStyle(name)
+    % SE(3) kesikli: bozucu altında PID ile, bozucusuz İHA'larda SE(3)+FF ile üst üste biner
+    ex = expectedRun(name, NaN);
+    if strcmp(ex.ctrl, 'se3'), ls = '--'; else, ls = '-'; end
 end
 
 function axs = stackedAxes(fig, n)
