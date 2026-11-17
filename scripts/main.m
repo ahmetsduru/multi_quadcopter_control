@@ -18,13 +18,13 @@
 %   Fig. 3  Hız / Fig. 4 İvme / Fig. 5 Euler açıları            -> main_ctrl
 %   Fig. 6  Bozucu kuvvetler / Fig. 7 Thrust                    -> main_ctrl
 %   NDOB    NDOB bozucu kestirimi, 3 eksen, tüm İHA'lar          -> NDOB koşusu (mismatch_ctrls)
-%   Fig. 8  Ablasyon: ileri besleme var / yok                   -> main_ctrl vs ablation_ctrl
+%   Fig. 8  Ablasyon: ileri besleme var / yok (50 ms pencere RMS) -> fig8_ctrls
 %   Fig. 9  Uyumsuz kompanzatör: downwash vs NDOB kestirimi ve konum hatası -> mismatch_ctrls
 %   Fig. S5 Drone 1 hibrit yörünge ve waypointler               -> main_ctrl + config/*.yaml
 %   Fig. S6 Drone 2 yönelim hatası, beta karşılaştırması        -> main_ctrl vs beta_run
 %   Fig. F1 Komşu İHA'lar arası bağıl mesafe ve formasyon hatası -> formation_ctrls
 %   Table 1 RMSE/ISE, ilk koşunun diğerlerine göre farkı (%)   -> fig2_ctrls
-%   Table 2 RMSE/ISE, ablasyon                                  -> main_ctrl vs ablation_ctrl
+%   Table 2 RMSE/ISE, ablasyon (çift çift)                      -> fig8_ctrls
 %   Table 3 İHA çiftleri matrisi: üst üçgen formasyon hatası (RMS, baskın yön xy/z),
 %           alt üçgen bağıl mesafe hatası (RMS, işaretli ortalama) -> formation_ctrls
 %   Table 4 Uyumsuz kompanzatör: RMSE ve bozucusuz koşuya göre artış (ΔRMSE) -> mismatch_ctrls + nominal_run
@@ -46,14 +46,15 @@ pkg_dir    = fullfile(script_dir, '..');
 
 % --- Hangi grafik hangi koşuyu kullanır? (koşu adı = log/ altındaki klasör adı) ---
 % Kontrolcüler: pid_ff (PID+FF), pid (PID), ndob (PID+NDOB), se3 (SE(3)), se3_ff (SE(3)+FF)
-main_ctrl       = 'pid_ff';                    % Fig. 1, 3-7, S5, S6, Table 2'nin ana koşusu
+main_ctrl       = 'pid_ff';                    % Fig. 1, 3-7, S5, S6'nın ana koşusu
 fig2_ctrls      = {'pid_ff', 'se3_ff', 'ndob'};  % Fig. 2 / Table 1: 2-5 koşu (ilki referans: Table 1'deki
                                                        % fark % buna göre; çizgilerde en üstte). Renkler: ctrlColor
 fig2_window     = 0.05;   % s; Fig. 2'deki hata bu pencerelerdeki RMS'tir. Referans 20 Hz'de (50 ms) güncellendiği
                           % için ham hata her periyotta testere dişi çizer; 50 ms RMS bunu düzler ve karesel
                           % ortalaması tablodaki RMSE'ye eşittir.
-ablation_ctrl   = erase(main_ctrl, '_ff');     % Fig. 8 / Table 2: ana koşunun ileri beslemesiz hali
-formation_ctrls = {main_ctrl, ablation_ctrl, 'se3_ff'};   % Fig. F1 / Table 3
+fig8_ctrls      = {'pid_ff', 'pid', 'se3_ff', 'se3'};   % Fig. 8 / Table 2: ablasyon çiftleri sırayla
+                                               % (ileri beslemeli, ileri beslemesiz), (..., ...)
+formation_ctrls = {'pid_ff', 'pid', 'se3_ff'};   % Fig. F1 / Table 3
 mismatch_ctrls  = {'pid', 'ndob', 'pid_ff'};   % Fig. 9 / Table 4: kompanzasyon yok / gözlemci / model FF
 nominal_run     = 'pid_nominal';               % Table 4: bozucusuz koşu (disturbance_enabled:=false)
 beta_main       = 0.05;                        % ana koşudaki psi_filter_beta
@@ -129,7 +130,7 @@ S = struct('font_name', font_name, 'font_size', font_size, 'line_w', line_w, 're
 %% === VERİ OKUMA (gereken her koşu bir kez) ===
 % Her koşu log/<koşu>/ klasöründen okunur ve run_info.txt ile beklenen kontrolcü, bozucu ve beta
 % ayarına sahip olduğu kontrol edilir.
-run_names = unique([{main_ctrl, ablation_ctrl, nominal_run, beta_run}, ...
+run_names = unique([{main_ctrl, nominal_run, beta_run}, fig8_ctrls, ...
                     fig2_ctrls, formation_ctrls, mismatch_ctrls], 'stable');
 run_data = containers.Map();
 for k = 1:numel(run_names)
@@ -146,13 +147,13 @@ end
 fprintf('Ana koşu: %s (%s), %d drone logu\n', main_ctrl, ctrlLabel(main_ctrl), numel(valid));
 D_f2   = cellfun(@(n) run_data(n), fig2_ctrls, 'UniformOutput', false);   % Fig. 2 / Table 1
 f2_ok  = cellfun(@(x) any([x.ok]), D_f2);
-D_abl  = run_data(ablation_ctrl);    % Fig. 8 / Table 2
+D_f8   = cellfun(@(n) run_data(n), fig8_ctrls, 'UniformOutput', false);   % Fig. 8 / Table 2
+f8_ok  = cellfun(@(x) any([x.ok]), D_f8);
 D_beta = run_data(beta_run);         % Fig. S6
 D_nom  = run_data(nominal_run);      % Table 4
 D_none = run_data(mismatch_ctrls{1});   % Fig. 9 / Table 4: kompanzasyon yok
 D_obs  = run_data(mismatch_ctrls{2});   %                    gözlemci (NDOB)
 D_ff   = run_data(mismatch_ctrls{3});   %                    model tabanlı FF
-ablation_log_dir = fullfile(log_root, ablation_ctrl);
 beta_log_dir     = fullfile(log_root, beta_run);
 nominal_log_dir  = fullfile(log_root, nominal_run);
 
@@ -236,32 +237,10 @@ f2_labels = cellfun(@ctrlLabel, fig2_ctrls, 'UniformOutput', false);
 if all(f2_ok)
     fig = figure('Position', [100, 100, 1200, 1000]);
     tl = tiledlayout(fig, 3, 2, 'TileSpacing', 'compact', 'Padding', 'compact');
-    hs = gobjects(1, numel(fig2_ctrls));
     for i = 1:num_drones
         ax = nexttile(tl); hold(ax, 'on'); box(ax, 'on');
-        % Çizim sırası: düz çizgiler sondan başa (ilk koşu/referans en üstte), kesikli çizgiler en üstte;
-        % böylece üst üste binen eğriler (ör. PID ve SE(3)) birlikte görünür.
-        is_dash  = cellfun(@(n) strcmp(ctrlLineStyle(n), '--'), fig2_ctrls);
-        f2_order = [fliplr(find(~is_dash)), find(is_dash)];
-        for k = f2_order
-            Dk = D_f2{k}(i);
-            if ~Dk.ok, continue; end
-            [tb, eb] = windowRms(Dk, fig2_window);
-            hs(k) = plot(ax, tb, eb, ctrlLineStyle(fig2_ctrls{k}), 'Color', ctrlColor(fig2_ctrls{k}), ...
-                         'LineWidth', ctrlLineWidth(fig2_ctrls{k}));
-        end
-        yl = ylim(ax); ylim(ax, [0 yl(2) * 1.05]);
-        addZones(ax, phase_zones, c_phase);
-        xlim(ax, [0 t_axis_max]);
-        set(ax, 'XTick', 0:10:t_axis_max, 'FontName', font_name, 'FontSize', 16, 'FontWeight', 'bold', ...
-            'LineWidth', 1.5, 'Layer', 'top', 'Box', 'on');
-        % İHA etiketi grafiğin içinde, sağ üstte (uçuşun sonunda hata küçük olduğundan eğrilerle çakışmaz);
-        % çerçevesiz ve saydam, altındaki faz bölgesinin rengi görünür
-        text(ax, 0.985, 0.96, sprintf('Q %d', i), 'Units', 'normalized', 'HorizontalAlignment', 'right', ...
-             'VerticalAlignment', 'top', 'FontWeight', 'bold', 'FontSize', 18, 'FontName', font_name, ...
-             'BackgroundColor', 'none', 'EdgeColor', 'none', 'Margin', 2);
-        xlabel(ax, 't (s)', 'FontWeight', 'bold', 'FontSize', 18, 'FontName', font_name);
-        ylabel(ax, '||e_p|| (m)', 'FontWeight', 'bold', 'FontSize', 18, 'FontName', font_name);
+        hs = plotErrorLines(ax, cellfun(@(x) x(i), D_f2, 'UniformOutput', false), fig2_ctrls, fig2_window);
+        styleErrorAxes(ax, i, phase_zones, c_phase, S);
     end
     % Ortak açıklama, boş kalan son kutuda
     lgd = legend(hs(isgraphics(hs)), f2_labels(isgraphics(hs)), 'FontSize', 18, 'FontWeight', 'bold', ...
@@ -363,22 +342,26 @@ ylabel(ax, '||f_{thrust}|| (N)', 'FontWeight', 'bold', 'FontSize', font_size, 'F
 addTopLegend(lgd_handles, [0.15 0.94 0.7 0.05], S);
 saveFigure(fig, out_folder, 'Fig7.svg', output_pdf);
 
-%% === Fig. 8 - ABLASYON: FEEDFORWARD AKTİF vs PASİF ===
-if any([D_abl.ok]) && ~strcmp(ablation_ctrl, main_ctrl)
-    fig = figure('Position', [100, 100, 1200, 500]);
+%% === Fig. 8 - ABLASYON: İLERİ BESLEME VAR / YOK (fig8_ctrls, 50 ms pencere RMS) ===
+if mod(numel(fig8_ctrls), 2) ~= 0
+    error('fig8_ctrls çift sayıda koşu içermeli: (ileri beslemeli, ileri beslemesiz) çiftleri.');
+end
+f8_labels = cellfun(@ctrlLabel, fig8_ctrls, 'UniformOutput', false);
+if all(f8_ok)
+    fig = figure('Position', [100, 100, 1200, 560]);
     tl = tiledlayout(fig, 1, numel(fig8_drones), 'TileSpacing', 'compact', 'Padding', 'compact');
     for i = fig8_drones
         ax = nexttile(tl); hold(ax, 'on'); box(ax, 'on');
-        [hs, names] = errorBars(ax, {D_abl(i), D(i)}, {ctrlColor(ablation_ctrl), ctrlColor(main_ctrl)}, ...
-                                {ctrlLabel(ablation_ctrl), ctrlLabel(main_ctrl)}, sparse_factor);
-        finishBarAxes(ax, phase_zones, c_phase, S, font_size);
-        barLegend(ax, hs, names, sprintf('Q %d', i), font_name);
-        xlabel(ax, 't (s)', 'FontWeight', 'bold', 'FontSize', 22, 'FontName', font_name);
-        ylabel(ax, '||e_p|| (m)', 'FontWeight', 'bold', 'FontSize', 22, 'FontName', font_name);
+        hs = plotErrorLines(ax, cellfun(@(x) x(i), D_f8, 'UniformOutput', false), fig8_ctrls, fig2_window);
+        styleErrorAxes(ax, i, phase_zones, c_phase, S);
     end
+    % Ortak açıklama figürün üstünde, yatay
+    lgd = legend(hs(isgraphics(hs)), f8_labels(isgraphics(hs)), 'Orientation', 'horizontal', ...
+                 'FontSize', 18, 'FontWeight', 'bold', 'FontName', font_name, 'Box', 'off');
+    lgd.Layout.Tile = 'north';
     saveFigure(fig, out_folder, 'Fig8.svg', output_pdf);
 else
-    warning('Fig. 8 / Table 2 atlandı: ablasyon logları (%s) bulunamadı ya da ana koşuyla aynı.', ablation_log_dir);
+    warning('Fig. 8 / Table 2 atlandı: %s logları bulunamadı (log/ altında).', strjoin(fig8_ctrls(~f8_ok), ', '));
 end
 
 %% === Fig. 9 - UYUMSUZ KOMPANZATÖR: NDOB (Hakem 1) ===
@@ -548,9 +531,11 @@ if all(f2_ok)
     disp(tbl1);
     writetable(tbl1, fullfile(out_folder, 'Table1.csv'));
 end
-if any([D_abl.ok]) && ~strcmp(ablation_ctrl, main_ctrl)
-    tbl2 = comparisonTable(M, metrics(D_abl), ctrlVar(main_ctrl), ctrlVar(ablation_ctrl));
-    fprintf('\nTable 2: Ablasyon - %s vs %s\n', ctrlLabel(main_ctrl), ctrlLabel(ablation_ctrl));
+if all(f8_ok) && mod(numel(fig8_ctrls), 2) == 0
+    tbl2 = ablationTable(cellfun(@metrics, D_f8, 'UniformOutput', false), ...
+                         cellfun(@ctrlVar, fig8_ctrls, 'UniformOutput', false));
+    fprintf('\nTable 2: Ablasyon - ileri beslemeli / ileri beslemesiz çiftler: %s (iyileşme %% = (ileri beslemesiz - ileri beslemeli) / ileri beslemesiz * 100)\n', ...
+            strjoin(f8_labels, ', '));
     disp(tbl2);
     writetable(tbl2, fullfile(out_folder, 'Table2.csv'));
 end
@@ -742,16 +727,6 @@ function M = metrics(D)
     end
 end
 
-function tbl = comparisonTable(A, B, nameA, nameB)
-    % Makaledeki gibi: iyileşme (%) = (B - A) / B * 100
-    n = numel(A.rmse);
-    Quadcopter = "Q " + string((1:n)');
-    tbl = table(Quadcopter, A.rmse, A.ise, B.rmse, B.ise, ...
-                (B.rmse - A.rmse) ./ B.rmse * 100, (B.ise - A.ise) ./ B.ise * 100, ...
-                'VariableNames', {'Quadcopter', [nameA '_RMSE_m'], [nameA '_ISE'], ...
-                                  [nameB '_RMSE_m'], [nameB '_ISE'], 'RMSE_Improvement_pct', 'ISE_Improvement_pct'});
-end
-
 function [t_b, e_b] = windowRms(D1, window)
     % Konum hatasının ardışık, örtüşmeyen pencerelerdeki RMS'i (pencere ortası zamanında).
     % Pencere referansın güncelleme periyoduna eşitse (20 Hz -> 0.05 s) testere dişi düzlenir ve
@@ -808,6 +783,53 @@ function axs = stackedAxes(fig, n)
     for a = 1:n
         axs(a) = axes(fig, 'Position', [left, top - a * h - (a - 1) * gap, width, h]);
     end
+end
+
+function tbl = ablationTable(Ms, names)
+    % Çiftler sırayla (ileri beslemeli, ileri beslemesiz): her ikisinin RMSE/ISE'si ve ileri beslemenin
+    % sağladığı iyileşme (%) = (ileri beslemesiz - ileri beslemeli) / ileri beslemesiz * 100
+    n = numel(Ms{1}.rmse);
+    tbl = table("Q " + string((1:n)'), 'VariableNames', {'Quadcopter'});
+    for k = 1:2:numel(Ms) - 1
+        A = Ms{k}; B = Ms{k + 1};
+        tbl.([names{k} '_RMSE_m'])     = A.rmse;
+        tbl.([names{k} '_ISE'])        = A.ise;
+        tbl.([names{k + 1} '_RMSE_m']) = B.rmse;
+        tbl.([names{k + 1} '_ISE'])    = B.ise;
+        tbl.([names{k} '_vs_' names{k + 1} '_RMSE_pct']) = (B.rmse - A.rmse) ./ B.rmse * 100;
+        tbl.([names{k} '_vs_' names{k + 1} '_ISE_pct'])  = (B.ise - A.ise) ./ B.ise * 100;
+    end
+end
+
+function hs = plotErrorLines(ax, runs, names, window)
+    % Konum hatasının pencere RMS'i (bkz. windowRms), kontrolcü başına sabit renk / kalınlık / çizgi tipiyle.
+    % Çizim sırası: düz çizgiler kalından inceye, sonra kesikli çizgiler; üst üste binen eğriler iç içe
+    % şeritler olarak birlikte görünür. hs names sırasındadır (çizilmeyenler boş grafik nesnesi).
+    hs = gobjects(1, numel(names));
+    is_dash = cellfun(@(n) strcmp(ctrlLineStyle(n), '--'), names);
+    w = cellfun(@ctrlLineWidth, names);
+    solid = find(~is_dash);
+    [~, o] = sort(w(solid), 'descend');
+    for k = [solid(o), find(is_dash)]
+        if ~runs{k}.ok, continue; end
+        [tb, eb] = windowRms(runs{k}, window);
+        hs(k) = plot(ax, tb, eb, ctrlLineStyle(names{k}), 'Color', ctrlColor(names{k}), 'LineWidth', w(k));
+    end
+end
+
+function styleErrorAxes(ax, drone, zones, zone_cols, S)
+    % Fig. 2 ve Fig. 8 panelleri: faz bölgeleri, eksen etiketleri ve İHA etiketi (sağ üstte, çerçevesiz,
+    % saydam; uçuşun sonunda hata küçük olduğundan eğrilerle çakışmaz)
+    yl = ylim(ax); ylim(ax, [0 yl(2) * 1.05]);
+    addZones(ax, zones, zone_cols);
+    xlim(ax, [0 S.t_max]);
+    set(ax, 'XTick', 0:10:S.t_max, 'FontName', S.font_name, 'FontSize', 16, 'FontWeight', 'bold', ...
+        'LineWidth', 1.5, 'Layer', 'top', 'Box', 'on');
+    text(ax, 0.985, 0.96, sprintf('Q %d', drone), 'Units', 'normalized', 'HorizontalAlignment', 'right', ...
+         'VerticalAlignment', 'top', 'FontWeight', 'bold', 'FontSize', 18, 'FontName', S.font_name, ...
+         'BackgroundColor', 'none', 'EdgeColor', 'none', 'Margin', 2);
+    xlabel(ax, 't (s)', 'FontWeight', 'bold', 'FontSize', 18, 'FontName', S.font_name);
+    ylabel(ax, '||e_p|| (m)', 'FontWeight', 'bold', 'FontSize', 18, 'FontName', S.font_name);
 end
 
 function tbl = multiComparisonTable(Ms, names)
