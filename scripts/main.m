@@ -105,7 +105,8 @@ plot_step = 5;
 % Grafik stili
 font_name = 'Times New Roman';
 font_size = 20;
-line_w    = 2;
+line_w    = 3;     % gerçek değer çizgileri
+ref_w     = 2;     % istenen (siyah noktalı) çizgiler; daha ince, kalın renkli çizginin üstünde görünür
 colors    = lines(num_drones);
 dark_gray = [0.2 0.2 0.2];
 
@@ -121,7 +122,8 @@ if isfile(output_pdf), delete(output_pdf); end
 phase_zones    = [[0 t_switch]' [t_switch t_axis_max]'];
 axis_names     = ["x", "y", "z"];
 
-S = struct('font_name', font_name, 'font_size', font_size, 'line_w', line_w, 't_max', t_axis_max);
+S = struct('font_name', font_name, 'font_size', font_size, 'line_w', line_w, 'ref_w', ref_w, ...
+           't_max', t_axis_max, 'ref_window', fig2_window);
 
 %% === VERİ OKUMA (gereken her koşu bir kez) ===
 % Her koşu log/<koşu>/ klasöründen okunur ve run_info.txt ile beklenen kontrolcü, bozucu ve beta
@@ -166,13 +168,13 @@ lgd_handles = gobjects(0);
 for a = 1:3
     ax = axs(a); hold(ax, 'on');
     if a == 1
-        lgd_handles(end+1) = plot(ax, NaN, NaN, ':k', 'LineWidth', line_w, 'DisplayName', 'Desired'); %#ok<SAGROW>
+        lgd_handles(end+1) = plot(ax, NaN, NaN, ':k', 'LineWidth', ref_w, 'DisplayName', 'Desired'); %#ok<SAGROW>
     end
     for i = valid
         h = plot(ax, D(i).tp, D(i).Tp{:, "a_pos." + axis_names(a)}, '-', 'Color', colors(i,:), ...
                  'LineWidth', line_w, 'DisplayName', sprintf('Q %d', i));
         if a == 1, lgd_handles(end+1) = h; else, h.HandleVisibility = 'off'; end %#ok<SAGROW>
-        plot(ax, D(i).tp, D(i).Tp{:, "r_pos." + axis_names(a)}, ':k', 'LineWidth', line_w, ...
+        plot(ax, D(i).tp, D(i).Tp{:, "r_pos." + axis_names(a)}, ':k', 'LineWidth', ref_w, ...
              'HandleVisibility', 'off');
     end
     yl = ylim(ax);
@@ -211,7 +213,7 @@ for w = 1:size(zoom_windows, 1)
     box(ax_zoom, 'on'); hold(ax_zoom, 'on');
     for i = valid
         plot(ax_zoom, D(i).tp, D(i).Tp{:, "a_pos.z"}, 'Color', colors(i,:), 'LineWidth', line_w);
-        plot(ax_zoom, D(i).tp, D(i).Tp{:, "r_pos.z"}, ':k', 'LineWidth', line_w);
+        plot(ax_zoom, D(i).tp, D(i).Tp{:, "r_pos.z"}, ':k', 'LineWidth', ref_w);
     end
     xlim(ax_zoom, zoom_windows(w, :));
     ylim(ax_zoom, zoom_zlim(w, :));
@@ -741,6 +743,16 @@ function tbl = comparisonTable(A, B, nameA, nameB)
                                   [nameB '_RMSE_m'], [nameB '_ISE'], 'RMSE_Improvement_pct', 'ISE_Improvement_pct'});
 end
 
+function [t, x] = breakWraps(t, x)
+    % Açıyı [-pi, pi] aralığına sarar ve sarma noktalarına NaN ekler (çizgi kesilir, dikey sıçrama çizilmez)
+    t = t(:); x = atan2(sin(x(:)), cos(x(:)));
+    j = find(abs(diff(x)) > pi);
+    for k = numel(j):-1:1
+        t = [t(1:j(k)); NaN; t(j(k) + 1:end)];
+        x = [x(1:j(k)); NaN; x(j(k) + 1:end)];
+    end
+end
+
 function [t_b, e_b] = windowRms(D1, window)
     % Konum hatasının ardışık, örtüşmeyen pencerelerdeki RMS'i (pencere ortası zamanında).
     % Pencere referansın güncelleme periyoduna eşitse (20 Hz -> 0.05 s) testere dişi düzlenir ve
@@ -872,24 +884,38 @@ function plotStateFigure(D, valid, act_prefix, ref_prefix, ylabels, zones, zone_
     for a = 1:3
         ax = axs(a); hold(ax, 'on');
         if a == 1
-            lgd_handles(end+1) = plot(ax, NaN, NaN, ':k', 'LineWidth', S.line_w, 'DisplayName', 'Desired'); %#ok<AGROW>
+            lgd_handles(end+1) = plot(ax, NaN, NaN, ':k', 'LineWidth', S.ref_w, 'DisplayName', 'Desired'); %#ok<AGROW>
         end
         all_vals = [];
+        is_euler = act_prefix == "a_eul_ang.";
         for i = valid
+            t = D(i).tp;
             v = D(i).Tp{:, act_prefix + axis_names(a)};
             r = D(i).Tp{:, ref_prefix + axis_names(a)};
-            if act_prefix == "a_eul_ang." && a == 3
-                % yaw: gerçek açı +/-pi'ye sarılı, referans sürekli -> ikisini de sürekli çiz
-                v = unwrap(v); r = unwrap(r);
-                k0 = round((r(1) - v(1)) / (2 * pi)); v = v + 2 * pi * k0;
+            t_r = t;
+            if is_euler && a < 3
+                % istenen roll/pitch, pozisyon kontrolcüsünün çıkışıdır ve 20 Hz referansın her
+                % güncellemesinde titrer; referans periyodu (S.ref_window) üzerinden ortalaması çizilir
+                N = max(1, round(S.ref_window / median(diff(D(i).t))));
+                r_full = movmean(D(i).T{:, ref_prefix + axis_names(a)}, N);
+                r = interp1(D(i).t, r_full, t);           % seyreltilmiş zamanlarda (t, D(i).t'nin alt kümesi)
+            elseif is_euler && a == 3
+                % yaw [-pi, pi] aralığında; +/-pi geçişlerinde çizgi kesilir (dikey sıçrama çizilmez)
+                [t,   v] = breakWraps(t, v);
+                [t_r, r] = breakWraps(t_r, r);
             end
             all_vals = [all_vals; v; r]; %#ok<AGROW>
-            h = plot(ax, D(i).tp, v, '-', 'Color', colors(i,:), 'LineWidth', S.line_w, ...
+            h = plot(ax, t, v, '-', 'Color', colors(i,:), 'LineWidth', S.line_w, ...
                      'DisplayName', sprintf('Q %d', i));
             if a == 1, lgd_handles(end+1) = h; else, h.HandleVisibility = 'off'; end %#ok<AGROW>
-            plot(ax, D(i).tp, r, ':k', 'LineWidth', S.line_w, 'HandleVisibility', 'off');
+            plot(ax, t_r, r, ':k', 'LineWidth', S.ref_w, 'HandleVisibility', 'off');
         end
-        ylim(ax, padLimits(all_vals, 0.1));
+        if is_euler && a == 3
+            ylim(ax, [-pi pi] * 1.08);
+            set(ax, 'YTick', [-pi -pi/2 0 pi/2 pi], 'YTickLabel', {'-\pi', '-\pi/2', '0', '\pi/2', '\pi'});
+        else
+            ylim(ax, padLimits(all_vals, 0.1));
+        end
         addZones(ax, zones, zone_cols);
         styleAxes(ax, S);
         ylabel(ax, ylabels(a), 'FontWeight', 'bold', 'FontSize', S.font_size, 'FontName', S.font_name);
@@ -946,9 +972,9 @@ function plotFigS5(Dd, wp, path_color, font_name, out_folder, output_pdf)
     for view_k = 1:2
         ax = nexttile(tl); hold(ax, 'on'); box(ax, 'on');
         if view_k == 1
-            plot3(ax, px, py, pz, '-', 'Color', path_color, 'LineWidth', 2.5);
+            plot3(ax, px, py, pz, '-', 'Color', path_color, 'LineWidth', 3.5);
         else
-            plot(ax, px, py, '-', 'Color', path_color, 'LineWidth', 2.5);
+            plot(ax, px, py, '-', 'Color', path_color, 'LineWidth', 3.5);
         end
         label_no = 0;
         for k = 1:numel(wp)
