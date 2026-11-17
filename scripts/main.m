@@ -313,8 +313,12 @@ for a = 1:3
     xlabel(ax, 't (s)', 'FontWeight', 'bold', 'FontSize', font_size, 'FontName', font_name);
 end
 % Açıklama tek satırda: yazı 18 pt, kısa çizgi örnekleri; doğal boyutunda, üstte ortalanır
-lgd = legend(lgd_handles, 'Orientation', 'horizontal', 'FontSize', 18, 'FontWeight', 'bold', ...
-             'Box', 'off', 'FontName', font_name, 'ItemTokenSize', [22 18]);
+lgd = legend(lgd_handles, displayNames(lgd_handles), 'Orientation', 'horizontal', 'FontSize', 18, ...
+             'FontWeight', 'bold', 'Box', 'off', 'FontName', font_name);
+try
+    lgd.ItemTokenSize = [22 18];         % kısa çizgi örnekleri (eski sürümlerde yoksa atlanır)
+catch
+end
 lp = lgd.Position;
 lgd.Position = [(1 - lp(3)) / 2, 0.99 - lp(4), lp(3), lp(4)];
 saveFigure(fig, out_folder, 'Fig6.svg', output_pdf);
@@ -1259,9 +1263,16 @@ function styleAxes(ax, S)
 end
 
 function addTopLegend(handles, position, S)
-    lgd = legend(handles, 'Orientation', 'horizontal', 'FontSize', S.font_size, 'FontWeight', 'bold', ...
-                 'Box', 'off', 'FontName', S.font_name);
+    lgd = legend(handles, displayNames(handles), 'Orientation', 'horizontal', 'FontSize', S.font_size, ...
+                 'FontWeight', 'bold', 'Box', 'off', 'FontName', S.font_name);
     set(lgd, 'Position', position);
+end
+
+function names = displayNames(handles)
+    % Açıklama etiketleri hücre dizisi olarak (legend'a açıkça verilince 'Orientation' gibi özellik
+    % adları etiket sanılmaz)
+    names = get(handles, 'DisplayName');
+    if ~iscell(names), names = {names}; end   % tek nesnede get char döndürür
 end
 
 function saveFigure(fig, out_folder, out_name, output_pdf)
