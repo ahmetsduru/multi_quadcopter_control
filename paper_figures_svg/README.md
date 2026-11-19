@@ -1,7 +1,8 @@
 # Paper figures (SVG)
 
 Figures of the manuscript and the supplementary material, generated from the simulation runs of
-`scripts/run_paper_sims.sh` (current code and parameters, `noise_seed` 42) with the same layout,
+`scripts/run_paper_sims.sh` (current code and parameters, downwash from the instantaneous thrust of
+the source drone, `noise_seed` 42) with the same layout,
 colours and line widths as `scripts/main.m`. Text is converted to outlines, so the files look the
 same on every computer.
 
