@@ -45,7 +45,8 @@ if isempty(script_dir), script_dir = pwd; end
 pkg_dir    = fullfile(script_dir, '..');
 
 % --- Hangi grafik hangi koşuyu kullanır? (koşu adı = log/ altındaki klasör adı) ---
-% Kontrolcüler: pid_ff (PID+FF), pid (PID), ndob (PID+NDOB), se3 (SE(3)), se3_ff (SE(3)+FF)
+% Kontrolcüler (etiket): pid_ff (PD+FF), pid (PD), ndob (PD+NDOB), se3 (SE(3)), se3_ff (SE(3)+FF).
+% Hiyerarşik kontrolcünün tüm integral kazançları 0 olduğu için grafik ve tablolarda PD olarak adlandırılır.
 main_ctrl       = 'pid_ff';                    % Fig. 1, 3-7, S5, S6'nın ana koşusu
 fig2_ctrls      = {'pid_ff', 'ndob', 'pid'};  % Fig. 2 / Table 1: kompanzasyon karşılaştırması, 2-5 koşu (ilki referans: Table 1'deki
                                                        % fark % buna göre; çizgilerde en üstte). Renkler: ctrlColor
@@ -368,7 +369,7 @@ end
 %% === Fig. 9 - UYUMSUZ KOMPANZATÖR: NDOB (Hakem 1) ===
 % Üst satır: NDOB koşusunda simülatörün uyguladığı downwash kuvveti (dist_f.z) ve NDOB kestirimi (ndob_f.z).
 %   NDOB downwash modelini kullanmaz; kestirim, modellenmemiş diğer etkileri (sürükleme vb.) de içerir.
-% Alt satır: konum hatası; PID (geniş), PID+NDOB (orta), PID+FF (dar); renkler ctrlColor'dan.
+% Alt satır: konum hatası; PD (geniş), PD+NDOB (orta), PD+FF (dar); renkler ctrlColor'dan.
 if hasNdobColumns(D_obs) && any([D_none.ok]) && any([D_ff.ok])
     fig = figure('Position', [100, 100, 1200, 800]);
     nc = numel(fig9_drones);
@@ -554,7 +555,7 @@ end
 %% === Table 4 - UYUMSUZ KOMPANZATÖR (Hakem 1) ===
 % Model tabanlı FF (simülatörle aynı model), NDOB (model yok, gözlemci kestirimi) ve kompanzasyonsuz koşu.
 %   dRMSE        = RMSE - bozucusuz RMSE (downwash'ın yarattığı ek hata)
-%   PID_NDOB_vs_PID_FF_pct = PID+NDOB'un PID+FF'ye göre RMSE artışı (%)
+%   PD_NDOB_vs_PD_FF_pct = PD+NDOB'un PD+FF'ye göre RMSE artışı (%)
 %   residual_pct = kompanzasyondan sonra kalan downwash hatası / kompanzasyonsuz downwash hatası (%);
 %                  yalnızca downwash'a maruz kalan İHA'lar için (kompanzasyonsuz dRMSE > 0.1 mm).
 if any([D_none.ok]) && any([D_obs.ok]) && any([D_ff.ok])
@@ -699,12 +700,12 @@ function ex = expectedRun(name, beta_default)
 end
 
 function s = ctrlLabel(name)
-    % Grafik etiketi: pid_ff -> PID+FF, se3 -> SE(3), pid_nominal -> PID (no disturbance), ...
+    % Grafik etiketi: pid_ff -> PD+FF, se3 -> SE(3), pid_nominal -> PD (no disturbance), ...
     ex = expectedRun(name, NaN);
     switch ex.ctrl
-        case 'pid_ff', s = 'PID+FF';
-        case 'pid',    s = 'PID';
-        case 'ndob',   s = 'PID+NDOB';
+        case 'pid_ff', s = 'PD+FF';      % kazançlarda K_i = 0: kontrolcü fiilen PD
+        case 'pid',    s = 'PD';
+        case 'ndob',   s = 'PD+NDOB';
         case 'se3',    s = 'SE(3)';
         case 'se3_ff', s = 'SE(3)+FF';
         otherwise,     s = ex.ctrl;
@@ -714,7 +715,7 @@ function s = ctrlLabel(name)
 end
 
 function s = ctrlVar(name)
-    % Tablo sütun adı: PID+FF -> PID_FF, SE(3)+FF -> SE3_FF
+    % Tablo sütun adı: PD+FF -> PD_FF, SE(3)+FF -> SE3_FF
     s = regexprep(strrep(ctrlLabel(name), '(3)', '3'), '[^A-Za-z0-9]+', '_');
     s = regexprep(s, '^_+|_+$', '');
 end
@@ -771,7 +772,7 @@ end
 
 function w = ctrlLineWidth(name)
     % Katmanlı kalınlık: altta çizilenler kalın, üsttekiler ince; üst üste binen eğriler iç içe
-    % şeritler olarak birlikte görünür (çizim sırası: PID, PID+NDOB, SE(3)+FF, PID+FF, kesikli SE(3)).
+    % şeritler olarak birlikte görünür (çizim sırası: PD, PD+NDOB, SE(3)+FF, PD+FF, kesikli SE(3)).
     ex = expectedRun(name, NaN);
     switch ex.ctrl
         case 'pid',    w = 3.5;
@@ -1194,14 +1195,22 @@ function [tblS2, tblS3] = parameterTables(config_dir, launch_file)
 
     % Kazançlar (Q1 ve Q2-Q5 aynı olmalı; farklıysa ikisi de yazılır)
     sec = {'mid_level_controller', 'low_level_controller', 'se3_mid_level_controller', 'se3_low_level_controller'};
-    names = {'PID position (x, y, z)', 'PID attitude (phi, theta, psi)', ...
+    names = {'PD position (x, y, z)', 'PD attitude (phi, theta, psi)', ...
              'SE(3) position k_x, k_v (x, y, z)', 'SE(3) attitude k_R, k_Omega (phi, theta, psi)'};
     keys = {{'thrust_x', 'thrust_y', 'thrust_z'}, {'torque1', 'torque2', 'torque3'}, ...
             {'thrust_x', 'thrust_y', 'thrust_z'}, {'torque1', 'torque2', 'torque3'}};
+    % Tüm integral kazançları 0 ise (kontrolcüler PD) kazançlar kp/kd olarak yazılır
+    with_ki = false;
+    for s = 1:numel(sec)
+        for a = 1:3
+            with_ki = with_ki || yamlNumber(yamlSection(q1, sec{s}), ['ki_' keys{s}{a}]) ~= 0 ...
+                              || yamlNumber(yamlSection(q2, sec{s}), ['ki_' keys{s}{a}]) ~= 0;
+        end
+    end
     rows = cell(0, 2);
     for s = 1:numel(sec)
-        g1 = gainText(yamlSection(q1, sec{s}), keys{s});
-        g2 = gainText(yamlSection(q2, sec{s}), keys{s});
+        g1 = gainText(yamlSection(q1, sec{s}), keys{s}, with_ki);
+        g2 = gainText(yamlSection(q2, sec{s}), keys{s}, with_ki);
         if ~strcmp(g1, g2), g1 = sprintf('%s (Q1); %s (Q2-Q5)', g1, g2); end
         rows(end+1, :) = {names{s}, g1}; %#ok<AGROW>
     end
@@ -1212,15 +1221,21 @@ function [tblS2, tblS3] = parameterTables(config_dir, launch_file)
                       sprintf('%g / %g / %g / %g', 20, 1 / yamlNumber(mid1, 'dt'), ...
                               1 / yamlNumber(yamlSection(q1, 'low_level_controller'), 'dt'), ...
                               1 / yamlNumber(dyn1, 'dt'))};
-    tblS3 = cell2table(rows, 'VariableNames', {'Gain', 'Value_kp_ki_kd'});
+    if with_ki, vname = 'Value_kp_ki_kd'; else, vname = 'Value_kp_kd'; end
+    tblS3 = cell2table(rows, 'VariableNames', {'Gain', vname});
 end
 
-function txt = gainText(sec_txt, axis_keys)
-    % "kp/ki/kd" her eksen için, eksenler "; " ile
+function txt = gainText(sec_txt, axis_keys, with_ki)
+    % Her eksen için "kp/ki/kd" (with_ki) ya da "kp/kd"; eksenler "; " ile
     parts = cell(1, numel(axis_keys));
     for a = 1:numel(axis_keys)
-        parts{a} = sprintf('%g/%g/%g', yamlNumber(sec_txt, ['kp_' axis_keys{a}]), ...
-                           yamlNumber(sec_txt, ['ki_' axis_keys{a}]), yamlNumber(sec_txt, ['kd_' axis_keys{a}]));
+        kp = yamlNumber(sec_txt, ['kp_' axis_keys{a}]);
+        kd = yamlNumber(sec_txt, ['kd_' axis_keys{a}]);
+        if with_ki
+            parts{a} = sprintf('%g/%g/%g', kp, yamlNumber(sec_txt, ['ki_' axis_keys{a}]), kd);
+        else
+            parts{a} = sprintf('%g/%g', kp, kd);
+        end
     end
     txt = strjoin(parts, '; ');
 end

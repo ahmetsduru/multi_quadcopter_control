@@ -208,8 +208,8 @@ and warns if the RMS computed from the logs differs from `run_info.txt` or the f
    For example `main_ctrl = 'se3_ff'` draws the state figures of the SE(3) controller. Each run is read once and checked against its `run_info.txt` (controller,
    disturbance on/off, beta); a mismatch gives a warning. The outputs go to
    `scripts/Figures/<main_ctrl>/`: every figure as SVG (vector), the tables as CSV and all figures in
-   `all_figures.pdf`. `fig_S2_downwash_field.m` writes `scripts/Figures/FigS2.svg`. Labels: `PID+FF`, `PID`, `PID+NDOB`, `SE(3)`,
-   `SE(3)+FF`. The downwash interaction zones of Fig. 6, 7 and 9 and the z range of the Fig. 1 zoom
+   `all_figures.pdf`. `fig_S2_downwash_field.m` writes `scripts/Figures/FigS2.svg`. Labels: `PD+FF`, `PD`, `PD+NDOB`, `SE(3)`,
+   `SE(3)+FF` (all integral gains of the hierarchical controller are zero, so it is labelled PD). The downwash interaction zones of Fig. 6, 7 and 9 and the z range of the Fig. 1 zoom
    insets are taken from the logs. `TableS2_parameters.csv` (simulation parameters) and
    `TableS3_gains.csv` (PID, SE(3) and NDOB gains, update rates) are read from `config/*.yaml` and
    `launch/sequential_sim.launch`. Run `scripts/fig_S2_downwash_field.m` for Fig. S2; it also reads
