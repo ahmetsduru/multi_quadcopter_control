@@ -445,7 +445,7 @@ end
 % Komşu çift (i,j) için (komşu: istenen mesafe <= neighbor_radius):
 %   bağıl mesafe hatası  e_d,ij = ||p_i - p_j|| - ||p_i^ref - p_j^ref||
 %   formasyon hatası     e_ij   = (p_i - p_j) - (p_i^ref - p_j^ref)
-% Her an komşu çiftler üzerinden RMS alınır: E_d(t), E_F(t).
+% Her an komşu çiftler üzerinden RMS alınır: E_rel(t) (bağıl mesafe), E_form(t) (formasyon).
 runs_F   = cellfun(@(n) run_data(n), formation_ctrls, 'UniformOutput', false);
 labels_F = cellfun(@ctrlLabel, formation_ctrls, 'UniformOutput', false);
 cols_F   = cellfun(@ctrlColor, formation_ctrls, 'UniformOutput', false);
@@ -460,7 +460,7 @@ avail_F = find(~cellfun(@isempty, F));
 fig = figure('Position', [100, 100, 1000, 700]);
 axs = stackedAxes(fig, 2);
 fields_F  = {'Ed', 'EF'};
-ylabels_F = {'E_d (m)', 'E_F (m)'};
+ylabels_F = {'E_{rel} (m)', 'E_{form} (m)'};   % bağıl mesafe ve formasyon hatası
 hs = gobjects(1, numel(formation_ctrls));
 [~, ord_F] = sort(cellfun(@ctrlLineWidth, formation_ctrls(avail_F)), 'descend');   % kalından inceye çiz
 for a = 1:2

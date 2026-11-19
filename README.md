@@ -227,7 +227,7 @@ and warns if the RMS computed from the logs differs from `run_info.txt` or the f
    `main.m` also computes formation indices (Fig. F1, `Table3_formation_<controller>.csv`) for neighbouring
    UAVs (desired distance below `neighbor_radius` = 3 m): the relative distance error
    `e_d,ij = ||p_i - p_j|| - ||p_i^ref - p_j^ref||` and the formation error
-   `e_ij = (p_i - p_j) - (p_i^ref - p_j^ref)`, each as an RMS over the neighbour pairs (`E_d`, `E_F`).
+   `e_ij = (p_i - p_j) - (p_i^ref - p_j^ref)`, each as an RMS over the neighbour pairs (`E_rel`, `E_form` in Fig. F1).
    Table 3 is a Q1-Q5 matrix per controller, computed while the pair are neighbours:
    upper triangle = RMS formation error of the pair with its dominant direction, `(xy)` horizontal or
    `(z)` vertical; lower triangle = RMS relative distance error with its signed mean in parentheses,
