@@ -94,6 +94,7 @@ void SequentialSimulator::step() {
         for (size_t i = 0; i < drones_.size(); ++i) {
             kin[i].position_world = drones_[i].dyn->position() + drones_[i].cfg.initial_offset;
             kin[i].R_body_to_world = drones_[i].dyn->rotation();
+            kin[i].thrust = drones_[i].dyn->thrustActual();  // actual (motor-lagged) thrust at t_k
         }
         std::vector<Eigen::Vector3d> f_static;
         std::vector<Eigen::Vector3d> f = downwash_->compute(kin, &f_static);

@@ -4,6 +4,7 @@
 %   f_static = K * n / (dz^2 + z0^2) * exp(-r^2 / (2 sigma^2))
 %   f_total  = f_static + |f_static| .* (turb_intensity * pink_noise)
 %   v        = sqrt(|f_total| / (rho * C_coup * 4))
+% Simülasyonda kuvvet kaynak İHA'nın anlık itkisiyle orantılıdır; bu şekil askıdaki itkiyle (m g) çizilir.
 % Downwash parametreleri launch/sequential_sim.launch dosyasından, kaynak İHA kütlesi
 % config/quadcopter_params_2.yaml dosyasından (simülasyonda kaynak İHA'lar Q4 ve Q5) okunur.
 

@@ -1,6 +1,9 @@
 // Relative downwash disturbance model (ROS-free).
-// Same model as src/relative_disturbance_generator.cpp:
 //   F = 4 * R_top * [ K n / (dz^2 + z0^2) * exp(-r^2 / 2 sigma^2) * (1 + turb_intensity * pink_noise) ]
+//   K = diag(k_z r_lat, k_z r_lat, k_z),  k_z = (f_thrust / 4) * c_coup
+// f_thrust is the instantaneous total thrust of the source (upper) drone, so the downwash follows its
+// thrust (manuscript Eq. 8: W proportional to f_thrust C_coup). If no thrust is given, the hover thrust
+// m g is used (the model of src/relative_disturbance_generator.cpp).
 #ifndef MQC_SIM_DOWNWASH_MODEL_H
 #define MQC_SIM_DOWNWASH_MODEL_H
 
@@ -46,13 +49,15 @@ struct DownwashParams {
 struct DroneKinematics {
     Eigen::Vector3d position_world;  // includes the initial offset
     Eigen::Matrix3d R_body_to_world;
+    double thrust = -1.0;            // instantaneous total thrust (N); < 0: hover thrust m g
 };
 
 class DownwashModel {
 public:
     explicit DownwashModel(const DownwashParams& p) : p_(p) {}
 
-    // Register drones in a fixed order (index used in compute()).
+    // Register drones in a fixed order (index used in compute()). mass gives the hover thrust m g,
+    // used only when DroneKinematics::thrust is not set.
     void addDrone(const std::string& name, double mass);
 
     // Disturbance force (world frame) on every drone. Advances each drone's noise exactly once.
@@ -64,7 +69,7 @@ public:
 private:
     DownwashParams p_;
     std::vector<std::string> names_;
-    std::vector<Eigen::Matrix3d> k_matrices_;
+    std::vector<double> hover_thrust_;
     std::vector<PinkNoise3D> noise_;
     PinkNoise3D makeNoiseFor(const std::string& drone_name) const;
 };

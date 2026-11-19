@@ -50,19 +50,8 @@ PinkNoise3D DownwashModel::makeNoiseFor(const std::string& drone_name) const {
 }
 
 void DownwashModel::addDrone(const std::string& name, double mass) {
-    const double g = 9.81;
-    const double thrust_per_rotor = mass * g / 4.0;
-    const double k_z = thrust_per_rotor * p_.c_coup;
-    const double k_x = k_z * p_.r_lat;
-    const double k_y = k_z * p_.r_lat;
-
-    Eigen::Matrix3d k;
-    k << k_x, 0.0, 0.0,
-         0.0, k_y, 0.0,
-         0.0, 0.0, k_z;
-
     names_.push_back(name);
-    k_matrices_.push_back(k);
+    hover_thrust_.push_back(mass * 9.81);
     noise_.push_back(makeNoiseFor(name));
 }
 
@@ -86,7 +75,12 @@ std::vector<Eigen::Vector3d> DownwashModel::compute(const std::vector<DroneKinem
         const Eigen::Vector3d& P_top = drones[top].position_world;
         const Eigen::Matrix3d& R_top_to_world = drones[top].R_body_to_world;
         const Eigen::Matrix3d R_world_to_top = R_top_to_world.transpose();
-        const Eigen::Matrix3d& k_matrix = k_matrices_[top];
+
+        // Influence matrix from the source drone's instantaneous thrust (per rotor: thrust / 4)
+        const double thrust_top = drones[top].thrust >= 0.0 ? drones[top].thrust : hover_thrust_[top];
+        const double k_z = (thrust_top / 4.0) * p_.c_coup;
+        const Eigen::Matrix3d k_matrix =
+            Eigen::Vector3d(k_z * p_.r_lat, k_z * p_.r_lat, k_z).asDiagonal();
 
         for (size_t bot = 0; bot < N; ++bot) {
             if (top == bot) continue;
