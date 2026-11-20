@@ -74,9 +74,10 @@ ndob_est_cols   = [0 0 0; 0 0.7 0.85];      % Fig. 6: kestirim renkleri (siyah, 
 s5_drone    = 1;      % Fig. S5 drone'u
 
 % Formasyon ölçütleri (Fig. F1, Table 3)
-% Komşuluk zamana bağlıdır: referans (istenen) mesafesi neighbor_radius'tan küçük olan çiftler
-% o anda komşudur (formasyon uçuş boyunca değiştiği için sabit bir graf kullanılmaz).
-neighbor_radius = 3.0;   % m
+% Komşuluk: referans (istenen) mesafesi neighbor_radius'tan küçük olan çiftler o anda komşudur.
+% 50 m, bu senaryoda istenen en büyük İHA arası mesafeden (8 m) büyük olduğu için tüm çiftler (10 çift)
+% her an dahil edilir; daha küçük bir değer yalnızca yakın çiftleri ölçer.
+neighbor_radius = 50.0;   % m
 
 out_folder = fullfile(script_dir, 'Figures', main_ctrl);   % her ana koşunun çıktıları ayrı klasörde (SVG + CSV)
 output_pdf = fullfile(out_folder, 'all_figures.pdf');     % tüm figürler tek dosyada (göz atmak için)

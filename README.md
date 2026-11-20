@@ -225,7 +225,8 @@ and warns if the RMS computed from the logs differs from `run_info.txt` or the f
    plots use the full 500 Hz data.
 
    `main.m` also computes formation indices (Fig. F1, `Table3_formation_<controller>.csv`) for neighbouring
-   UAVs (desired distance below `neighbor_radius` = 3 m): the relative distance error
+   UAV pairs (desired distance below `neighbor_radius` = 50 m, i.e. all 10 pairs at all times in this
+   scenario, where the largest desired distance is 8 m): the relative distance error
    `e_d,ij = ||p_i - p_j|| - ||p_i^ref - p_j^ref||` and the formation error
    `e_ij = (p_i - p_j) - (p_i^ref - p_j^ref)`, each as an RMS over the neighbour pairs (`E_rel`, `E_form` in Fig. F1).
    Table 3 is a Q1-Q5 matrix per controller, computed while the pair are neighbours:
