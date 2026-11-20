@@ -56,7 +56,7 @@ fig2_window     = 0.05;   % s; Fig. 2'deki hata bu pencerelerdeki RMS'tir. Refer
 fig8_ctrls      = {'pid_ff', 'pid', 'se3_ff', 'se3'};   % Fig. 8 / Table 2: ablasyon çiftleri sırayla
                                                % (ileri beslemeli, ileri beslemesiz), (..., ...)
 fig8_nominal    = {'pid_nominal', 'se3_nominal'};   % Table 2: her çiftin bozucusuz koşusu (ΔRMSE için)
-formation_ctrls = {'pid_ff', 'pid', 'se3_ff'};   % Fig. F1 / Table 3
+formation_ctrls = {'pid_ff', 'pid', 'ndob'};   % Fig. F1 / Table 3: kompanzasyon karşılaştırması (Fig. 2 ile aynı)
 mismatch_ctrls  = {'pid', 'ndob', 'pid_ff'};   % Fig. 9 / Table 4: kompanzasyon yok / gözlemci / model FF
 nominal_run     = 'pid_nominal';               % Table 4: bozucusuz koşu (disturbance_enabled:=false)
 beta_main       = 0.05;                        % ana koşudaki psi_filter_beta

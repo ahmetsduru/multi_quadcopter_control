@@ -201,7 +201,7 @@ and warns if the RMS computed from the logs differs from `run_info.txt` or the f
    | `fig2_ctrls` | `pid_ff`, `ndob`, `pid` | Fig. 2, Table 1: comparison of the compensations (2-5 runs; the first is the reference). Fig. 2 plots the RMS of the position error over each 50 ms reference update period (`fig2_window`) |
    | `fig8_ctrls` | `pid_ff`, `pid`, `se3_ff`, `se3` | Fig. 8, Table 2: pairs (with feedforward, without), plotted like Fig. 2 for Q2 and Q3 |
    | `fig8_nominal` | `pid_nominal`, `se3_nominal` | Table 2: disturbance-free run of each pair; the table gives the disturbance-free RMSE, the increase caused by the downwash (dRMSE) and the share of it removed by the feedforward |
-   | `formation_ctrls` | `pid_ff`, `pid`, `se3_ff` | Fig. F1, Table 3 |
+   | `formation_ctrls` | `pid_ff`, `pid`, `ndob` | Fig. F1, Table 3 (same compensations as Fig. 2) |
    | `mismatch_ctrls` | `pid`, `ndob`, `pid_ff` | Fig. 9, Table 4 (no compensation / observer / model feedforward) |
    | `nominal_run` | `pid_nominal` | Table 4 (disturbance-free reference) |
 
