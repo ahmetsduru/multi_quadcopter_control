@@ -62,7 +62,7 @@ f_des = Kp e_p + Ki ∫e_p + Kd e_v + m a_des + m g - f_comp
 
 | `controller` | `f_comp` | Description |
 |---|---|---|
-| `pid_ff` (default) | `f_dw` | Modelled downwash as feedforward (proposed controller) |
+| `pid_ff` (default) | `f_dw` | Modelled downwash as feedforward |
 | `pid` | `0` | No disturbance compensation (ablation) |
 | `ndob` | `Δf` | Disturbance estimated by a nonlinear disturbance observer |
 
@@ -170,7 +170,7 @@ and warns if the RMS computed from the logs differs from `run_info.txt` or the f
 
    | Run (folder) | Settings |
    |---|---|
-   | `pid_ff` | PID + downwash feedforward (proposed) |
+   | `pid_ff` | PID + downwash feedforward |
    | `pid` | PID, no feedforward |
    | `ndob` | PID + NDOB, the controller does not use the downwash model |
    | `se3` | geometric SE(3), no feedforward |
