@@ -117,7 +117,7 @@ private:
         Eigen::Matrix3d dR = R * skew(w);
         for (int i = 0; i < 9; ++i) dxdt[3 + i] = dR(i / 3, i % 3);
 
-        Eigen::Vector3d drag = -0.5 * rho * (Cd_trans * A_trans * V.array().square().matrix());
+        Eigen::Vector3d drag = -0.5 * rho * (Cd_trans * A_trans * V) * V.norm();  // Eq. 14
         Eigen::Vector3d acc = (R * thrust_vec + drag + m * g + disturbance) / m;
         for (int i = 0; i < 3; ++i) dxdt[12 + i] = acc[i];
 
@@ -159,7 +159,7 @@ private:
                 atan2(R(1,0), R(0,0)));
 
             Eigen::Vector3d V(&x[12]);
-            Eigen::Vector3d drag = -0.5 * rho * (Cd_trans * A_trans * V.array().square().matrix());
+            Eigen::Vector3d drag = -0.5 * rho * (Cd_trans * A_trans * V) * V.norm();  // Eq. 14
             Eigen::Vector3d thrust_vec(0, 0, thrust_actual);
             Eigen::Vector3d acc = (R * thrust_vec + drag + m * g + disturbance_force) / m;
             publishVec(acceleration_pub, acc[0], acc[1], acc[2]);

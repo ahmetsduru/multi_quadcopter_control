@@ -1,0 +1,121 @@
+%% Fig. S2 - DOWNWASH BOZUCU MODELİ: KUVVET VE HIZ ALANI (gövde x-z düzlemi)
+% Simülasyondaki modelle aynı (src/sim/downwash_model.cpp), TEK pervane için (şekil açıklamasındaki gibi;
+% simülasyonda drone başına toplam kuvvet bunun 4 katıdır):
+%   f_static = K * n / (dz^2 + z0^2) * exp(-r^2 / (2 sigma^2))
+%   f_total  = f_static + |f_static| .* (turb_intensity * pink_noise)
+%   v        = sqrt(|f_total| / (rho * C_coup * 4))
+% Simülasyonda kuvvet kaynak İHA'nın anlık itkisiyle orantılıdır; bu şekil askıdaki itkiyle (m g) çizilir.
+% Downwash parametreleri launch/sequential_sim.launch dosyasından, kaynak İHA kütlesi
+% config/quadcopter_params_2.yaml dosyasından (simülasyonda kaynak İHA'lar Q4 ve Q5) okunur.
+
+clc; clear; close all;
+
+%% === AYARLAR ===
+script_dir = fileparts(mfilename('fullpath'));
+if isempty(script_dir), script_dir = pwd; end
+pkg_dir    = fullfile(script_dir, '..');
+out_folder = fullfile(script_dir, 'Figures');
+if ~exist(out_folder, 'dir'), mkdir(out_folder); end
+
+launch_txt = fileread(fullfile(pkg_dir, 'launch', 'sequential_sim.launch'));
+yaml_txt   = fileread(fullfile(pkg_dir, 'config', 'quadcopter_params_2.yaml'));
+
+m_drone        = yamlNumber(yaml_txt, 'mass');            % kaynak (üstteki) drone kütlesi (kg)
+g              = 9.81;
+C_coup         = launchParam(launch_txt, 'c_coup');       % c_coup (m^2)
+r_lat          = launchParam(launch_txt, 'r_lat');        % kappa_lat
+z0             = launchParam(launch_txt, 'z0');           % z0 (m)
+sigma          = launchParam(launch_txt, 'sigma');        % sigma (m)
+turb_intensity = launchParam(launch_txt, 'turb_intensity'); % lambda
+rho_air        = yamlNumber(yaml_txt, 'rho');
+noise_seed     = 42;             % gürültü haritası tekrarlanabilir olsun
+fprintf('Fig. S2: m = %g kg, C_coup = %g, kappa_lat = %g, z0 = %g m, sigma = %g m, lambda = %g\n', ...
+        m_drone, C_coup, r_lat, z0, sigma, turb_intensity);
+
+font_name = 'Times New Roman';
+
+%% === MODEL ===
+thrust_per_rotor = m_drone * g / 4;
+K_z = thrust_per_rotor * C_coup;
+K   = diag([K_z * r_lat, K_z * r_lat, K_z]);
+
+x_range = -1.5 : 0.02 : 1.5;
+z_range = -2.5 : 0.02 : -0.1;
+[X, Z]  = meshgrid(x_range, z_range);
+
+rng(noise_seed);
+[rows, cols] = size(X);
+pink = {pinkNoiseField(rows, cols), pinkNoiseField(rows, cols), pinkNoiseField(rows, cols)};
+
+F_mag = zeros(size(X));
+V_mag = zeros(size(X));
+for idx = 1:numel(X)
+    p_rel = [X(idx); 0; Z(idx)];          % hedef - kaynak (kaynak orijinde)
+    dist  = norm(p_rel);
+    if dist < 0.01 || p_rel(3) >= 0, continue; end
+    n_vec = p_rel / dist;
+    d_z   = -p_rel(3);
+    r2    = p_rel(1)^2 + p_rel(2)^2;
+
+    decay    = 1 / (d_z^2 + z0^2) * exp(-r2 / (2 * sigma^2));
+    f_static = K * n_vec * decay;
+    noise    = [pink{1}(idx); pink{2}(idx); pink{3}(idx)];
+    f_total  = f_static + abs(f_static) .* (turb_intensity * noise);   % tek pervane
+
+    F_mag(idx) = norm(f_total);
+    V_mag(idx) = sqrt(F_mag(idx) / (rho_air * C_coup * 4 + eps));
+end
+
+%% === GÖRSELLEŞTİRME ===
+fig = figure('Color', 'w', 'Position', [100, 100, 1200, 600]);
+tl  = tiledlayout(fig, 1, 2, 'TileSpacing', 'compact', 'Padding', 'compact');
+fields = {F_mag, V_mag};
+titles = {'Force Field [N]', 'Velocity Field [m/s]'};
+for k = 1:2
+    ax = nexttile(tl);
+    contourf(ax, X, Z, fields{k}, 100, 'LineStyle', 'none');
+    hold(ax, 'on');
+    plot(ax, 0, 0, 'kp', 'MarkerSize', 14, 'MarkerFaceColor', 'r');
+    text(ax, 0.1, 0.1, 'Source', 'Color', 'k', 'FontWeight', 'bold', 'FontSize', 14, 'FontName', font_name);
+    colormap(ax, jet);
+    clim_max = max(fields{k}(:));
+    if clim_max > 0, caxis(ax, [0 clim_max]); end
+    cb = colorbar(ax);
+    set(cb, 'LineWidth', 2, 'FontSize', 14, 'FontWeight', 'bold', 'FontName', font_name);
+    title(ax, titles{k}, 'FontSize', 14, 'FontWeight', 'bold', 'FontName', font_name);
+    xlabel(ax, 'x (m)', 'FontSize', 14, 'FontWeight', 'bold', 'FontName', font_name);
+    ylabel(ax, 'z (m)', 'FontSize', 14, 'FontWeight', 'bold', 'FontName', font_name);
+    axis(ax, 'equal'); xlim(ax, [-0.7 0.7]); ylim(ax, [-2.5 0.5]);
+    set(ax, 'LineWidth', 2, 'FontSize', 14, 'FontWeight', 'bold', 'Box', 'on', 'FontName', font_name);
+end
+
+set(fig, 'PaperPositionMode', 'auto');
+try
+    print(fig, fullfile(out_folder, 'FigS2.svg'), '-dsvg', '-vector');     % R2022b ve sonrası
+catch
+    print(fig, fullfile(out_folder, 'FigS2.svg'), '-dsvg', '-painters');   % eski sürümler
+end
+fprintf('Fig. S2 kaydedildi: %s\n', fullfile(out_folder, 'FigS2.svg'));
+
+%% === YARDIMCI FONKSİYONLAR ===
+function v = launchParam(txt, name)
+    tok = regexp(txt, ['<param name="' name '" value="([^"]+)"'], 'tokens', 'once');
+    if isempty(tok), error('launch parametresi bulunamadı: %s', name); end
+    v = str2double(tok{1});
+end
+
+function v = yamlNumber(txt, key)
+    tok = regexp(txt, ['(?m)^\s*' key ':\s*([-+0-9.eE]+)'], 'tokens', 'once');
+    if isempty(tok), error('yaml anahtarı bulunamadı: %s', key); end
+    v = str2double(tok{1});
+end
+
+%% === PINK NOISE ALANI (1/f, spektral sentez) ===
+function field = pinkNoiseField(rows, cols)
+    F = fftshift(fft2(randn(rows, cols)));
+    [cx, cy] = meshgrid(-(cols/2):(cols/2 - 1), -(rows/2):(rows/2 - 1));
+    radius = sqrt(cx.^2 + cy.^2);
+    radius(radius == 0) = 1;
+    field = real(ifft2(ifftshift(F ./ radius)));
+    field = field / max(abs(field(:)));
+end

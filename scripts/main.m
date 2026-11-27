@@ -1,1435 +1,1388 @@
-clear all;
-clc;
+%% MAKALE GRAFİKLERİ - Disturbance-Aware Hybrid Trajectory Generation and Control for Multirotor Swarms
+% Sıralı simülasyonun (launch/sequential_sim.launch) loglarından makaledeki ve ek materyaldeki
+% grafikleri ve tabloları üretir:
+%
+% Her simülasyon koşusu kendi klasörüne yazar: log/<koşu>/
+%   pid_ff, pid, ndob, se3, se3_ff : bozuculu koşular, kontrolcü adıyla (launch: controller:=...)
+%   pid_nominal                     : bozucusuz PID (disturbance_enabled:=false)
+%   pid_ff_beta0.1                  : PID+FF, yaw filtresi beta = 0.1
+% Hepsi tek komutla üretilir:
+%   rosrun multi_quadcopter_control run_paper_sims.sh
+% veya tek tek (log_dir verilmezse log/<controller>/ klasörüne yazılır):
+%   roslaunch multi_quadcopter_control sequential_sim.launch rviz:=false real_time_factor:=0 shutdown_on_finish:=true controller:=se3
+%
+% Hangi grafiğin hangi koşuyu kullanacağı AYARLAR bölümünde seçilir (main_ctrl, fig2_ctrls, ...).
+% Varsayılanlarla makaledeki ve ek materyaldeki grafik ve tablolar üretilir:
+%   Fig. 1  Pozisyon (x, y, z) + z zoom                         -> main_ctrl
+%   Fig. 2  Anlık konum hatası (50 ms pencere RMS), 2-5 koşu   -> fig2_ctrls
+%   Fig. 3  Hız / Fig. 4 İvme / Fig. 5 Euler açıları            -> main_ctrl
+%   Fig. 6  Bozucu kuvvetler (main_ctrl) ve NDOB kestirimi (mismatch_ctrls'deki NDOB koşusu)
+%   Fig. 7  Thrust                                              -> main_ctrl
+%   Fig. 8  Ablasyon: ileri besleme var / yok (50 ms pencere RMS) -> fig8_ctrls
+%   Fig. 9  Uyumsuz kompanzatör: downwash vs NDOB kestirimi ve konum hatası -> mismatch_ctrls
+%   Fig. S5 Drone 1 hibrit yörünge ve waypointler               -> main_ctrl + config/*.yaml
+%   Fig. S6 Drone 2 yönelim hatası, beta karşılaştırması        -> main_ctrl vs beta_run
+%   Fig. F1 Komşu İHA'lar arası bağıl mesafe ve formasyon hatası -> formation_ctrls
+%   Table 1 RMSE/ISE, ilk koşunun diğerlerine göre farkı (%)   -> fig2_ctrls
+%   Table 2 Bozucu bastırma: bozucusuz RMSE, ΔRMSE, ileri beslemenin giderdiği pay -> fig8_ctrls + fig8_nominal
+%   Table 3 İHA çiftleri matrisi: üst üçgen formasyon hatası (RMS, baskın yön xy/z),
+%           alt üçgen bağıl mesafe hatası (RMS, işaretli ortalama) -> formation_ctrls
+%   Table 4 Uyumsuz kompanzatör: RMSE ve bozucusuz koşuya göre artış (ΔRMSE) -> mismatch_ctrls + nominal_run
+%   Table S2 Simülasyon parametreleri (config/*.yaml + launch/sequential_sim.launch)
+%   Table S3 Kontrolcü kazançları (PID, SE(3), NDOB)                -> config/*.yaml
+%   (Fig. S2 için: fig_S2_downwash_field.m)
+% Her figür SVG (vektör) olarak scripts/Figures/<main_ctrl>/ klasörüne
+% yazılır. Eksik koşulara bağlı grafikler uyarı verilerek atlanır.
+
+clear; clc; close all;
+warning('off', 'MATLAB:print:ContentTypeImageSuggested');   % vektör çıktı isteniyor
+
+%% === AYARLAR ===
 num_drones = 5;
-% Dizin yolunu kendi bilgisayarına göre tekrar kontrol et
-log_dir = '/home/asd/catkin_ws/src/multi_quadcopter_control/log/';
 
-% Çıktı dosyası ve klasörü ayarları
-output_pdf = 'all_drones_plots_fixed.pdf'; 
-eps_folder = 'EPS_Results'; % EPS dosyalarının kaydedileceği klasör
+script_dir = fileparts(mfilename('fullpath'));
+if isempty(script_dir), script_dir = pwd; end
+pkg_dir    = fullfile(script_dir, '..');
 
-% PDF varsa sil (temiz başlangıç)
-if isfile(output_pdf)
-    delete(output_pdf);
+% --- Hangi grafik hangi koşuyu kullanır? (koşu adı = log/ altındaki klasör adı) ---
+% Kontrolcüler (etiket): pid_ff (PD+FF), pid (PD), ndob (PD+NDOB), se3 (SE(3)), se3_ff (SE(3)+FF).
+% Hiyerarşik kontrolcünün tüm integral kazançları 0 olduğu için grafik ve tablolarda PD olarak adlandırılır.
+main_ctrl       = 'pid_ff';                    % Fig. 1, 3-7, S5, S6'nın ana koşusu
+fig2_ctrls      = {'pid_ff', 'ndob', 'pid'};  % Fig. 2 / Table 1: kompanzasyon karşılaştırması, 2-5 koşu (ilki referans: Table 1'deki
+                                                       % fark % buna göre; çizgilerde en üstte). Renkler: ctrlColor
+fig2_window     = 0.05;   % s; Fig. 2'deki hata bu pencerelerdeki RMS'tir. Referans 20 Hz'de (50 ms) güncellendiği
+                          % için ham hata her periyotta testere dişi çizer; 50 ms RMS bunu düzler ve karesel
+                          % ortalaması tablodaki RMSE'ye eşittir.
+fig8_ctrls      = {'pid_ff', 'pid', 'se3_ff', 'se3'};   % Fig. 8 / Table 2: ablasyon çiftleri sırayla
+                                               % (ileri beslemeli, ileri beslemesiz), (..., ...)
+fig8_nominal    = {'pid_nominal', 'se3_nominal'};   % Table 2: her çiftin bozucusuz koşusu (ΔRMSE için)
+formation_ctrls = {'pid_ff', 'pid', 'ndob'};   % Fig. F1 / Table 3: kompanzasyon karşılaştırması (Fig. 2 ile aynı)
+mismatch_ctrls  = {'pid', 'ndob', 'pid_ff'};   % Fig. 9 / Table 4: kompanzasyon yok / gözlemci / model FF
+nominal_run     = 'pid_nominal';               % Table 4: bozucusuz koşu (disturbance_enabled:=false)
+beta_main       = 0.05;                        % ana koşudaki psi_filter_beta
+beta_alt        = 0.1;                         % Fig. S6'da karşılaştırılan psi_filter_beta
+beta_run        = sprintf('%s_beta%g', main_ctrl, beta_alt);
+
+log_root   = fullfile(pkg_dir, 'log');
+config_dir = fullfile(pkg_dir, 'config');      % Fig. S5 waypointleri
+
+s6_drone    = 2;      % Fig. S6 drone'u
+fig8_drones = [2 3];  % Fig. 8 drone'ları
+fig9_drones = [2 3];  % Fig. 9 drone'ları (downwash etkisindeki İHA'lar)
+ndob_est_drones = [2 3];                    % Fig. 6: NDOB kestirimi çizilen İHA'lar (downwash etkisindekiler)
+ndob_est_cols   = [0 0 0; 0 0.7 0.85];      % Fig. 6: kestirim renkleri (siyah, camgöbeği), İHA renklerinden farklı
+s5_drone    = 1;      % Fig. S5 drone'u
+
+% Formasyon ölçütleri (Fig. F1, Table 3)
+% Komşuluk: referans (istenen) mesafesi neighbor_radius'tan küçük olan çiftler o anda komşudur.
+% 50 m, bu senaryoda istenen en büyük İHA arası mesafeden (8 m) büyük olduğu için tüm çiftler (10 çift)
+% her an dahil edilir; daha küçük bir değer yalnızca yakın çiftleri ölçer.
+neighbor_radius = 50.0;   % m
+
+out_folder = fullfile(script_dir, 'Figures', main_ctrl);   % her ana koşunun çıktıları ayrı klasörde (SVG + CSV)
+output_pdf = fullfile(out_folder, 'all_figures.pdf');     % tüm figürler tek dosyada (göz atmak için)
+
+% Zaman ekseni (makaledeki gibi 0-60 s)
+t_axis_max = 60;
+
+% Yörünge geçiş anları (s). Sıralı simülasyonda deterministiktir:
+% cubic spline -> min snap (8.05 s) -> min snap (21.05 s) -> min jerk (32.55 s), bitiş 54.55 s.
+t_switch = [8.05 21.05 32.55];
+
+% Downwash etkileşim bölgeleri (Fig. 6, 7, 9) ana koşunun loglarından bulunur (|f_dist| > interact_thr):
+%   yeşil: ilk downwash etkisinin başladığı an -> iki İHA'nın aynı anda etkilendiği son an
+%          (Q5 -> Q2 ve Q4 -> Q3)
+%   sarı : yeşilin sonu -> t_axis_max (yalnızca Q2 etkileniyor: Q5, sonra Q4 ve Q5)
+interact_thr = 0.05;   % N
+
+% Fig. 1 z zoom pencereleri (s). Zoom'un z aralığı, zoom_drones'un (downwash etkisindeki İHA'lar)
+% o penceredeki gerçek ve istenen z değerlerinden belirlenir.
+zoom_windows = [23 25; 34 36];
+zoom_colors  = {'r', 'b'};
+zoom_drones  = [2 3];
+
+% Çubuk grafikleri (Fig. 2, 8, S6): her sparse_factor örnekten biri (500 Hz log -> 0.6 s)
+sparse_factor = 300;
+
+% Çizgi grafikleri her plot_step örnekten birini çizer (500 Hz log -> 100 Hz). Vektör SVG dosyalarını
+% küçültür ve hızlandırır; metrikler (RMSE, ISE) ve çubuk grafikleri her zaman tam veriyi kullanır.
+plot_step = 5;
+
+% Grafik stili
+font_name = 'Times New Roman';
+font_size = 20;
+line_w    = 3;     % gerçek değer çizgileri
+ref_w     = 2;     % istenen değer çizgileri: siyah noktalı, gerçek değerlerin üstünde (Fig. 5'te yok)
+ref_col   = [0 0 0];
+colors    = lines(num_drones);
+dark_gray = [0.2 0.2 0.2];
+
+c_phase  = [1 0.88 0.88; 0.85 1 1; 0.85 1 0.85; 1 1 0.9];   % pembe, mavi, yeşil, sarı
+c_green  = [0.85 1 0.85];
+c_yellow = [1 1 0.9];
+
+%% === HAZIRLIK ===
+if ~exist(out_folder, 'dir'), mkdir(out_folder); end
+if isfile(output_pdf), delete(output_pdf); end
+
+
+phase_zones    = [[0 t_switch]' [t_switch t_axis_max]'];
+axis_names     = ["x", "y", "z"];
+
+S = struct('font_name', font_name, 'font_size', font_size, 'line_w', line_w, 'ref_w', ref_w, ...
+           'ref_col', ref_col, 't_max', t_axis_max);
+
+%% === VERİ OKUMA (gereken her koşu bir kez) ===
+% Her koşu log/<koşu>/ klasöründen okunur ve run_info.txt ile beklenen kontrolcü, bozucu ve beta
+% ayarına sahip olduğu kontrol edilir.
+run_names = unique([{main_ctrl, nominal_run, beta_run}, fig8_ctrls, fig8_nominal, ...
+                    fig2_ctrls, formation_ctrls, mismatch_ctrls], 'stable');
+run_data = containers.Map();
+for k = 1:numel(run_names)
+    rdir = fullfile(log_root, run_names{k});
+    run_data(run_names{k}) = readLogs(rdir, num_drones, plot_step);
+    checkRunInfo(rdir, run_data(run_names{k}), run_names{k}, expectedRun(run_names{k}, beta_main));
 end
 
-% EPS klasörü yoksa oluştur
-if ~exist(eps_folder, 'dir')
-    mkdir(eps_folder);
+D = run_data(main_ctrl);
+valid = find([D.ok]);
+if isempty(valid)
+    error('Ana koşunun (%s) logları okunamadı: %s', main_ctrl, fullfile(log_root, main_ctrl));
 end
+fprintf('Ana koşu: %s (%s), %d drone logu\n', main_ctrl, ctrlLabel(main_ctrl), numel(valid));
+D_f2   = cellfun(@(n) run_data(n), fig2_ctrls, 'UniformOutput', false);   % Fig. 2 / Table 1
+f2_ok  = cellfun(@(x) any([x.ok]), D_f2);
+D_f8   = cellfun(@(n) run_data(n), fig8_ctrls, 'UniformOutput', false);   % Fig. 8 / Table 2
+f8_ok  = cellfun(@(x) any([x.ok]), D_f8);
+D_f8n  = cellfun(@(n) run_data(n), fig8_nominal, 'UniformOutput', false);  % Table 2: bozucusuz koşular
+D_beta = run_data(beta_run);         % Fig. S6
+D_nom  = run_data(nominal_run);      % Table 4
+D_none = run_data(mismatch_ctrls{1});   % Fig. 9 / Table 4: kompanzasyon yok
+D_obs  = run_data(mismatch_ctrls{2});   %                    gözlemci (NDOB)
+D_ff   = run_data(mismatch_ctrls{3});   %                    model tabanlı FF
+beta_log_dir     = fullfile(log_root, beta_run);
+nominal_log_dir  = fullfile(log_root, nominal_run);
 
-colors = lines(num_drones);
+% Downwash etkileşim bölgeleri (ana koşunun bozucu kuvvetlerinden)
+interact_zones = interactionZones(D, interact_thr, t_axis_max);
+interact_cols  = [c_green; c_yellow];
+interact_cols  = interact_cols(1:size(interact_zones, 1), :);
+fprintf('Downwash etkileşim bölgeleri (s): %s\n', mat2str(interact_zones));
 
-% === VERİ SAKLAMA HÜCRELERİ ===
-thrust_all = cell(num_drones, 1);
-time_all = cell(num_drones, 1);
-
-% İvme verilerini zoom grafiğinde tekrar okumamak için hafızaya alıyoruz
-acc_x_all = cell(num_drones, 1);
-acc_y_all = cell(num_drones, 1);
-acc_z_all = cell(num_drones, 1);
-ref_acc_x = cell(num_drones, 1);
-ref_acc_y = cell(num_drones, 1);
-ref_acc_z = cell(num_drones, 1);
-
-
-%% === VERİ OKUMA DÖNGÜSÜ ===
-for i = 1:num_drones
-    filename = fullfile(log_dir, sprintf('drone%d_log.txt', i));
-    if ~isfile(filename)
-        warning('File not found: %s', filename);
-        continue;
+%% === Fig. 1 - POZİSYON + Z ZOOM ===
+fig = figure('Position', [100, 100, 1000, 900]);
+axs = stackedAxes(fig, 3);
+lgd_handles = gobjects(0);
+for a = 1:3
+    ax = axs(a); hold(ax, 'on');
+    if a == 1
+        lgd_handles(end+1) = plot(ax, NaN, NaN, ':', 'Color', ref_col, 'LineWidth', ref_w, ...
+                                  'DisplayName', 'Desired'); %#ok<SAGROW>
     end
-
-    data = readtable(filename, 'VariableNamingRule', 'preserve');
-    time = data{:, "time"} - data{1, "time"};
-    time_all{i} = time;
-
-    % Thrust verilerini sakla
-    thrust_all{i} = data{:, "r_thr"};
-    
-    % İvme verilerini sakla
-    acc_x_all{i} = data{:, "a_acc.x"};
-    acc_y_all{i} = data{:, "a_acc.y"};
-    acc_z_all{i} = data{:, "a_acc.z"};
-    
-    ref_acc_x{i} = data{:, "r_acc.x"};
-    ref_acc_y{i} = data{:, "r_acc.y"};
-    ref_acc_z{i} = data{:, "r_acc.z"};
+    for i = valid
+        h = plot(ax, D(i).tp, D(i).Tp{:, "a_pos." + axis_names(a)}, '-', 'Color', colors(i,:), ...
+                 'LineWidth', line_w, 'DisplayName', sprintf('Q %d', i));
+        if a == 1, lgd_handles(end+1) = h; else, h.HandleVisibility = 'off'; end %#ok<SAGROW>
+    end
+    for i = valid                                 % istenen değerler (üstte, siyah noktalı)
+        plot(ax, D(i).tp, D(i).Tp{:, "r_pos." + axis_names(a)}, ':', 'Color', ref_col, 'LineWidth', ref_w, ...
+             'HandleVisibility', 'off');
+    end
+    yl = ylim(ax);
+    if a < 3
+        ylim(ax, [yl(1) - 1, yl(2) + 1]);
+    else
+        ylim(ax, [yl(1) - 0.4, yl(2) + 0.2]);   % altta zoom inset'leri için boşluk
+    end
+    xlabel(ax, 't (s)', 'FontWeight', 'bold', 'FontSize', font_size, 'FontName', font_name);
+    addZones(ax, phase_zones, c_phase);
+    styleAxes(ax, S);
+    ylabel(ax, sprintf('%s (m)', axis_names(a)), 'FontWeight', 'bold', 'FontSize', font_size, ...
+           'FontName', font_name);
 end
-
-% === RENK VE ZAMAN TANIMLARI ===
-t_green = [23.5 33.5 33.5 23.5];       color_green = [0.85 1 0.85];
-t_yellow = [33.5 60 60 33.5];      color_yellow = [1 1 0.9];
-
-t_zone1 = [0 8 8 0];      c_zone1 = [1 0.88 0.88];    % Pembe
-t_zone2 = [8 21 21 8];    c_zone2 = [0.85 1 1];       % Mavi
-t_zone3 = [21 33 33 21];  c_zone3 = [0.85 1 0.85];    % Yeşil
-t_zone4 = [33 60 60 33];  c_zone4 = [1 1 0.9];        % Sarı
-
-
-%% === 1. TÜM DRONE'LAR - THRUST ===
-fig = figure;
-hold on;
-lgd_handles = [];
-for i = 1:num_drones
-    if ~isempty(thrust_all{i})
-        h = plot(time_all{i}, thrust_all{i}, 'LineWidth', 2, 'Color', colors(i,:), 'DisplayName', sprintf('Q %d', i));
-        lgd_handles = [lgd_handles, h];
+hZ = ax;
+zoom_zlim = zeros(size(zoom_windows));
+for w = 1:size(zoom_windows, 1)
+    vals = [];
+    for i = zoom_drones
+        if ~D(i).ok, continue; end
+        m = D(i).t >= zoom_windows(w, 1) & D(i).t <= zoom_windows(w, 2);
+        vals = [vals; D(i).T{m, "a_pos.z"}; D(i).T{m, "r_pos.z"}]; %#ok<AGROW>
+    end
+    zoom_zlim(w, :) = padLimits(vals, 0.1);
+    for tw = zoom_windows(w, :)
+        line(hZ, [tw tw], zoom_zlim(w, :), 'Color', zoom_colors{w}, 'LineStyle', '--', ...
+             'LineWidth', line_w, 'HandleVisibility', 'off');
     end
 end
-yl = ylim; yl = [yl(1)*0.9, yl(2)*1.1]; ylim(yl); 
-p1 = patch(t_green, [yl(1) yl(1) yl(2) yl(2)], color_green, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-p2 = patch(t_yellow, [yl(1) yl(1) yl(2) yl(2)], color_yellow, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-uistack(p1, 'bottom'); uistack(p2, 'bottom');
-grid off; xlim([0 60]); ylim([3 6.8]);
-set(gca, 'FontName', 'Times New Roman', 'FontSize', 20, 'FontWeight', 'bold', 'LineWidth', 2, 'Box', 'on', 'Layer', 'top');
-xlabel('t (s)', 'FontWeight', 'bold', 'FontSize', 20, 'FontName', 'Times New Roman');
-ylabel('||f_{thrust}|| (N)', 'FontWeight', 'bold', 'FontSize', 20, 'FontName', 'Times New Roman');
+main_pos     = get(hZ, 'Position');
+inset_height = main_pos(4) * 0.26;
+inset_y      = main_pos(2) + 0.03;
+inset_x      = [0.05 0.35];
+for w = 1:size(zoom_windows, 1)
+    ax_zoom = axes(fig, 'Position', [main_pos(1) + inset_x(w), inset_y, main_pos(3) * 0.25, inset_height]);
+    box(ax_zoom, 'on'); hold(ax_zoom, 'on');
+    for i = valid
+        plot(ax_zoom, D(i).tp, D(i).Tp{:, "a_pos.z"}, 'Color', colors(i,:), 'LineWidth', line_w);
+    end
+    for i = valid
+        plot(ax_zoom, D(i).tp, D(i).Tp{:, "r_pos.z"}, ':', 'Color', ref_col, 'LineWidth', ref_w);
+    end
+    xlim(ax_zoom, zoom_windows(w, :));
+    ylim(ax_zoom, zoom_zlim(w, :));
+    set(ax_zoom, 'FontSize', 9, 'FontName', font_name, 'XTick', [], 'YTick', [], 'LineWidth', 1.5);
+end
+addTopLegend(lgd_handles, [0.1 0.94 0.8 0.05], S);
+saveFigure(fig, out_folder, 'Fig1.svg', output_pdf);
 
-lgd = legend(lgd_handles, 'Orientation', 'horizontal', 'FontSize', 20, 'FontWeight', 'bold', 'Box', 'off', 'FontName', 'Times New Roman');
-set(lgd, 'Position', [0.15 0.94 0.7 0.05]); 
+%% === Fig. 2 - ANLIK KONUM HATASI: fig2_ctrls (2-5 koşu, 50 ms pencere RMS) ===
+if numel(fig2_ctrls) < 2 || numel(fig2_ctrls) > 5
+    error('fig2_ctrls 2-5 koşu içermeli (şu an %d).', numel(fig2_ctrls));
+end
+f2_labels = cellfun(@ctrlLabel, fig2_ctrls, 'UniformOutput', false);
+if all(f2_ok)
+    fig = figure('Position', [100, 100, 1200, 1000]);
+    tl = tiledlayout(fig, 3, 2, 'TileSpacing', 'compact', 'Padding', 'compact');
+    for i = 1:num_drones
+        ax = nexttile(tl); hold(ax, 'on'); box(ax, 'on');
+        hs = plotErrorLines(ax, cellfun(@(x) x(i), D_f2, 'UniformOutput', false), fig2_ctrls, fig2_window);
+        styleErrorAxes(ax, i, phase_zones, c_phase, S);
+    end
+    % Ortak açıklama, boş kalan son kutuda
+    lgd = legend(hs(isgraphics(hs)), f2_labels(isgraphics(hs)), 'FontSize', 18, 'FontWeight', 'bold', ...
+                 'FontName', font_name, 'Box', 'on');
+    lgd.Layout.Tile = num_drones + 1;
+    saveFigure(fig, out_folder, 'Fig2.svg', output_pdf);
+else
+    warning('Fig. 2 / Table 1 atlandı: %s logları bulunamadı (log/ altında).', strjoin(fig2_ctrls(~f2_ok), ', '));
+end
 
-% KAYDETME
-eps_name = fullfile(eps_folder, 'Fig14.eps');
-exportgraphics(fig, eps_name, 'ContentType', 'vector');
-exportgraphics(fig, output_pdf, 'Append', true);
-close(fig);
+%% === Fig. 3 - HIZ ===
+plotStateFigure(D, valid, "a_vel.", "r_vel.", ["v_x (m/s)", "v_y (m/s)", "v_z (m/s)"], ...
+                phase_zones, c_phase, colors, S, out_folder, 'Fig3.svg', output_pdf);
 
+%% === Fig. 4 - İVME ===
+% Not: a_z gerçekten "a_acc.z" sütunundan okunur (eski script bu panele z konumunu çiziyordu).
+plotStateFigure(D, valid, "a_acc.", "r_acc.", ["a_x (m/s^2)", "a_y (m/s^2)", "a_z (m/s^2)"], ...
+                phase_zones, c_phase, colors, S, out_folder, 'Fig4.svg', output_pdf);
 
-%% === 13. YENİ EKLENEN: TÜM DRONE'LAR - NDOB ESTIMATED DISTURBANCES ===
-fig = figure;
+%% === Fig. 5 - EULER AÇILARI ===
+% Açı sembolleri skaler: dik ve kalın değil. TeX'in \phi'si yerine Unicode φ, θ, ψ; "\rm{}" sembolü normal,
+% "\bf" birimi diğer etiketler gibi kalın yazar ("{}" komut adını sembolden ayırır).
+plotStateFigure(D, valid, "a_eul_ang.", "r_eul_ang.", ...
+                "\rm{}" + [string(char(966)), string(char(952)), string(char(968))] + "\bf (rad)", ...
+                phase_zones, c_phase, colors, S, out_folder, 'Fig5.svg', output_pdf, false, true);
+                % referans çizilmez; φ ve θ panellerinde en büyük ve en küçük açı işaretlenir
 
-% --- Delta Fx ---
-subplot(3,1,1); hold on;
-lgd_handles = [];
-for i = 1:num_drones
-    filename = fullfile(log_dir, sprintf('drone%d_log.txt', i));
-    if isfile(filename)
-        data = readtable(filename, 'VariableNamingRule', 'preserve');
-        time = data{:, "time"} - data{1, "time"};
-        
-        % Sütun adındaki nokta/alt çizgi kontrolü
-        if ismember("ndob_f.x", data.Properties.VariableNames)
-            ndob_val = data{:, "ndob_f.x"};
-        elseif ismember("ndob_f_x", data.Properties.VariableNames)
-            ndob_val = data{:, "ndob_f_x"};
-        else
-            ndob_val = zeros(size(time));
+%% === Fig. 6 - BOZUCU KUVVETLER VE NDOB KESTİRİMİ ===
+% Düz çizgiler: ana koşuda (main_ctrl) uygulanan downwash kuvveti. Kesikli çizgiler (ndob_est_cols): NDOB
+% kestirimi (PID+NDOB koşusu; kontrolcü downwash modelini kullanmaz, kestirim modellenmemiş diğer
+% etkileri de içerir). İki koşuda uygulanan kuvvetler neredeyse aynıdır (İHA konumları cm mertebesinde
+% farklıdır). NDOB koşusu yoksa yalnızca uygulanan kuvvetler çizilir.
+D_est = [];
+if hasNdobColumns(D)
+    D_est = D;
+elseif hasNdobColumns(D_obs)
+    D_est = D_obs;
+end
+fig = figure('Position', [100, 100, 1000, 900]);
+axs = stackedAxes(fig, 3);
+lgd_handles = gobjects(0);
+for a = 1:3
+    ax = axs(a); hold(ax, 'on');
+    all_vals = [];
+    for i = valid
+        v = D(i).Tp{:, "dist_f." + axis_names(a)};
+        all_vals = [all_vals; v]; %#ok<AGROW>
+        h = plot(ax, D(i).tp, v, '-', 'LineWidth', line_w, 'Color', colors(i,:), 'DisplayName', sprintf('Q %d', i));
+        if a == 1, lgd_handles(end+1) = h; else, h.HandleVisibility = 'off'; end %#ok<SAGROW>
+    end
+    if ~isempty(D_est)
+        % yalnızca downwash etkisindeki İHA'ların kestirimi; her biri ayrı renkte kesikli
+        for k = 1:numel(ndob_est_drones)
+            i = ndob_est_drones(k);
+            if ~D_est(i).ok, continue; end
+            v = D_est(i).Tp{:, "ndob_f." + axis_names(a)};
+            all_vals = [all_vals; v]; %#ok<AGROW>
+            h = plot(ax, D_est(i).tp, v, '--', 'LineWidth', ref_w, ...
+                     'Color', ndob_est_cols(mod(k - 1, size(ndob_est_cols, 1)) + 1, :), ...
+                     'DisplayName', sprintf('NDOB (Q %d)', i));
+            if a == 1, lgd_handles(end+1) = h; else, h.HandleVisibility = 'off'; end %#ok<SAGROW>
         end
-        
-        h = plot(time, ndob_val, 'LineWidth', 2, 'Color', colors(i,:), 'DisplayName', sprintf('Q %d', i));
-        lgd_handles = [lgd_handles, h];
+    end
+    ylim(ax, padLimits(all_vals, 0.1));
+    addZones(ax, interact_zones, interact_cols);
+    styleAxes(ax, S);
+    ylabel(ax, sprintf('f_{dist,%s} (N)', axis_names(a)), 'FontWeight', 'bold', ...
+           'FontSize', font_size, 'FontName', font_name);
+    xlabel(ax, 't (s)', 'FontWeight', 'bold', 'FontSize', font_size, 'FontName', font_name);
+end
+% Açıklama tek satırda: yazı 18 pt, kısa çizgi örnekleri; doğal boyutunda, grafiklerin hemen üstünde
+lgd = legend(lgd_handles, displayNames(lgd_handles), 'Orientation', 'horizontal', 'FontSize', 18, ...
+             'FontWeight', 'bold', 'Box', 'off', 'FontName', font_name);
+try
+    lgd.ItemTokenSize = [22 18];         % kısa çizgi örnekleri (eski sürümlerde yoksa atlanır)
+catch
+end
+placeAboveAxes(lgd);
+saveFigure(fig, out_folder, 'Fig6.svg', output_pdf);
+
+%% === Fig. 7 - THRUST ===
+fig = figure('Position', [100, 100, 1000, 600]);
+ax = stackedAxes(fig, 1); hold(ax, 'on');
+lgd_handles = gobjects(0);
+all_vals = [];
+for i = valid
+    v = D(i).Tp{:, "r_thr"};
+    all_vals = [all_vals; v]; %#ok<AGROW>
+    lgd_handles(end+1) = plot(ax, D(i).tp, v, 'LineWidth', line_w, 'Color', colors(i,:), ...
+                              'DisplayName', sprintf('Q %d', i)); %#ok<SAGROW>
+end
+ylim(ax, padLimits(all_vals, 0.1));
+addZones(ax, interact_zones, interact_cols);
+styleAxes(ax, S);
+xlabel(ax, 't (s)', 'FontWeight', 'bold', 'FontSize', font_size, 'FontName', font_name);
+ylabel(ax, '||f_{thrust}|| (N)', 'FontWeight', 'bold', 'FontSize', font_size, 'FontName', font_name);
+addTopLegend(lgd_handles, [0.15 0.94 0.7 0.05], S);
+saveFigure(fig, out_folder, 'Fig7.svg', output_pdf);
+
+%% === Fig. 8 - ABLASYON: İLERİ BESLEME VAR / YOK (fig8_ctrls, 50 ms pencere RMS) ===
+if mod(numel(fig8_ctrls), 2) ~= 0
+    error('fig8_ctrls çift sayıda koşu içermeli: (ileri beslemeli, ileri beslemesiz) çiftleri.');
+end
+f8_labels = cellfun(@ctrlLabel, fig8_ctrls, 'UniformOutput', false);
+if all(f8_ok)
+    fig = figure('Position', [100, 100, 1200, 560]);
+    tl = tiledlayout(fig, 1, numel(fig8_drones), 'TileSpacing', 'compact', 'Padding', 'compact');
+    for i = fig8_drones
+        ax = nexttile(tl); hold(ax, 'on'); box(ax, 'on');
+        hs = plotErrorLines(ax, cellfun(@(x) x(i), D_f8, 'UniformOutput', false), fig8_ctrls, fig2_window);
+        styleErrorAxes(ax, i, phase_zones, c_phase, S);
+    end
+    % Ortak açıklama figürün üstünde, yatay
+    lgd = legend(hs(isgraphics(hs)), f8_labels(isgraphics(hs)), 'Orientation', 'horizontal', ...
+                 'FontSize', 18, 'FontWeight', 'bold', 'FontName', font_name, 'Box', 'off');
+    lgd.Layout.Tile = 'north';
+    saveFigure(fig, out_folder, 'Fig8.svg', output_pdf);
+else
+    warning('Fig. 8 / Table 2 atlandı: %s logları bulunamadı (log/ altında).', strjoin(fig8_ctrls(~f8_ok), ', '));
+end
+
+%% === Fig. 9 - UYUMSUZ KOMPANZATÖR: NDOB (Hakem 1) ===
+% Üst satır: NDOB koşusunda simülatörün uyguladığı downwash kuvveti (dist_f.z) ve NDOB kestirimi (ndob_f.z).
+%   NDOB downwash modelini kullanmaz; kestirim, modellenmemiş diğer etkileri (sürükleme vb.) de içerir.
+% Alt satır: konum hatası; PD (geniş), PD+NDOB (orta), PD+FF (dar); renkler ctrlColor'dan.
+if hasNdobColumns(D_obs) && any([D_none.ok]) && any([D_ff.ok])
+    fig = figure('Position', [100, 100, 1200, 800]);
+    nc = numel(fig9_drones);
+    tl = tiledlayout(fig, 2, nc, 'TileSpacing', 'compact', 'Padding', 'compact');
+    for c = 1:nc
+        i = fig9_drones(c);
+        ax = nexttile(tl, c); hold(ax, 'on'); box(ax, 'on');
+        f_true = D_obs(i).Tp{:, "dist_f.z"};
+        f_est  = D_obs(i).Tp{:, "ndob_f.z"};
+        h1 = plot(ax, D_obs(i).tp, f_true, '-', 'Color', [0 0 0], 'LineWidth', line_w);
+        h2 = plot(ax, D_obs(i).tp, f_est, '--', 'Color', ctrlColor(mismatch_ctrls{2}), 'LineWidth', line_w);
+        ylim(ax, padLimits([f_true; f_est], 0.1));
+        addZones(ax, interact_zones, interact_cols);
+        styleAxes(ax, S);
+        set(ax, 'FontSize', 16, 'XTick', 0:10:t_axis_max);
+        xlabel(ax, 't (s)', 'FontWeight', 'bold', 'FontSize', 16, 'FontName', font_name);
+        ylabel(ax, 'f_{dist,z} (N)', 'FontWeight', 'bold', 'FontSize', 16, 'FontName', font_name);
+        lgd = legend(ax, [h1 h2], {'Applied downwash', 'NDOB estimate'}, 'Location', 'SouthWest', ...
+                     'FontSize', 12, 'FontWeight', 'bold', 'FontName', font_name, 'Box', 'on');
+        title(lgd, sprintf('Q %d', i));
+    end
+    for c = 1:nc
+        i = fig9_drones(c);
+        ax = nexttile(tl, nc + c); hold(ax, 'on'); box(ax, 'on');
+        [hs, names] = errorBars(ax, {D_none(i), D_obs(i), D_ff(i)}, cellfun(@ctrlColor, mismatch_ctrls, 'UniformOutput', false), ...
+                                cellfun(@ctrlLabel, mismatch_ctrls, 'UniformOutput', false), sparse_factor);
+        finishBarAxes(ax, interact_zones, interact_cols, S, 16);
+        barLegend(ax, hs, names, sprintf('Q %d', i), font_name);
+        xlabel(ax, 't (s)', 'FontWeight', 'bold', 'FontSize', 16, 'FontName', font_name);
+        ylabel(ax, '||e_p|| (m)', 'FontWeight', 'bold', 'FontSize', 16, 'FontName', font_name);
+    end
+    saveFigure(fig, out_folder, 'Fig9.svg', output_pdf);
+else
+    warning('Fig. 9 atlandı: %s logları bulunamadı (log/ altında).', strjoin(mismatch_ctrls, ', '));
+end
+
+%% === Fig. S5 - DRONE 1 HİBRİT YÖRÜNGE VE WAYPOINTLER ===
+wp = [];
+try
+    wp = loadWaypointSets(config_dir, s5_drone);
+catch err
+    warning('Fig. S5 atlandı: waypointler okunamadı (%s).', err.message);
+end
+if ~isempty(wp) && D(s5_drone).ok
+    plotFigS5(D(s5_drone), wp, colors(s5_drone,:), font_name, out_folder, output_pdf);
+end
+
+%% === Fig. S6 - DRONE 2 YÖNELİM HATASI (DCM), BETA KARŞILAŞTIRMASI ===
+% Yönelim hatası (geodesic, DCM) Fig. 2 gibi 50 ms pencere RMS'i olarak; beta = 0.1 kalın turuncu (altta),
+% beta = 0.05 ince mavi (üstte). beta sembolü dik ve kalın değil (skaler).
+if D(s6_drone).ok && D_beta(s6_drone).ok
+    fig = figure('Position', [100, 100, 1000, 600]);
+    ax = stackedAxes(fig, 1); hold(ax, 'on'); box(ax, 'on');
+    beta_lbl = @(b) "\rm{}" + string(char(946)) + "\bf = " + sprintf('%g', b);
+    [tb, eb] = windowRmsSignal(D_beta(s6_drone).t, dcmError(D_beta(s6_drone).T), fig2_window);
+    h_alt  = plot(ax, tb, eb, '-', 'Color', [1.00 0.50 0.00], 'LineWidth', 3.5, 'DisplayName', beta_lbl(beta_alt));
+    [tb, eb] = windowRmsSignal(D(s6_drone).t, dcmError(D(s6_drone).T), fig2_window);
+    h_main = plot(ax, tb, eb, '-', 'Color', [0.00 0.40 1.00], 'LineWidth', 2.0, 'DisplayName', beta_lbl(beta_main));
+    yl = ylim(ax); ylim(ax, [0 yl(2) * 1.05]);
+    addZones(ax, phase_zones, c_phase);
+    styleAxes(ax, S);
+    text(ax, 0.985, 0.96, sprintf('Q %d', s6_drone), 'Units', 'normalized', 'HorizontalAlignment', 'right', ...
+         'VerticalAlignment', 'top', 'FontWeight', 'bold', 'FontSize', font_size, 'FontName', font_name);
+    xlabel(ax, 't (s)', 'FontWeight', 'bold', 'FontSize', font_size, 'FontName', font_name);
+    ylabel(ax, 'Orientation Error (rad)', 'FontWeight', 'bold', 'FontSize', font_size, 'FontName', font_name);
+    addTopLegend([h_main h_alt], [], S);
+    saveFigure(fig, out_folder, 'FigS6.svg', output_pdf);
+else
+    warning('Fig. S6 atlandı: beta logları bulunamadı (%s).', beta_log_dir);
+end
+
+%% === FORMASYON ÖLÇÜTLERİ (Fig. F1, Table 3) ===
+% Komşu çift (i,j) için (komşu: istenen mesafe <= neighbor_radius):
+%   bağıl mesafe hatası  e_d,ij = ||p_i - p_j|| - ||p_i^ref - p_j^ref||
+%   formasyon hatası     e_ij   = (p_i - p_j) - (p_i^ref - p_j^ref)
+% Her an komşu çiftler üzerinden RMS alınır: E_rel(t) (bağıl mesafe), E_form(t) (formasyon).
+runs_F   = cellfun(@(n) run_data(n), formation_ctrls, 'UniformOutput', false);
+labels_F = cellfun(@ctrlLabel, formation_ctrls, 'UniformOutput', false);
+cols_F   = cellfun(@ctrlColor, formation_ctrls, 'UniformOutput', false);
+F = cell(1, 3);
+for r = 1:3
+    if all([runs_F{r}.ok])
+        F{r} = formationMetrics(runs_F{r}, neighbor_radius);
     end
 end
-yl = ylim; yl = [yl(1)*1.1, yl(2)*1.1]; if yl(1)==yl(2), yl=[-0.5, 0.5]; end, ylim(yl);
-p1 = patch(t_green, [yl(1) yl(1) yl(2) yl(2)], color_green, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-p2 = patch(t_yellow, [yl(1) yl(1) yl(2) yl(2)], color_yellow, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-uistack(p1, 'bottom'); uistack(p2, 'bottom');
-ylabel('\Delta\hat{f}_x (N)', 'FontWeight', 'bold', 'FontSize', 20, 'FontName', 'Times New Roman'); 
-grid off; xlim([0 60]); set(gca, 'FontName', 'Times New Roman', 'FontSize', 20, 'FontWeight', 'bold', 'LineWidth', 2, 'Box', 'on', 'Layer', 'top');
+avail_F = find(~cellfun(@isempty, F));
 
-% --- Delta Fy ---
-subplot(3,1,2); hold on;
-for i = 1:num_drones
-    filename = fullfile(log_dir, sprintf('drone%d_log.txt', i));
-    if isfile(filename)
-        data = readtable(filename, 'VariableNamingRule', 'preserve');
-        time = data{:, "time"} - data{1, "time"};
-        
-        if ismember("ndob_f.y", data.Properties.VariableNames)
-            ndob_val = data{:, "ndob_f.y"};
-        elseif ismember("ndob_f_y", data.Properties.VariableNames)
-            ndob_val = data{:, "ndob_f_y"};
-        else
-            ndob_val = zeros(size(time));
+fig = figure('Position', [100, 100, 1000, 700]);
+axs = stackedAxes(fig, 2);
+fields_F  = {'Ed', 'EF'};
+ylabels_F = {'E_{rel} (m)', 'E_{form} (m)'};   % bağıl mesafe ve formasyon hatası
+hs = gobjects(1, numel(formation_ctrls));
+[~, ord_F] = sort(cellfun(@ctrlLineWidth, formation_ctrls(avail_F)), 'descend');   % kalından inceye çiz
+for a = 1:2
+    ax = axs(a); hold(ax, 'on');
+    for r = avail_F(ord_F)
+        % 50 ms pencere RMS'i (Fig. 2 gibi): 20 Hz referansın testere dişi eğriyi bant gibi gösterir
+        [tb, eb] = windowRmsSignal(F{r}.t, F{r}.(fields_F{a}), fig2_window);
+        h = plot(ax, tb, eb, ctrlLineStyle(formation_ctrls{r}), ...
+                 'LineWidth', ctrlLineWidth(formation_ctrls{r}), 'Color', cols_F{r}, ...
+                 'DisplayName', labels_F{r});
+        if a == 1, hs(r) = h; end
+    end
+    yl = ylim(ax); ylim(ax, [0 yl(2) * 1.05]);
+    addZones(ax, phase_zones, c_phase);
+    styleAxes(ax, S);
+    ylabel(ax, ylabels_F{a}, 'FontWeight', 'bold', 'FontSize', font_size, 'FontName', font_name);
+    xlabel(ax, 't (s)', 'FontWeight', 'bold', 'FontSize', font_size, 'FontName', font_name);
+end
+addTopLegend(hs(isgraphics(hs)), [0.1 0.94 0.8 0.05], S);   % açıklama formation_ctrls sırasıyla
+saveFigure(fig, out_folder, 'FigF1_formation_error.svg', output_pdf);
+
+% Table 3: İHA çiftleri matrisi (her kontrolcü için). Satır/sütun Q1..Q5;
+%   köşegenin üstü: formasyon hatası RMS ||e_ij|| (m) ve parantez içinde baskın yönü:
+%       (z) dikey bileşen, (xy) yatay bileşen daha büyük. Downwash dikey olduğundan (z) bozucunun izidir.
+%   köşegenin altı: bağıl mesafe hatası RMS e_d,ij (m) ve parantez içinde işaretli ortalaması:
+%       (+) çift istenenden uzak, (-) istenenden yakın (çarpışma yönü), ~0 ise yönsüz (gürültü benzeri) hata.
+%   RMS işareti ve yönü kaybettiği için bu ekler yönü gösterir. e_d, e_ij'nin iki İHA'yı birleştiren
+%   doğrultudaki bileşenidir; bu yüzden alt üçgen üst üçgenden büyük olamaz, aradaki fark formasyonun
+%   mesafeyi değiştirmeden bozulmasıdır (ör. yan yana iki İHA'dan birinin aşağı kayması).
+% Değerler çiftin komşu olduğu süre boyunca hesaplanır; hiç komşu olmayan çiftler '-' ile gösterilir.
+names_Q = "Q" + string(1:num_drones);
+file_tag = formation_ctrls;
+for r = avail_F
+    M = repmat("-", num_drones, num_drones);
+    for k = 1:size(F{r}.pairs, 1)
+        i1 = F{r}.pairs(k, 1); j1 = F{r}.pairs(k, 2);
+        if ~isnan(F{r}.pair_EF(k))
+            if F{r}.pair_EF_z(k) >= F{r}.pair_EF_xy(k), dir_F = 'z'; else, dir_F = 'xy'; end
+            mean_d = sprintf('%+.3f', F{r}.pair_Ed_mean(k));
+            if abs(F{r}.pair_Ed_mean(k)) < 5e-4, mean_d = '0.000'; end      % '+0.000' / '-0.000' yazılmasın
+            M(i1, j1) = sprintf('%.3f (%s)', F{r}.pair_EF(k), dir_F);        % üst üçgen: formasyon hatası
+            M(j1, i1) = sprintf('%.3f (%s)', F{r}.pair_Ed(k), mean_d);       % alt üçgen: bağıl mesafe hatası
         end
-        
-        plot(time, ndob_val, 'LineWidth', 2, 'Color', colors(i,:), 'HandleVisibility', 'off');
     end
-end
-yl = ylim; yl = [yl(1)*1.1, yl(2)*1.1]; if yl(1)==yl(2), yl=[-0.5, 0.5]; end, ylim(yl);
-p1 = patch(t_green, [yl(1) yl(1) yl(2) yl(2)], color_green, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-p2 = patch(t_yellow, [yl(1) yl(1) yl(2) yl(2)], color_yellow, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-uistack(p1, 'bottom'); uistack(p2, 'bottom');
-ylabel('\Delta\hat{f}_y (N)', 'FontWeight', 'bold', 'FontSize', 20, 'FontName', 'Times New Roman'); 
-grid off; xlim([0 60]); set(gca, 'FontName', 'Times New Roman', 'FontSize', 20, 'FontWeight', 'bold', 'LineWidth', 2, 'Box', 'on', 'Layer', 'top');
-
-% --- Delta Fz ---
-subplot(3,1,3); hold on;
-for i = 1:num_drones
-    filename = fullfile(log_dir, sprintf('drone%d_log.txt', i));
-    if isfile(filename)
-        data = readtable(filename, 'VariableNamingRule', 'preserve');
-        time = data{:, "time"} - data{1, "time"};
-        
-        if ismember("ndob_f.z", data.Properties.VariableNames)
-            ndob_val = data{:, "ndob_f.z"};
-        elseif ismember("ndob_f_z", data.Properties.VariableNames)
-            ndob_val = data{:, "ndob_f_z"};
-        else
-            ndob_val = zeros(size(time));
-        end
-        
-        plot(time, ndob_val, 'LineWidth', 2, 'Color', colors(i,:), 'HandleVisibility', 'off');
-    end
+    tbl3 = array2table(M, 'RowNames', cellstr(names_Q), 'VariableNames', cellstr(names_Q));
+    fprintf('\nTable 3 (%s), m\n', labels_F{r});
+    fprintf('  üst üçgen: formasyon hatası RMS (baskın yön: xy yatay, z dikey)\n');
+    fprintf('  alt üçgen: bağıl mesafe hatası RMS (işaretli ortalama: + istenenden uzak, - istenenden yakın)\n');
+    disp(tbl3);
+    writetable(tbl3, fullfile(out_folder, sprintf('Table3_formation_%s.csv', file_tag{r})), 'WriteRowNames', true);
 end
 
-% Kıyaslamayı kusursuzlaştırmak için Bölüm 2 rüzgar grafiğindeki Z limitlerinin aynısı kilitlendi
-ylim([-2.5, 1.0]);
-yl = ylim;         
-p1 = patch(t_green, [yl(1) yl(1) yl(2) yl(2)], color_green, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-p2 = patch(t_yellow, [yl(1) yl(1) yl(2) yl(2)], color_yellow, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-uistack(p1, 'bottom'); uistack(p2, 'bottom');
-ylabel('\Delta\hat{f}_z (N)', 'FontWeight', 'bold', 'FontSize', 20, 'FontName', 'Times New Roman'); 
-xlabel('t (s)', 'FontWeight', 'bold', 'FontSize', 20, 'FontName', 'Times New Roman'); 
-grid off; xlim([0 60]); set(gca, 'FontName', 'Times New Roman', 'FontSize', 20, 'FontWeight', 'bold', 'LineWidth', 2, 'Box', 'on', 'Layer', 'top');
-
-% Üst taraftaki yatay ortak legend yerleşimi
-lgd = legend(lgd_handles, 'Orientation', 'horizontal', 'FontSize', 20, 'FontWeight', 'bold', 'Box', 'off', 'FontName', 'Times New Roman');
-set(lgd, 'Position', [0.1 0.94 0.8 0.05]); 
-
-% KAYDETME
-eps_name = fullfile(eps_folder, '13_all_drones_ndob_estimation.eps');
-exportgraphics(fig, eps_name, 'ContentType', 'vector');
-exportgraphics(fig, output_pdf, 'Append', true);
-close(fig);
-fprintf('NDOB kuvvet tahmin grafiği, rüzgar grafiğinin ikizi formatında (3 eksen üst üste) başarıyla kaydedildi.\n');
-
-%% === 2. TÜM DRONE'LAR - DISTURBANCE FORCES ===
-fig = figure;
-
-% --- Fx ---
-subplot(3,1,1); hold on;
-lgd_handles = [];
+%% === Table 1 / Table 2 - PERFORMANS METRİKLERİ ===
+M = metrics(D);
+fprintf('\n=====================================================================\n');
+fprintf('   %s (RMSE: ortalama, ISE: toplam, MAX: en büyük)\n', ctrlLabel(main_ctrl));
+fprintf('=====================================================================\n');
 for i = 1:num_drones
-    filename = fullfile(log_dir, sprintf('drone%d_log.txt', i));
-    if isfile(filename)
-        data = readtable(filename, 'VariableNamingRule', 'preserve');
-        h = plot(data{:, "time"} - data{1, "time"}, data{:, "dist_f.x"}, 'LineWidth', 2, 'Color', colors(i,:), 'DisplayName', sprintf('Q %d', i));
-        lgd_handles = [lgd_handles, h];
-    end
-end
-yl = ylim; yl = [yl(1)*1.1, yl(2)*1.1]; ylim(yl);
-p1 = patch(t_green, [yl(1) yl(1) yl(2) yl(2)], color_green, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-p2 = patch(t_yellow, [yl(1) yl(1) yl(2) yl(2)], color_yellow, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-uistack(p1, 'bottom'); uistack(p2, 'bottom');
-ylabel('f_{dist,x} (N)', 'FontWeight', 'bold', 'FontSize', 20, 'FontName', 'Times New Roman'); 
-grid off; xlim([0 60]); set(gca, 'FontName', 'Times New Roman', 'FontSize', 20, 'FontWeight', 'bold', 'LineWidth', 2, 'Box', 'on', 'Layer', 'top');
-
-% --- Fy ---
-subplot(3,1,2); hold on;
-for i = 1:num_drones
-    filename = fullfile(log_dir, sprintf('drone%d_log.txt', i));
-    if isfile(filename)
-        data = readtable(filename, 'VariableNamingRule', 'preserve');
-        plot(data{:, "time"} - data{1, "time"}, data{:, "dist_f.y"}, 'LineWidth', 2, 'Color', colors(i,:), 'HandleVisibility', 'off');
-    end
-end
-yl = ylim; yl = [yl(1)*1.1, yl(2)*1.1]; ylim(yl);
-p1 = patch(t_green, [yl(1) yl(1) yl(2) yl(2)], color_green, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-p2 = patch(t_yellow, [yl(1) yl(1) yl(2) yl(2)], color_yellow, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-uistack(p1, 'bottom'); uistack(p2, 'bottom');
-ylabel('f_{dist,y} (N)', 'FontWeight', 'bold', 'FontSize', 20, 'FontName', 'Times New Roman'); 
-grid off; xlim([0 60]); set(gca, 'FontName', 'Times New Roman', 'FontSize', 20, 'FontWeight', 'bold', 'LineWidth', 2, 'Box', 'on', 'Layer', 'top');
-
-% --- Fz (GÜNCELLENDİ) ---
-subplot(3,1,3); hold on;
-for i = 1:num_drones
-    filename = fullfile(log_dir, sprintf('drone%d_log.txt', i));
-    if isfile(filename)
-        data = readtable(filename, 'VariableNamingRule', 'preserve');
-        plot(data{:, "time"} - data{1, "time"}, data{:, "dist_f.z"}, 'LineWidth', 2, 'Color', colors(i,:), 'HandleVisibility', 'off');
-    end
-end
-
-% --- AYAR BURADA YAPILDI ---
-ylim([-2.5, 0.2]); % Alt sınır -1.5, üst sınır 0.1 olarak ayarlandı
-yl = ylim;         % Patch çizimi için yeni limitleri hafızaya al
-
-p1 = patch(t_green, [yl(1) yl(1) yl(2) yl(2)], color_green, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-p2 = patch(t_yellow, [yl(1) yl(1) yl(2) yl(2)], color_yellow, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-uistack(p1, 'bottom'); uistack(p2, 'bottom');
-ylabel('f_{dist,z} (N)', 'FontWeight', 'bold', 'FontSize', 20, 'FontName', 'Times New Roman'); 
-xlabel('t (s)', 'FontWeight', 'bold', 'FontSize', 20, 'FontName', 'Times New Roman'); 
-grid off; xlim([0 60]); set(gca, 'FontName', 'Times New Roman', 'FontSize', 20, 'FontWeight', 'bold', 'LineWidth', 2, 'Box', 'on', 'Layer', 'top');
-
-lgd = legend(lgd_handles, 'Orientation', 'horizontal', 'FontSize', 20, 'FontWeight', 'bold', 'Box', 'off', 'FontName', 'Times New Roman');
-set(lgd, 'Position', [0.1 0.94 0.8 0.05]); 
-
-% KAYDETME
-eps_name = fullfile(eps_folder, 'Fig13.eps');
-exportgraphics(fig, eps_name, 'ContentType', 'vector');
-exportgraphics(fig, output_pdf, 'Append', true);
-close(fig);
-
-%% === 3. TÜM DRONE'LAR - POZİSYON (Z-AXIS DOUBLE ZOOM) ===
-fig = figure;
-
-%% ===================== X =====================
-subplot(3,1,1); hold on;
-lgd_handles = [];
-h_des = plot(NaN, NaN, ':k', 'LineWidth', 2, 'DisplayName', 'Desired');
-lgd_handles = [lgd_handles, h_des];
-
-for i = 1:num_drones
-    filename = fullfile(log_dir, sprintf('drone%d_log.txt', i));
-    if isfile(filename)
-        data = readtable(filename,'VariableNamingRule','preserve');
-        time = data{:, "time"} - data{1,"time"};
-        h = plot(time, data{:, "a_pos.x"}, '-', 'Color', colors(i,:), ...
-                 'LineWidth',2,'DisplayName',sprintf('Q %d',i));
-        lgd_handles = [lgd_handles, h];
-        plot(time, data{:, "r_pos.x"}, ':k', 'LineWidth',2,'HandleVisibility','off');
-    end
-end
-
-yl = ylim; yl = [yl(1)-1 yl(2)+1]; ylim(yl);
-p1 = patch(t_zone1,[yl(1) yl(1) yl(2) yl(2)],c_zone1,'EdgeColor','none');
-p2 = patch(t_zone2,[yl(1) yl(1) yl(2) yl(2)],c_zone2,'EdgeColor','none');
-p3 = patch(t_zone3,[yl(1) yl(1) yl(2) yl(2)],c_zone3,'EdgeColor','none');
-p4 = patch(t_zone4,[yl(1) yl(1) yl(2) yl(2)],c_zone4,'EdgeColor','none');
-uistack([p1 p2 p3 p4],'bottom');
-
-ylabel('x (m)','FontWeight','bold','FontSize',20,'FontName','Times New Roman');
-grid off; xlim([0 60]);
-set(gca,'FontName','Times New Roman','FontSize',20,'FontWeight','bold',...
-    'LineWidth',2,'Box','on','Layer','top');
-
-%% ===================== Y =====================
-subplot(3,1,2); hold on;
-for i = 1:num_drones
-    filename = fullfile(log_dir, sprintf('drone%d_log.txt', i));
-    if isfile(filename)
-        data = readtable(filename,'VariableNamingRule','preserve');
-        time = data{:, "time"} - data{1,"time"};
-        plot(time, data{:, "a_pos.y"}, '-', 'Color', colors(i,:), 'LineWidth',2);
-        plot(time, data{:, "r_pos.y"}, ':k', 'LineWidth',2);
-    end
-end
-
-yl = ylim; yl = [yl(1)-1 yl(2)+1]; ylim(yl);
-p1 = patch(t_zone1,[yl(1) yl(1) yl(2) yl(2)],c_zone1,'EdgeColor','none');
-p2 = patch(t_zone2,[yl(1) yl(1) yl(2) yl(2)],c_zone2,'EdgeColor','none');
-p3 = patch(t_zone3,[yl(1) yl(1) yl(2) yl(2)],c_zone3,'EdgeColor','none');
-p4 = patch(t_zone4,[yl(1) yl(1) yl(2) yl(2)],c_zone4,'EdgeColor','none');
-uistack([p1 p2 p3 p4],'bottom');
-
-ylabel('y (m)','FontWeight','bold','FontSize',20,'FontName','Times New Roman');
-grid off; xlim([0 60]);
-set(gca,'FontName','Times New Roman','FontSize',20,'FontWeight','bold',...
-    'LineWidth',2,'Box','on','Layer','top');
-
-%% ===================== Z =====================
-hZ = subplot(3,1,3); hold on;
-
-for i = 1:num_drones
-    filename = fullfile(log_dir, sprintf('drone%d_log.txt', i));
-    if isfile(filename)
-        data = readtable(filename,'VariableNamingRule','preserve');
-        time = data{:, "time"} - data{1,"time"};
-
-        plot(time, data{:, "a_pos.z"}, '-', ...
-             'Color', colors(i,:), 'LineWidth',2);
-        plot(time, data{:, "r_pos.z"}, ':k', ...
-             'LineWidth',2,'HandleVisibility','off');
-
-        % inset için sakla
-        time_all{i}  = time;
-        acc_z_all{i} = data{:, "a_pos.z"};
-        ref_acc_z{i} = data{:, "r_pos.z"};
-    end
-end
-
-%% === Eksen ayarları ===
-yl = ylim;
-yl = [yl(1)-0.4 yl(2)+0.2];   % altta inset için boşluk
-ylim(yl);
-xlim([0 60]);
-
-ylabel('z (m)','FontWeight','bold','FontSize',20,'FontName','Times New Roman');
-xlabel('t (s)','FontWeight','bold','FontSize',20,'FontName','Times New Roman');
-
-set(gca,'FontName','Times New Roman','FontSize',20,'FontWeight','bold',...
-        'LineWidth',2,'Box','on','Layer','top');
-grid off;
-
-%% === Arka plan zonları ===
-p1 = patch(t_zone1,[yl(1) yl(1) yl(2) yl(2)],c_zone1,'EdgeColor','none');
-p2 = patch(t_zone2,[yl(1) yl(1) yl(2) yl(2)],c_zone2,'EdgeColor','none');
-p3 = patch(t_zone3,[yl(1) yl(1) yl(2) yl(2)],c_zone3,'EdgeColor','none');
-p4 = patch(t_zone4,[yl(1) yl(1) yl(2) yl(2)],c_zone4,'EdgeColor','none');
-uistack([p1 p2 p3 p4],'bottom');
-
-%% === KISA KESİKLİ ZOOM İŞARETLERİ ===
-z_mark_min = 1.9;
-z_mark_max = 3.0;
-
-% 23–25 s (kırmızı)
-line([23 23],[z_mark_min z_mark_max], ...
-     'Color','r','LineStyle','--','LineWidth',2);
-line([25 25],[z_mark_min z_mark_max], ...
-     'Color','r','LineStyle','--','LineWidth',2);
-
-% 34–36 s (mavi)
-line([34 34],[z_mark_min z_mark_max], ...
-     'Color','b','LineStyle','--','LineWidth',2);
-line([36 36],[z_mark_min z_mark_max], ...
-     'Color','b','LineStyle','--','LineWidth',2);
-
-%% ===================== ZOOM INSET'LER (ALT HİZALI) =====================
-main_pos = get(hZ,'Position'); % Ana Z grafiğinin konumu
-
-inset_height = main_pos(4) * 0.26; % Yükseklik
-inset_y      = main_pos(2) + 0.03; % Y konumu (biraz yukarı kaldır)
-
-%% --- Zoom 1: 23–25 s (SOL TARAFA) ---
-ax_zoom1 = axes('Position', ...
-    [ main_pos(1) + 0.05, ...  % X konumu
-      inset_y, ...
-      main_pos(3) * 0.25, ...  % Genişlik
-      inset_height ]);
-
-box on; hold on;
-for i = 1:num_drones
-    plot(time_all{i}, acc_z_all{i}, 'Color', colors(i,:), 'LineWidth', 2);
-    plot(time_all{i}, ref_acc_z{i}, ':k', 'LineWidth', 2);
-end
-
-xlim([23 25]);
-ylim([z_mark_min z_mark_max]);
-
-% DEĞİŞİKLİK BURADA: Title silindi, XTick ve YTick boş bırakıldı
-set(gca, 'FontSize', 9, 'FontName', 'Times New Roman', ...
-         'XTick', [], 'YTick', [], 'LineWidth', 1.5);
-
-%% --- Zoom 2: 34–36 s (SAĞ TARAFA) ---
-ax_zoom2 = axes('Position', ...
-    [ main_pos(1) + 0.35, ...  % X konumu
-      inset_y, ...
-      main_pos(3) * 0.25, ...  % Genişlik
-      inset_height ]);
-
-box on; hold on;
-for i = 1:num_drones
-    plot(time_all{i}, acc_z_all{i}, 'Color', colors(i,:), 'LineWidth', 2);
-    plot(time_all{i}, ref_acc_z{i}, ':k', 'LineWidth', 2);
-end
-
-xlim([34 36]);
-ylim([z_mark_min z_mark_max]);
-
-% DEĞİŞİKLİK BURADA: Title silindi, XTick ve YTick boş bırakıldı
-set(gca, 'FontSize', 9, 'FontName', 'Times New Roman', ...
-         'XTick', [], 'YTick', [], 'LineWidth', 1.5);
-
-%% ... (Önceki kodlarınız: subplotlar ve zoom kutuları bittikten hemen sonra) ...
-
-% ===================== LEGEND EKLEME =====================
-% Legend handles zaten 1. subplotta toplanmıştı (lgd_handles)
-lgd = legend(lgd_handles, 'Orientation', 'horizontal', ...
-    'FontSize', 20, 'FontWeight', 'bold', ...
-    'Box', 'off', 'FontName', 'Times New Roman');
-
-% Legend'ı sayfanın en tepesine ortalayarak yerleştir
-set(lgd, 'Position', [0.1 0.94 0.8 0.05]); 
-
-%% ===================== KAYDETME =====================
-%eps_name = fullfile(eps_folder, 'Fig6a.eps'); % Dosya ismini kontrol edin
-%exportgraphics(fig, eps_name, 'ContentType', 'vector');
-%exportgraphics(fig, output_pdf, 'Append', true);
-%close(fig);
-
-
-%%% === 5. TÜM DRONE'LAR - VELOCITY ===
-%fig = figure;
-%
-%% Vx
-%subplot(3,1,1); hold on;
-%lgd_handles = [];
-%h_des = plot(NaN, NaN, ':k', 'LineWidth', 2, 'DisplayName', 'Desired');
-%lgd_handles = [lgd_handles, h_des];
-%
-%for i = 1:num_drones
-%    filename = fullfile(log_dir, sprintf('drone%d_log.txt', i));
-%    if isfile(filename)
-%        data = readtable(filename, 'VariableNamingRule', 'preserve');
-%        time = data{:, "time"} - data{1, "time"};
-%        h = plot(time, data{:, "a_vel.x"}, '-', 'Color', colors(i,:), 'LineWidth', 2, 'DisplayName', sprintf('Q %d', i));
-%        lgd_handles = [lgd_handles, h];
-%        plot(time, data{:, "r_vel.x"}, ':k', 'LineWidth', 2, 'HandleVisibility', 'off');
-%    end
-%end
-%yl = ylim; yl = [yl(1)-0.5, yl(2)+0.5]; ylim(yl);
-%p1 = patch(t_zone1, [yl(1) yl(1) yl(2) yl(2)], c_zone1, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%p2 = patch(t_zone2, [yl(1) yl(1) yl(2) yl(2)], c_zone2, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%p3 = patch(t_zone3, [yl(1) yl(1) yl(2) yl(2)], c_zone3, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%p4 = patch(t_zone4, [yl(1) yl(1) yl(2) yl(2)], c_zone4, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%uistack(p1,'bottom'); uistack(p2,'bottom'); uistack(p3,'bottom'); uistack(p4,'bottom');
-%ylabel('v_x (m/s)', 'FontWeight', 'bold', 'FontSize', 20, 'FontName', 'Times New Roman'); 
-%grid off; xlim([0 60]); set(gca, 'FontName', 'Times New Roman', 'FontSize', 20, 'FontWeight', 'bold', 'LineWidth', 2, 'Box', 'on', 'Layer', 'top');
-%
-%% Vy
-%subplot(3,1,2); hold on;
-%for i = 1:num_drones
-%    filename = fullfile(log_dir, sprintf('drone%d_log.txt', i));
-%    if isfile(filename)
-%        data = readtable(filename, 'VariableNamingRule', 'preserve');
-%        time = data{:, "time"} - data{1, "time"};
-%        plot(time, data{:, "a_vel.y"}, '-', 'Color', colors(i,:), 'LineWidth', 2);
-%        plot(time, data{:, "r_vel.y"}, ':k', 'LineWidth', 2);
-%    end
-%end
-%yl = ylim; yl = [yl(1)-0.5, yl(2)+0.5]; ylim(yl);
-%p1 = patch(t_zone1, [yl(1) yl(1) yl(2) yl(2)], c_zone1, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%p2 = patch(t_zone2, [yl(1) yl(1) yl(2) yl(2)], c_zone2, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%p3 = patch(t_zone3, [yl(1) yl(1) yl(2) yl(2)], c_zone3, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%p4 = patch(t_zone4, [yl(1) yl(1) yl(2) yl(2)], c_zone4, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%uistack(p1,'bottom'); uistack(p2,'bottom'); uistack(p3,'bottom'); uistack(p4,'bottom');
-%ylabel('v_y (m/s)', 'FontWeight', 'bold', 'FontSize', 20, 'FontName', 'Times New Roman'); 
-%grid off; xlim([0 60]); set(gca, 'FontName', 'Times New Roman', 'FontSize', 20, 'FontWeight', 'bold', 'LineWidth', 2, 'Box', 'on', 'Layer', 'top');
-%
-%% Vz
-%subplot(3,1,3); hold on;
-%for i = 1:num_drones
-%    filename = fullfile(log_dir, sprintf('drone%d_log.txt', i));
-%    if isfile(filename)
-%        data = readtable(filename, 'VariableNamingRule', 'preserve');
-%        time = data{:, "time"} - data{1, "time"};
-%        plot(time, data{:, "a_vel.z"}, '-', 'Color', colors(i,:), 'LineWidth', 2);
-%        plot(time, data{:, "r_vel.z"}, ':k', 'LineWidth', 2);
-%    end
-%end
-%yl = ylim; yl = [yl(1)-0.5, yl(2)+0.5]; ylim(yl);
-%p1 = patch(t_zone1, [yl(1) yl(1) yl(2) yl(2)], c_zone1, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%p2 = patch(t_zone2, [yl(1) yl(1) yl(2) yl(2)], c_zone2, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%p3 = patch(t_zone3, [yl(1) yl(1) yl(2) yl(2)], c_zone3, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%p4 = patch(t_zone4, [yl(1) yl(1) yl(2) yl(2)], c_zone4, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%uistack(p1,'bottom'); uistack(p2,'bottom'); uistack(p3,'bottom'); uistack(p4,'bottom');
-%ylabel('v_z (m/s)', 'FontWeight', 'bold', 'FontSize', 20, 'FontName', 'Times New Roman'); 
-%xlabel('t (s)', 'FontWeight', 'bold', 'FontSize', 20, 'FontName', 'Times New Roman'); 
-%grid off; xlim([0 60]); set(gca, 'FontName', 'Times New Roman', 'FontSize', 20, 'FontWeight', 'bold', 'LineWidth', 2, 'Box', 'on', 'Layer', 'top');
-%
-%lgd = legend(lgd_handles, 'Orientation', 'horizontal', 'FontSize', 20, 'FontWeight', 'bold', 'Box', 'off', 'FontName', 'Times New Roman');
-%set(lgd, 'Position', [0.1 0.94 0.8 0.05]);
-%
-%% KAYDETME
-%eps_name = fullfile(eps_folder, 'Fig7.eps');
-%exportgraphics(fig, eps_name, 'ContentType', 'vector');
-%exportgraphics(fig, output_pdf, 'Append', true);
-%close(fig);
-%
-%
-%%% === 6. TÜM DRONE'LAR - ACCELERATION (ZOOMSUZ) ===
-%fig = figure;
-%
-%% --- AX ---
-%h1 = subplot(3,1,1); hold on;
-%lgd_handles = [];
-%h_des = plot(NaN, NaN, ':k', 'LineWidth', 2, 'DisplayName', 'Desired');
-%lgd_handles = [lgd_handles, h_des];
-%
-%for i = 1:num_drones
-%    if ~isempty(acc_x_all{i})
-%        h = plot(time_all{i}, acc_x_all{i}, '-', 'Color', colors(i,:), 'LineWidth', 2, 'DisplayName', sprintf('Q %d', i));
-%        lgd_handles = [lgd_handles, h];
-%        plot(time_all{i}, ref_acc_x{i}, ':k', 'LineWidth', 2, 'HandleVisibility', 'off');
-%    end
-%end
-%% Arka Plan
-%yl = ylim; yl = [yl(1)-0.5, yl(2)+0.5]; ylim(yl);
-%p1 = patch(t_zone1, [yl(1) yl(1) yl(2) yl(2)], c_zone1, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%p2 = patch(t_zone2, [yl(1) yl(1) yl(2) yl(2)], c_zone2, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%p3 = patch(t_zone3, [yl(1) yl(1) yl(2) yl(2)], c_zone3, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%p4 = patch(t_zone4, [yl(1) yl(1) yl(2) yl(2)], c_zone4, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%uistack(p1,'bottom'); uistack(p2,'bottom'); uistack(p3,'bottom'); uistack(p4,'bottom');
-%
-%ylabel('a_x (m/s^2)', 'FontWeight', 'bold', 'FontSize', 20, 'FontName', 'Times New Roman'); 
-%grid off; xlim([0 60]); 
-%set(gca, 'FontName', 'Times New Roman', 'FontSize', 20, 'FontWeight', 'bold', 'LineWidth', 2, 'Box', 'on', 'Layer', 'top');
-%
-%
-%% --- AY ---
-%h2 = subplot(3,1,2); hold on;
-%for i = 1:num_drones
-%    if ~isempty(acc_y_all{i})
-%        plot(time_all{i}, acc_y_all{i}, '-', 'Color', colors(i,:), 'LineWidth', 2);
-%        plot(time_all{i}, ref_acc_y{i}, ':k', 'LineWidth', 2);
-%    end
-%end
-%% Arka Plan
-%yl = ylim; yl = [yl(1)-0.5, yl(2)+0.5]; ylim(yl);
-%p1 = patch(t_zone1, [yl(1) yl(1) yl(2) yl(2)], c_zone1, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%p2 = patch(t_zone2, [yl(1) yl(1) yl(2) yl(2)], c_zone2, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%p3 = patch(t_zone3, [yl(1) yl(1) yl(2) yl(2)], c_zone3, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%p4 = patch(t_zone4, [yl(1) yl(1) yl(2) yl(2)], c_zone4, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%uistack(p1,'bottom'); uistack(p2,'bottom'); uistack(p3,'bottom'); uistack(p4,'bottom');
-%
-%ylabel('a_y (m/s^2)', 'FontWeight', 'bold', 'FontSize', 20, 'FontName', 'Times New Roman'); 
-%grid off; xlim([0 60]); 
-%set(gca, 'FontName', 'Times New Roman', 'FontSize', 20, 'FontWeight', 'bold', 'LineWidth', 2, 'Box', 'on', 'Layer', 'top');
-%
-%
-%% --- AZ ---
-%h3 = subplot(3,1,3); hold on;
-%for i = 1:num_drones
-%    if ~isempty(acc_z_all{i})
-%        plot(time_all{i}, acc_z_all{i}, '-', 'Color', colors(i,:), 'LineWidth', 2);
-%        plot(time_all{i}, ref_acc_z{i}, ':k', 'LineWidth', 2);
-%    end
-%end
-%% Arka Plan
-%yl = ylim; yl = [yl(1)-0.5, yl(2)+0.5]; ylim(yl);
-%p1 = patch(t_zone1, [yl(1) yl(1) yl(2) yl(2)], c_zone1, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%p2 = patch(t_zone2, [yl(1) yl(1) yl(2) yl(2)], c_zone2, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%p3 = patch(t_zone3, [yl(1) yl(1) yl(2) yl(2)], c_zone3, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%p4 = patch(t_zone4, [yl(1) yl(1) yl(2) yl(2)], c_zone4, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%uistack(p1,'bottom'); uistack(p2,'bottom'); uistack(p3,'bottom'); uistack(p4,'bottom');
-%
-%ylabel('a_z (m/s^2)', 'FontWeight', 'bold', 'FontSize', 20, 'FontName', 'Times New Roman');
-%xlabel('t (s)', 'FontWeight', 'bold', 'FontSize', 20, 'FontName', 'Times New Roman'); 
-%grid off; xlim([0 60]); 
-%set(gca, 'FontName', 'Times New Roman', 'FontSize', 20, 'FontWeight', 'bold', 'LineWidth', 2, 'Box', 'on', 'Layer', 'top');
-%
-%% LEGEND
-%lgd = legend(lgd_handles, 'Orientation', 'horizontal', 'FontSize', 20, 'FontWeight', 'bold', 'Box', 'off', 'FontName', 'Times New Roman');
-%set(lgd, 'Position', [0.1 0.94 0.8 0.05]);
-%
-%% KAYDETME
-%eps_name = fullfile(eps_folder, 'Fig11.eps');
-%exportgraphics(fig, eps_name, 'ContentType', 'vector');
-%exportgraphics(fig, output_pdf, 'Append', true);
-%close(fig);
-%
-%
-%%% === 7. TÜM DRONE'LAR - EULER AÇILARI ===
-%fig = figure;
-%
-%% --- Roll (Phi) ---
-%subplot(3,1,1); hold on;
-%lgd_handles = [];
-%h_des = plot(NaN, NaN, ':k', 'LineWidth', 2, 'DisplayName', 'Desired');
-%lgd_handles = [lgd_handles, h_des];
-%for i = 1:num_drones
-%    filename = fullfile(log_dir, sprintf('drone%d_log.txt', i));
-%    if isfile(filename)
-%        data = readtable(filename, 'VariableNamingRule', 'preserve');
-%        time = data{:, "time"} - data{1, "time"};
-%        
-%        h = plot(time, data{:, "a_eul_ang.x"}, '-', 'Color', colors(i,:), 'LineWidth', 2, 'DisplayName', sprintf('Q %d', i));
-%        lgd_handles = [lgd_handles, h];
-%        plot(time, data{:, "r_eul_ang.x"}, ':k', 'LineWidth', 2, 'HandleVisibility', 'off');
-%    end
-%end
-%% Arka Plan
-%yl = ylim; yl = [yl(1)-0.1, yl(2)+0.1]; ylim(yl);
-%p1 = patch(t_zone1, [yl(1) yl(1) yl(2) yl(2)], c_zone1, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%p2 = patch(t_zone2, [yl(1) yl(1) yl(2) yl(2)], c_zone2, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%p3 = patch(t_zone3, [yl(1) yl(1) yl(2) yl(2)], c_zone3, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%p4 = patch(t_zone4, [yl(1) yl(1) yl(2) yl(2)], c_zone4, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%uistack(p1,'bottom'); uistack(p2,'bottom'); uistack(p3,'bottom'); uistack(p4,'bottom');
-%ylabel('\phi (rad)', 'FontWeight', 'bold', 'FontSize', 20, 'FontName', 'Times New Roman'); 
-%grid off; xlim([0 60]); set(gca, 'FontName', 'Times New Roman', 'FontSize', 20, 'FontWeight', 'bold', 'LineWidth', 2, 'Box', 'on', 'Layer', 'top');
-%
-%% --- Pitch (Theta) ---
-%subplot(3,1,2); hold on;
-%for i = 1:num_drones
-%    filename = fullfile(log_dir, sprintf('drone%d_log.txt', i));
-%    if isfile(filename)
-%        data = readtable(filename, 'VariableNamingRule', 'preserve');
-%        time = data{:, "time"} - data{1, "time"};
-%        plot(time, data{:, "a_eul_ang.y"}, '-', 'Color', colors(i,:), 'LineWidth', 2);
-%        plot(time, data{:, "r_eul_ang.y"}, ':k', 'LineWidth', 2);
-%    end
-%end
-%yl = ylim; yl = [yl(1)-0.1, yl(2)+0.1]; ylim(yl);
-%p1 = patch(t_zone1, [yl(1) yl(1) yl(2) yl(2)], c_zone1, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%p2 = patch(t_zone2, [yl(1) yl(1) yl(2) yl(2)], c_zone2, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%p3 = patch(t_zone3, [yl(1) yl(1) yl(2) yl(2)], c_zone3, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%p4 = patch(t_zone4, [yl(1) yl(1) yl(2) yl(2)], c_zone4, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%uistack(p1,'bottom'); uistack(p2,'bottom'); uistack(p3,'bottom'); uistack(p4,'bottom');
-%ylabel('\theta (rad)', 'FontWeight', 'bold', 'FontSize', 20, 'FontName', 'Times New Roman'); 
-%grid off; xlim([0 60]); set(gca, 'FontName', 'Times New Roman', 'FontSize', 20, 'FontWeight', 'bold', 'LineWidth', 2, 'Box', 'on', 'Layer', 'top');
-%
-%% --- Yaw (Psi) ---
-%subplot(3,1,3); hold on;
-%for i = 1:num_drones
-%    filename = fullfile(log_dir, sprintf('drone%d_log.txt', i));
-%    if isfile(filename)
-%        data = readtable(filename, 'VariableNamingRule', 'preserve');
-%        time = data{:, "time"} - data{1, "time"};
-%        plot(time, data{:, "a_eul_ang.z"}, '-', 'Color', colors(i,:), 'LineWidth', 2);
-%        plot(time, data{:, "r_eul_ang.z"}, ':k', 'LineWidth', 2);
-%    end
-%end
-%yl = ylim; yl = [yl(1)-0.1, yl(2)+0.1]; ylim(yl);
-%p1 = patch(t_zone1, [yl(1) yl(1) yl(2) yl(2)], c_zone1, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%p2 = patch(t_zone2, [yl(1) yl(1) yl(2) yl(2)], c_zone2, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%p3 = patch(t_zone3, [yl(1) yl(1) yl(2) yl(2)], c_zone3, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%p4 = patch(t_zone4, [yl(1) yl(1) yl(2) yl(2)], c_zone4, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%uistack(p1,'bottom'); uistack(p2,'bottom'); uistack(p3,'bottom'); uistack(p4,'bottom');
-%ylabel('\psi (rad)', 'FontWeight', 'bold', 'FontSize', 20, 'FontName', 'Times New Roman');
-%xlabel('t (s)', 'FontWeight', 'bold', 'FontSize', 20, 'FontName', 'Times New Roman'); 
-%grid off; xlim([0 60]); set(gca, 'FontName', 'Times New Roman', 'FontSize', 20, 'FontWeight', 'bold', 'LineWidth', 2, 'Box', 'on', 'Layer', 'top');
-%
-%lgd = legend(lgd_handles, 'Orientation', 'horizontal', 'FontSize', 20, 'FontWeight', 'bold', 'Box', 'off', 'FontName', 'Times New Roman');
-%set(lgd, 'Position', [0.1 0.94 0.8 0.05]);
-%
-%% KAYDETME
-%eps_name = fullfile(eps_folder, 'Fig9.eps');
-%exportgraphics(fig, eps_name, 'ContentType', 'vector');
-%exportgraphics(fig, output_pdf, 'Append', true);
-%close(fig);
-%
-%
-%% === 8. TÜM DRONE'LAR - 3D POZİSYON HATASI ===
-fig = figure;
-hold on;
-lgd_handles = [];
-for i = 1:num_drones
-    filename = fullfile(log_dir, sprintf('drone%d_log.txt', i));
-    if isfile(filename)
-        data = readtable(filename, 'VariableNamingRule', 'preserve');
-        time = data{:, "time"} - data{1, "time"};
-        x = data{:, "a_pos.x"};  y = data{:, "a_pos.y"};  z = data{:, "a_pos.z"};
-        xr = data{:, "r_pos.x"}; yr = data{:, "r_pos.y"}; zr = data{:, "r_pos.z"};
-        pos_error = sqrt((x - xr).^2 + (y - yr).^2 + (z - zr).^2);
-        h = plot(time, pos_error, 'LineWidth', 2, 'Color', colors(i,:), 'DisplayName', sprintf('Q %d', i));
-        lgd_handles = [lgd_handles, h];
-    end
-end
-xlabel('t (s)', 'FontWeight', 'bold', 'FontSize', 20, 'FontName', 'Times New Roman');
-ylabel('||e_p|| (m)', 'FontWeight', 'bold', 'FontSize', 20, 'FontName', 'Times New Roman');
-
-grid off; set(gca, 'FontName', 'Times New Roman', 'FontSize', 20, 'FontWeight', 'bold', 'LineWidth', 2, 'Box', 'on');
-
-lgd = legend(lgd_handles, 'Orientation', 'horizontal', 'FontSize', 20, 'FontWeight', 'bold', 'Box','off', 'FontName', 'Times New Roman');
-set(lgd, 'Position', [0.1 0.92 0.8 0.05]);
-
-% KAYDETME
-eps_name = fullfile(eps_folder, '08_all_drones_position_error.eps');
-exportgraphics(fig, eps_name, 'ContentType', 'vector');
-exportgraphics(fig, output_pdf, 'Append', true);
-close(fig);
-
-% HATA HESAPLAMA EKRAN ÇIKTISI
-fprintf('\n=======================================================\n');
-fprintf('   PERFORMANS METRİKLERİ (RMSE: Ortalama, ISE: Toplam)   \n');
-fprintf('=======================================================\n');
-
-for i = 1:num_drones
-    filename = fullfile(log_dir, sprintf('drone%d_log.txt', i));
-    if isfile(filename)
-        data = readtable(filename, 'VariableNamingRule', 'preserve');
-        
-        t = data{:, "time"} - data{1, "time"};
-        dt = [0; diff(t)]; 
-        
-        e_x = data{:, "a_pos.x"} - data{:, "r_pos.x"};
-        e_y = data{:, "a_pos.y"} - data{:, "r_pos.y"};
-        e_z = data{:, "a_pos.z"} - data{:, "r_pos.z"};
-        
-        sq_error = e_x.^2 + e_y.^2 + e_z.^2;
-        rmse_3d = sqrt(mean(sq_error));
-        ise_3d = sum(sq_error .* dt); 
-        
-        fprintf('Q %d -> RMSE (Ortalama): %.5f m | ISE (Toplam): %.5f\n', i, rmse_3d, ise_3d);
+    if D(i).ok
+        fprintf('Q %d -> RMSE: %.5f m | ISE: %.5f m^2s | MAX: %.5f m\n', i, M.rmse(i), M.ise(i), M.max(i));
     else
         fprintf('Q %d: Dosya bulunamadı.\n', i);
     end
 end
-fprintf('=======================================================\n');
-fprintf('Grafikler EPS formatında "EPS_Results" klasörüne kaydedildi.\n');
 
-%% === 9. HER DRONE İÇİN AYRI ANLIK HATA (SEYRELTİLMİŞ İNCE ÇUBUKLAR) ===
-%fig = figure;
-%set(fig, 'Position', [100, 100, 1200, 800]); % Büyük pencere
-%
-%% --- KULLANICI AYARLARI ---
-%% 1) SEYREKLİK ORANI:
-%% Veriyi ne kadar seyreltmek istediğinizi belirler.
-%% Örneğin '50' ise, log dosyasındaki her 50 veriden sadece 1'i çizilir.
-%% Çubuklar hala çok sıksa bu sayıyı artırın (örn: 100).
-%sparse_factor = 300; 
-%
-%% 2) ÇUBUK İNCELİĞİ:
-%% 0 ile 1 arasında bir değer. 
-%% 1 = Çubuklar birbirine değer (kalın). 
-%% 0.3 - 0.5 arası = İnce ve aralıklı çubuklar.
-%bar_thinness = 1.0; 
-%% ---------------------------
-%
-%fixed_ylim = 'auto'; 
-%
-%for i = 1:num_drones
-%    % 3 satır 2 sütunlu yerleşim
-%    subplot(3, 2, i); 
-%    hold on;
-%    
-%    filename = fullfile(log_dir, sprintf('drone%d_log.txt', i));
-%    if isfile(filename)
-%        data = readtable(filename, 'VariableNamingRule', 'preserve');
-%        time = data{:, "time"} - data{1, "time"};
-%        
-%        % Hata Hesaplama
-%        e_x = data{:, "a_pos.x"} - data{:, "r_pos.x"};
-%        e_y = data{:, "a_pos.y"} - data{:, "r_pos.y"};
-%        e_z = data{:, "a_pos.z"} - data{:, "r_pos.z"};
-%        pos_error = sqrt(e_x.^2 + e_y.^2 + e_z.^2);
-%        
-%        % --- VERİ SEYRELTME İŞLEMİ ---
-%        num_points = length(time);
-%        % 1'den başlayıp, sparse_factor kadar atlayarak indeksleri seç
-%        idx_sparse = 1:sparse_factor:num_points;
-%        
-%        time_sparse = time(idx_sparse);
-%        error_sparse = pos_error(idx_sparse);
-%        
-%        % --- ÇİZİM: SEYRELTİLMİŞ VE İNCE ÇUBUKLAR ---
-%        % 'BarWidth': Çubuk inceliği ayarı.
-%        % 'EdgeColor', 'k': Çubuklar artık ayrık olduğu için siyah kenar çizgisi
-%        % eklemek görselliği artırır. İstemezseniz 'none' yapabilirsiniz.
-%        h_bar = bar(time_sparse, error_sparse, 'FaceColor', colors(i,:), ...
-%                    'EdgeColor', 'k', 'LineWidth', 0.5, 'BarWidth', bar_thinness);
-%        
-%        % Y Limiti Ayarları
-%        yl = ylim; 
-%        if ~strcmp(fixed_ylim, 'auto')
-%             yl = [0 fixed_ylim];
-%        else
-%             max_err = max(pos_error); if max_err == 0, max_err = 0.1; end
-%             yl = [0, max_err * 1.1]; 
-%        end
-%        ylim(yl);
-%        
-%        % Zonları ekle (Arka plan renkleri)
-%        p1 = patch(t_zone1, [yl(1) yl(1) yl(2) yl(2)], c_zone1, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%        p2 = patch(t_zone2, [yl(1) yl(1) yl(2) yl(2)], c_zone2, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%        p3 = patch(t_zone3, [yl(1) yl(1) yl(2) yl(2)], c_zone3, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%        p4 = patch(t_zone4, [yl(1) yl(1) yl(2) yl(2)], c_zone4, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%        uistack([p1 p2 p3 p4], 'bottom'); % Zonları arkaya at
-%        
-%        % Etiketler ve Başlıklar
-%        % Başlıkta ne kadar seyreltildiğini bilgi olarak ekleyelim
-%        title(sprintf('Q %d Error', i), ...
-%            'FontWeight', 'bold', 'FontSize', 20, 'FontName', 'Times New Roman');
-%        ylabel('||e_p|| (m)', 'FontWeight', 'bold', 'FontSize', 20, 'FontName', 'Times New Roman');
-%        grid off; 
-%        xlim([0 60]);
-%        
-%        % Sadece alt sıradakilere X ekseni etiketi
-%        if i >= 4
-%            xlabel('t (s)', 'FontWeight', 'bold', 'FontSize', 20, 'FontName', 'Times New Roman');
-%        end
-%        
-%        set(gca, 'FontName', 'Times New Roman', 'FontSize', 20, 'FontWeight', 'bold', 'LineWidth', 1.5, 'Box', 'on', 'Layer', 'top');
-%    else
-%        text(0.5, 0.5, 'No Data', 'HorizontalAlignment', 'center');
-%    end
-%end
-%
-%% KAYDETME
-%eps_name = fullfile(eps_folder, '09_individual_error_sparse_bar.eps');
-%exportgraphics(fig, eps_name, 'ContentType', 'vector');
-%exportgraphics(fig, output_pdf, 'Append', true);
-%close(fig);
-%fprintf('Her drone için seyreltilmiş anlık hata çubuk grafikleri oluşturuldu ve kaydedildi.\n');
-%
-%
-%%% === 10. KARŞILAŞTIRMALI HATA ANALİZİ (MEVCUT vs GEOMETRIC) - TIGHT LAYOUT ===
-%fig = figure;
-%set(fig, 'Position', [100, 100, 1200, 800]); % Pencere boyutu
-%
-%% --- DİZİN AYARLARI ---
-%log_dir1 = log_dir; 
-%log_dir2 = '/home/asd/catkin_ws/src/multi_quadcopter_geometric_control/log/';
-%
-%% --- GÖRSEL VE YERLEŞİM AYARLARI (TIGHT LAYOUT) ---
-%sparse_factor = 300;     
-%bar_width_1   = 1.0;     
-%bar_width_2   = 0.5;     
-%fixed_ylim    = 'auto';  
-%
-%% Sayfa Yerleşim Parametreleri (0 ile 1 arası oranlar)
-%marg_l = 0.08; % Sol kenar boşluğu (Y eksen yazısı için)
-%marg_r = 0.02; % Sağ kenar boşluğu
-%marg_b = 0.08; % Alt kenar boşluğu (X eksen yazısı için)
-%marg_t = 0.05; % Üst kenar boşluğu
-%gap_w  = 0.03; % Grafikler arası yatay boşluk (Daraltıldı)
-%gap_h  = 0.06; % Grafikler arası dikey boşluk (Daraltıldı)
-%
-%% Genişlik ve Yükseklik Hesaplaması (Otomatik)
-%plot_w = (1 - marg_l - marg_r - gap_w) / 2;      % 2 Sütun olduğu için
-%plot_h = (1 - marg_b - marg_t - 2 * gap_h) / 3;  % 3 Satır olduğu için
-%
-%for i = 1:num_drones
-%    % --- KONUM HESAPLAMA (Grid Mantığı) ---
-%    row = ceil(i / 2);          % Satır indeksi (1, 1, 2, 2, 3, 3)
-%    col = mod(i-1, 2) + 1;      % Sütun indeksi (1, 2, 1, 2, 1, 2)
-%    
-%    % MATLAB koordinat sistemi sol-alttan başlar, buna göre pozisyon:
-%    pos_x = marg_l + (col - 1) * (plot_w + gap_w);
-%    % Y ekseni yukarıdan aşağıya insin diye ters mantık kurulur:
-%    pos_y = 1 - marg_t - row * plot_h - (row - 1) * gap_h;
-%    
-%    % Subplot yerine direkt eksen oluşturuyoruz
-%    ax = axes('Position', [pos_x, pos_y, plot_w, plot_h]);
-%    hold on; box on;
-%    
-%    local_handles = [];
-%    local_names = {};
-%    
-%    % === 1. VERİ SETİ (PROPOSED) ===
-%    file1 = fullfile(log_dir1, sprintf('drone%d_log.txt', i));
-%    max_err1 = 0;
-%    if isfile(file1)
-%        data1 = readtable(file1, 'VariableNamingRule', 'preserve');
-%        t1 = data1{:, "time"} - data1{1, "time"};
-%        ex1 = data1{:, "a_pos.x"} - data1{:, "r_pos.x"};
-%        ey1 = data1{:, "a_pos.y"} - data1{:, "r_pos.y"};
-%        ez1 = data1{:, "a_pos.z"} - data1{:, "r_pos.z"};
-%        err1 = sqrt(ex1.^2 + ey1.^2 + ez1.^2);
-%        max_err1 = max(err1);
-%        idx1 = 1:sparse_factor:length(t1);
-%        h1 = bar(t1(idx1), err1(idx1), 'FaceColor', colors(i,:), ...
-%            'EdgeColor', 'none', 'BarWidth', bar_width_1, 'FaceAlpha', 0.6);
-%        local_handles = [local_handles, h1];
-%        local_names{end+1} = 'Proposed Controller';
-%    end
-%    
-%    % === 2. VERİ SETİ (SE3) ===
-%    file2 = fullfile(log_dir2, sprintf('drone%d_log.txt', i));
-%    max_err2 = 0;
-%    if isfile(file2)
-%        data2 = readtable(file2, 'VariableNamingRule', 'preserve');
-%        t2 = data2{:, "time"} - data2{1, "time"};
-%        ex2 = data2{:, "a_pos.x"} - data2{:, "r_pos.x"};
-%        ey2 = data2{:, "a_pos.y"} - data2{:, "r_pos.y"};
-%        ez2 = data2{:, "a_pos.z"} - data2{:, "r_pos.z"};
-%        err2 = sqrt(ex2.^2 + ey2.^2 + ez2.^2);
-%        max_err2 = max(err2);
-%        idx2 = 1:sparse_factor:length(t2);
-%        h2 = bar(t2(idx2), err2(idx2), 'FaceColor', [0.2 0.2 0.2], ...
-%            'EdgeColor', 'none', 'BarWidth', bar_width_2, 'FaceAlpha', 0.9);
-%        local_handles = [local_handles, h2];
-%        local_names{end+1} = 'SE(3) Controller';
-%    end
-%    
-%    % === EKSEN LİMİTLERİ VE ZONLAR ===
-%    if ~strcmp(fixed_ylim, 'auto')
-%         yl = [0 fixed_ylim];
-%    else
-%         global_max = max(max_err1, max_err2);
-%         if global_max == 0, global_max = 0.1; end
-%         yl = [0, global_max * 1.1]; 
-%    end
-%    ylim(yl);
-%    
-%    p1 = patch(t_zone1, [yl(1) yl(1) yl(2) yl(2)], c_zone1, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%    p2 = patch(t_zone2, [yl(1) yl(1) yl(2) yl(2)], c_zone2, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%    p3 = patch(t_zone3, [yl(1) yl(1) yl(2) yl(2)], c_zone3, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%    p4 = patch(t_zone4, [yl(1) yl(1) yl(2) yl(2)], c_zone4, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%    uistack([p1 p2 p3 p4], 'bottom'); 
-%    
-%    grid off; xlim([0 60]);
-%    
-%    % Eksen yazı tipleri
-%    set(gca, 'XTick', 0:10:60, ...          
-%             'FontName', 'Times New Roman', ...
-%             'FontSize', 16, ... % Font biraz küçültüldü ki sığsın
-%             'FontWeight', 'bold', ...
-%             'LineWidth', 1.5, ...
-%             'Layer', 'top');
-%    
-%    % === LEGEND ===
-%    if ~isempty(local_handles)
-%        lgd = legend(local_handles, local_names, ...
-%            'Location', 'NorthEast', ...
-%            'FontSize', 13, ...            
-%            'FontWeight', 'bold', ...
-%            'FontName', 'Times New Roman', ...
-%            'Box', 'on');
-%        title(lgd, sprintf('Q %d', i)); 
-%        lgd.Title.Visible = 'on';
-%        lgd.Title.NodeChildren.FontSize = 10;
-%        lgd.Title.NodeChildren.FontWeight = 'bold';
-%    end
-%end
-%
-%% --- ORTAK EKSEN YAZILARI ---
-%% Tüm figürü kaplayan görünmez bir eksen
-%han = axes(fig, 'Position', [0 0 1 1], 'visible', 'off'); 
-%
-%% Y-Ekseni Yazısı (Sol Kenar Ortası)
-%text(han, 0.03, 0.5, '||e_p|| (m)', ...
-%    'FontName', 'Times New Roman', ...
-%    'FontSize', 22, ...
-%    'FontWeight', 'bold', ...
-%    'Rotation', 90, ...
-%    'HorizontalAlignment', 'center', ...
-%    'VerticalAlignment', 'middle');
-%
-%% X-Ekseni Yazısı (Alt Kenar Ortası)
-%text(han, 0.5, 0.03, 't (s)', ...
-%    'FontName', 'Times New Roman', ...
-%    'FontSize', 22, ...
-%    'FontWeight', 'bold', ...
-%    'HorizontalAlignment', 'center', ...
-%    'VerticalAlignment', 'middle');
-%
-%% KAYDETME
-%eps_name = fullfile(eps_folder, 'Fig12_Tight.eps');
-%exportgraphics(fig, eps_name, 'ContentType', 'vector');
-%exportgraphics(fig, output_pdf, 'Append', true);
-%close(fig);
-%fprintf('Grafikler sıkıştırılmış (Tight Layout) formatta oluşturuldu.\n');
-%%% === 11. KARŞILAŞTIRMALI HATA ANALİZİ (SADECE DRONE 2 ve 3) - DÜZELTİLMİŞ LAYOUT ===
-%fig = figure;
-%set(fig, 'Position', [100, 100, 1200, 500]); % Geniş ve alçak pencere
-%
-%% --- DİZİN AYARLARI ---
-%log_dir1 = log_dir; 
-%log_dir2 = '/home/asd/catkin_ws/src/multi_quadcopter_geometric_control/log/';
-%
-%% --- GÖRSEL VE YERLEŞİM AYARLARI ---
-%sparse_factor = 300;     
-%bar_width_1   = 1.0;     
-%bar_width_2   = 0.5;     
-%fixed_ylim    = 0.24;    
-%
-%% --- SAYFA YERLEŞİMİ (DÜZELTİLEN KISIM) ---
-%% Sol eksen sayıları ve yazısı için daha fazla yer ayrıldı.
-%marg_l = 0.10;  % Sol kenar boşluğu (ARTIRILDI: 0.07 -> 0.12)
-%marg_r = 0.02;  % Sağ kenar boşluğu
-%marg_b = 0.15;  % Alt kenar boşluğu
-%marg_t = 0.10;  % Üst kenar boşluğu (Legend sığsın diye biraz artırıldı)
-%
-%% Grafikler arası boşluk (Sağdaki sayıların sola binmemesi için)
-%gap    = 0.08;  % Ara boşluk (ARTIRILDI: 0.03 -> 0.08)
-%
-%% Grafik genişlik hesaplaması (Otomatik)
-%plot_w = (1 - marg_l - marg_r - gap) / 2; 
-%plot_h = 1 - marg_b - marg_t;             
-%
-%target_drones = [2, 3]; 
-%
-%for k = 1:length(target_drones)
-%    i = target_drones(k); 
-%    
-%    % --- KONUM HESAPLAMA ---
-%    pos_x = marg_l + (k-1) * (plot_w + gap);
-%    pos_y = marg_b; 
-%    
-%    ax = axes('Position', [pos_x, pos_y, plot_w, plot_h]);
-%    hold on; box on;
-%    
-%    local_handles = [];
-%    local_names = {};
-%    
-%    % === 1. VERİ SETİ (PROPOSED) ===
-%    file1 = fullfile(log_dir1, sprintf('drone%d_log.txt', i));
-%    max_err1 = 0;
-%    if isfile(file1)
-%        data1 = readtable(file1, 'VariableNamingRule', 'preserve');
-%        t1 = data1{:, "time"} - data1{1, "time"};
-%        ex1 = data1{:, "a_pos.x"} - data1{:, "r_pos.x"};
-%        ey1 = data1{:, "a_pos.y"} - data1{:, "r_pos.y"};
-%        ez1 = data1{:, "a_pos.z"} - data1{:, "r_pos.z"};
-%        err1 = sqrt(ex1.^2 + ey1.^2 + ez1.^2);
-%        max_err1 = max(err1);
-%        idx1 = 1:sparse_factor:length(t1);
-%        h1 = bar(t1(idx1), err1(idx1), 'FaceColor', colors(i,:), ...
-%            'EdgeColor', 'none', 'BarWidth', bar_width_1, 'FaceAlpha', 0.6);
-%        local_handles = [local_handles, h1];
-%        local_names{end+1} = 'Feedforward Inactive';
-%    end
-%    
-%    % === 2. VERİ SETİ (SE3) ===
-%    file2 = fullfile(log_dir2, sprintf('drone%d_log.txt', i));
-%    max_err2 = 0;
-%    if isfile(file2)
-%        data2 = readtable(file2, 'VariableNamingRule', 'preserve');
-%        t2 = data2{:, "time"} - data2{1, "time"};
-%        ex2 = data2{:, "a_pos.x"} - data2{:, "r_pos.x"};
-%        ey2 = data2{:, "a_pos.y"} - data2{:, "r_pos.y"};
-%        ez2 = data2{:, "a_pos.z"} - data2{:, "r_pos.z"};
-%        err2 = sqrt(ex2.^2 + ey2.^2 + ez2.^2);
-%        max_err2 = max(err2);
-%        idx2 = 1:sparse_factor:length(t2);
-%        h2 = bar(t2(idx2), err2(idx2), 'FaceColor', [0.2 0.2 0.2], ...
-%            'EdgeColor', 'none', 'BarWidth', bar_width_2, 'FaceAlpha', 0.9);
-%        local_handles = [local_handles, h2];
-%        local_names{end+1} = 'Feedforward Active';
-%    end
-%    
-%    % === EKSEN LİMİTLERİ VE ZONLAR ===
-%    if ~strcmp(fixed_ylim, 'auto')
-%         yl = [0 fixed_ylim];
-%    else
-%         global_max = max(max_err1, max_err2);
-%         if global_max == 0, global_max = 0.1; end
-%         yl = [0, global_max * 1.1]; 
-%    end
-%    ylim(yl);
-%    
-%    p1 = patch(t_zone1, [yl(1) yl(1) yl(2) yl(2)], c_zone1, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%    p2 = patch(t_zone2, [yl(1) yl(1) yl(2) yl(2)], c_zone2, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%    p3 = patch(t_zone3, [yl(1) yl(1) yl(2) yl(2)], c_zone3, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%    p4 = patch(t_zone4, [yl(1) yl(1) yl(2) yl(2)], c_zone4, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%    uistack([p1 p2 p3 p4], 'bottom'); 
-%    
-%    grid off; xlim([0 60]);
-%    
-%    set(gca, 'XTick', 0:10:60, ...
-%             'FontName', 'Times New Roman', ...
-%             'FontSize', 20, ...
-%             'FontWeight', 'bold', ...
-%             'LineWidth', 1.5, ...
-%             'Layer', 'top');
-%    
-%    % === LEGEND ===
-%    if ~isempty(local_handles)
-%        lgd = legend(local_handles, local_names, ...
-%            'Location', 'NorthEast', ...
-%            'FontSize', 13, ...            
-%            'FontWeight', 'bold', ...
-%            'FontName', 'Times New Roman', ...
-%            'Box', 'on');
-%            
-%        title(lgd, sprintf('Q %d', i)); 
-%        lgd.Title.Visible = 'on';
-%        lgd.Title.NodeChildren.FontSize = 12;
-%        lgd.Title.NodeChildren.FontWeight = 'bold';
-%    end
-%end
-%
-%% --- ORTAK EKSEN YAZILARI (Global Labels) ---
-%han = axes(fig, 'Position', [0 0 1 1], 'visible', 'off'); 
-%
-%% Y-Ekseni Yazısı (Daha sola çekildi: 0.02)
-%text(han, 0.02, 0.55, '||e_p|| (m)', ...
-%    'FontName', 'Times New Roman', ...
-%    'FontSize', 24, ...
-%    'FontWeight', 'bold', ...
-%    'Rotation', 90, ...
-%    'HorizontalAlignment', 'center', ...
-%    'VerticalAlignment', 'middle');
-%
-%% X-Ekseni Yazısı
-%text(han, 0.5, 0.04, 't (s)', ...
-%    'FontName', 'Times New Roman', ...
-%    'FontSize', 24, ...
-%    'FontWeight', 'bold', ...
-%    'HorizontalAlignment', 'center', ...
-%    'VerticalAlignment', 'middle');
-%
-%% KAYDETME
-%eps_name = fullfile(eps_folder, 'Fig12_Drone2and3_Corrected.eps');
-%exportgraphics(fig, eps_name, 'ContentType', 'vector');
-%exportgraphics(fig, output_pdf, 'Append', true);
-%close(fig);
-%fprintf('Eksen çakışmaları giderildi.\n');
-%
-%%% === 12. HER DRONE İÇİN EULER AÇI HATASI (ATTITUDE ERROR - BAR GRAFİĞİ) ===
-%fig = figure;
-%set(fig, 'Position', [100, 100, 1200, 800]); % Büyük pencere
-%
-%% --- GÖRSEL AYARLAR ---
-%sparse_factor = 300;     % Veri seyreltme (Bar sıklığı)
-%bar_thinness  = 0.3;     % Bar kalınlığı
-%fixed_ylim    = 'auto';  % Y ekseni limiti ('auto' veya örn: 0.1 rad)
-%
-%for i = 1:num_drones
-%    % 3 satır 2 sütunlu yerleşim
-%    subplot(3, 2, i); 
-%    hold on; box on;
-%    
-%    filename = fullfile(log_dir, sprintf('drone%d_log.txt', i));
-%    if isfile(filename)
-%        data = readtable(filename, 'VariableNamingRule', 'preserve');
-%        time = data{:, "time"} - data{1, "time"};
-%        
-%        % --- EULER AÇI HATALARINI HESAPLA (Radyan) ---
-%        % x: Roll (Phi), y: Pitch (Theta), z: Yaw (Psi)
-%        e_phi   = data{:, "a_eul_ang.x"} - data{:, "r_eul_ang.x"};
-%        e_theta = data{:, "a_eul_ang.y"} - data{:, "r_eul_ang.y"};
-%        e_psi   = data{:, "a_eul_ang.z"} - data{:, "r_eul_ang.z"};
-%        
-%        % Toplam Açı Hatası Normu (Euclidean Norm)
-%        att_error = sqrt(e_phi.^2 + e_theta.^2 + e_psi.^2);
-%        
-%        % --- VERİ SEYRELTME ---
-%        idx_sparse = 1:sparse_factor:length(time);
-%        time_sparse = time(idx_sparse);
-%        error_sparse = att_error(idx_sparse);
-%        
-%        % --- ÇİZİM ---
-%        bar(time_sparse, error_sparse, 'FaceColor', colors(i,:), ...
-%            'EdgeColor', 'k', 'LineWidth', 0.5, 'BarWidth', bar_thinness);
-%        
-%        % Y Limiti Ayarları
-%        yl = ylim; 
-%        if ~strcmp(fixed_ylim, 'auto')
-%             yl = [0 fixed_ylim];
-%        else
-%             max_err = max(att_error); if max_err == 0, max_err = 0.1; end
-%             yl = [0, max_err * 1.1]; 
-%        end
-%        ylim(yl);
-%        
-%        % Arka Plan Zonları
-%        p1 = patch(t_zone1, [yl(1) yl(1) yl(2) yl(2)], c_zone1, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%        p2 = patch(t_zone2, [yl(1) yl(1) yl(2) yl(2)], c_zone2, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%        p3 = patch(t_zone3, [yl(1) yl(1) yl(2) yl(2)], c_zone3, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%        p4 = patch(t_zone4, [yl(1) yl(1) yl(2) yl(2)], c_zone4, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%        uistack([p1 p2 p3 p4], 'bottom'); 
-%        
-%        % Etiketler
-%        title(sprintf('Q %d Attitude Error', i), 'FontWeight', 'bold', 'FontSize', 20, 'FontName', 'Times New Roman');
-%        ylabel('||e_{att}|| (rad)', 'FontWeight', 'bold', 'FontSize', 20, 'FontName', 'Times New Roman');
-%        grid off; xlim([0 60]);
-%        
-%        % Sadece alt sıradakilere X ekseni etiketi
-%        if i >= 4
-%            xlabel('t (s)', 'FontWeight', 'bold', 'FontSize', 20, 'FontName', 'Times New Roman');
-%        end
-%        
-%        % X Eksenini 10'un katları yap
-%        set(gca, 'XTick', 0:10:60, ...
-%                 'FontName', 'Times New Roman', ...
-%                 'FontSize', 20, ...
-%                 'FontWeight', 'bold', ...
-%                 'LineWidth', 1.5, ...
-%                 'Layer', 'top');
-%    else
-%        text(0.5, 0.5, 'No Data', 'HorizontalAlignment', 'center');
-%    end
-%end
-%
-%% KAYDETME
-%eps_name = fullfile(eps_folder, '12_attitude_error_bar.eps');
-%exportgraphics(fig, eps_name, 'ContentType', 'vector');
-%exportgraphics(fig, output_pdf, 'Append', true);
-%close(fig);
-%fprintf('Euler açısı hata grafikleri (Attitude Error) oluşturuldu.\n');
-%
-%%% === 15. DCM (ROTASYON MATRİSİ) TABANLI YÖNELİM HATASI (GEODESIC ERROR) ===
-%fig = figure;
-%set(fig, 'Position', [100, 100, 800, 500]); % Tek grafik
-%
-%% --- AYARLAR ---
-%target_drone  = 2;      % Sadece Drone 2
-%sparse_factor = 300;    % Veri seyreltme
-%bar_width_1   = 0.5;
-%bar_width_2   = 0.3;
-%fixed_ylim    = 1.3;    % <--- DEĞİŞİKLİK BURADA: Y Limiti 1.3 radyan
-%
-%% Dosya Yolları
-%log_dirs = {log_dir, '/home/asd/catkin_ws/src/multi_quadcopter_geometric_control/log/'};
-%legend_names = {'\beta = 0.05', '\beta = 0.1'};
-%bar_colors = {colors(target_drone,:), [0.2 0.2 0.2]};
-%bar_widths = [bar_width_1, bar_width_2];
-%alphas = [0.6, 0.9];
-%
-%hold on; box on;
-%local_handles = [];
-%
-%for k = 1:2
-%    filename = fullfile(log_dirs{k}, sprintf('drone%d_log.txt', target_drone));
-%    if ~isfile(filename), continue; end
-%    
-%    data = readtable(filename, 'VariableNamingRule', 'preserve');
-%    time = data{:, "time"} - data{1, "time"};
-%    
-%    % Euler Açılarını Al (Radyan)
-%    r_phi = data{:, "r_eul_ang.x"}; r_theta = data{:, "r_eul_ang.y"}; r_psi = data{:, "r_eul_ang.z"};
-%    a_phi = data{:, "a_eul_ang.x"}; a_theta = data{:, "a_eul_ang.y"}; a_psi = data{:, "a_eul_ang.z"};
-%    
-%    num_points = length(time);
-%    dcm_error = zeros(num_points, 1);
-%    
-%    % --- DCM HESAPLAMA DÖNGÜSÜ (Z-Y-X) ---
-%    for j = 1:num_points
-%        % 1. Referans Rotasyon Matrisi (R_ref)
-%        % Z-Y-X: R = Rz(psi) * Ry(theta) * Rx(phi)
-%        
-%        Rx_r = [1 0 0; 0 cos(r_phi(j)) -sin(r_phi(j)); 0 sin(r_phi(j)) cos(r_phi(j))];
-%        Ry_r = [cos(r_theta(j)) 0 sin(r_theta(j)); 0 1 0; -sin(r_theta(j)) 0 cos(r_theta(j))];
-%        Rz_r = [cos(r_psi(j)) -sin(r_psi(j)) 0; sin(r_psi(j)) cos(r_psi(j)) 0; 0 0 1];
-%        
-%        R_ref = Rz_r * Ry_r * Rx_r;
-%        
-%        % 2. Aktüel Rotasyon Matrisi (R_act)
-%        Rx_a = [1 0 0; 0 cos(a_phi(j)) -sin(a_phi(j)); 0 sin(a_phi(j)) cos(a_phi(j))];
-%        Ry_a = [cos(a_theta(j)) 0 sin(a_theta(j)); 0 1 0; -sin(a_theta(j)) 0 cos(a_theta(j))];
-%        Rz_a = [cos(a_psi(j)) -sin(a_psi(j)) 0; sin(a_psi(j)) cos(a_psi(j)) 0; 0 0 1];
-%        
-%        R_act = Rz_a * Ry_a * Rx_a;
-%        
-%        % 3. Hata Matrisi: R_err = R_ref' * R_act
-%        R_err = R_ref' * R_act;
-%        
-%        % 4. Geodesic Error (Trace Hesabı)
-%        tr = R_err(1,1) + R_err(2,2) + R_err(3,3);
-%        val = (tr - 1) / 2;
-%        val = max(min(val, 1), -1); % Güvenlik
-%        
-%        dcm_error(j) = acos(val); % Radyan
-%    end
-%    
-%    % --- ÇİZİM ---
-%    idx = 1:sparse_factor:num_points;
-%    h = bar(time(idx), dcm_error(idx), 'FaceColor', bar_colors{k}, ...
-%            'EdgeColor', 'none', 'BarWidth', bar_widths(k), 'FaceAlpha', alphas(k));
-%    local_handles = [local_handles, h];
-%end
-%
-%% --- GÖRSEL DÜZENLEMELER ---
-%% Y Limiti Sabitleme
-%if ~strcmp(fixed_ylim, 'auto')
-%     yl = [0 fixed_ylim];
-%else
-%     yl = ylim; yl = [0, yl(2)*1.1]; 
-%end
-%ylim(yl);
-%
-%% Arka Plan Zonları
-%p1 = patch(t_zone1, [yl(1) yl(1) yl(2) yl(2)], c_zone1, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%p2 = patch(t_zone2, [yl(1) yl(1) yl(2) yl(2)], c_zone2, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%p3 = patch(t_zone3, [yl(1) yl(1) yl(2) yl(2)], c_zone3, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%p4 = patch(t_zone4, [yl(1) yl(1) yl(2) yl(2)], c_zone4, 'EdgeColor', 'none', 'HandleVisibility', 'off');
-%uistack([p1 p2 p3 p4], 'bottom'); 
-%
-%% Eksenler
-%ylabel('Orientation Error (rad)', 'FontWeight', 'bold', 'FontSize', 16, 'FontName', 'Times New Roman');
-%xlabel('t (s)', 'FontWeight', 'bold', 'FontSize', 16, 'FontName', 'Times New Roman');
-%xlim([0 60]);
-%
-%set(gca, 'XTick', 0:10:60, ...
-%         'FontName', 'Times New Roman', 'FontSize', 16, 'FontWeight', 'bold', 'LineWidth', 1.5, 'Layer', 'top');
-%
-%% Legend
-%lgd = legend(local_handles, legend_names, 'Location', 'NorthEast', ...
-%    'FontSize', 12, 'FontWeight', 'bold', 'Box', 'on');
-%
-%% KAYDETME
-%eps_name = fullfile(eps_folder, '15_drone2_DCM_error.eps');
-%exportgraphics(fig, eps_name, 'ContentType', 'vector');
-%exportgraphics(fig, output_pdf, 'Append', true);
-%close(fig);
-%fprintf('Drone 2 için DCM tabanlı oryantasyon hata grafiği (Y-Lim: 1.3) oluşturuldu.\n');
-%
-%%% === 16. DRONE 1 - PUBLICATION READY (TIGHT LAYOUT & STAR MARKER) ===
-%fig = figure;
-%% Makale için genelde genişlik yükseklikten fazla olur, oran ayarlandı
-%set(fig, 'Position', [100, 100, 1200, 550]); 
-%
-%% 'tiledlayout' grafikleri birbirine subplot'tan çok daha fazla yaklaştırır.
-%% 'TileSpacing', 'compact' -> Grafikler arası boşluğu azaltır.
-%% 'Padding', 'compact' -> Figür kenar boşluklarını azaltır.
-%t = tiledlayout(1, 2, 'TileSpacing', 'compact', 'Padding', 'compact');
-%
-%% --- 1. WAYPOINT VERİLERİ ---
-%wp_sets{1}.x = [0.0, 0.0, 0.0, 2.0, 2.0, 2.0, 3.0];
-%wp_sets{1}.y = [0.0, 0.5, 2.5, 4.0, 7.0, 8.5, 10.0];
-%wp_sets{1}.z = [0.0, 1.5, 2.0, 2.0, 3.0, 2.0, 2.0];
-%
-%wp_sets{2}.x = [-1.0, -6.0, -10.0, -7.0, -4.5, -2.8, -2.0];
-%wp_sets{2}.y = [3.0, 0.0, -5.2, -6.3, -7.0, -9.5, -10.0];
-%wp_sets{2}.z = [2.5, 2.0, 2.2, 2.2, 2.3, 2.4, 2.7];
-%
-%wp_sets{3}.x = [-2.5, -1.0, 0.0, 0.0, 0.0, 0.0, 1.0];
-%wp_sets{3}.y = [-9.0, -11.0, -12.5, -14.0, -16.0, -18.0, -20.0];
-%wp_sets{3}.z = [2.5, 2.0, 2.0, 2.0, 3.0, 3.0, 3.0];
-%
-%wp_sets{4}.x = [1.0, 0.0, 0.0, -1.0, 1.0, 1.0, 0.0];
-%wp_sets{4}.y = [-17.0, -14.0, -11.0, -8.0, -5.0, -2.0, 0.0];
-%wp_sets{4}.z = [2.0, 3.0, 3.0, 3.0, 3.0, 2.5, 0.0];
-%
-%% Renkler (Grafik referansına uygun)
-%wp_colors = {[1, 0.2, 0.2], [0.2, 0.6, 1], [0.2, 0.8, 0.2], [0.9, 0.8, 0]};
-%
-%% --- 2. LOG OKUMA ---
-%filename = fullfile(log_dir, 'drone1_log.txt');
-%
-%if isfile(filename)
-%    data = readtable(filename, 'VariableNamingRule', 'preserve');
-%    act_x = data{:, "a_pos.x"};
-%    act_y = data{:, "a_pos.y"};
-%    act_z = data{:, "a_pos.z"};
-%    d1_color = colors(1, :); 
-%
-%    start_x = act_x(1);
-%    start_y = act_y(1);
-%    start_z = act_z(1);
-%
-%    % ======================================================
-%    % GRAFİK 1: IZOMETRIK GÖRÜNÜM (3D)
-%    % ======================================================
-%    nexttile; % Subplot yerine nexttile kullanılır
-%    hold on; box on;
-%    
-%    % Gerçek Rota
-%    plot3(act_x, act_y, act_z, '-', 'Color', d1_color, 'LineWidth', 2.5);
-%    
-%    % Waypointler (Sadece Kareler)
-%    for k = 1:4
-%        scatter3(wp_sets{k}.x, wp_sets{k}.y, wp_sets{k}.z, 100, wp_colors{k}, 's', 'filled', ...
-%                 'MarkerEdgeColor', 'k');
-%    end
-%
-%    % BAŞLANGIÇ NOKTASI (YILDIZ)
-%    % 'p' -> Pentagram (Yıldız) sembolüdür.
-%    scatter3(start_x, start_y, start_z, 300, 'g', 'p', 'filled', 'MarkerEdgeColor', 'k', 'LineWidth', 1.5);
-%
-%    xlabel('x (m)', 'FontWeight', 'bold', 'FontSize', 22, 'FontName', 'Times New Roman');
-%    ylabel('y (m)', 'FontWeight', 'bold', 'FontSize', 22, 'FontName', 'Times New Roman');
-%    zlabel('z (m)', 'FontWeight', 'bold', 'FontSize', 22, 'FontName', 'Times New Roman');
-%    
-%    view(45, 30);
-%    grid on; 
-%    axis equal; 
-%    axis tight; % Grafiği kenarlara yapıştırır (Compact görüntü için şart)
-%    
-%    % Eksen yazı boyutlarını makale için büyüttük
-%    set(gca, 'FontName', 'Times New Roman', 'FontSize', 20, 'FontWeight', 'bold', 'LineWidth', 2.0);
-%
-%    % ======================================================
-%    % GRAFİK 2: XY GÖRÜNÜMÜ (TOP-DOWN)
-%    % ======================================================
-%    nexttile; 
-%    hold on; box on;
-%    
-%    % Gerçek Rota
-%    plot(act_x, act_y, '-', 'Color', d1_color, 'LineWidth', 2.5);
-%    
-%    % Waypointler
-%    for k = 1:4
-%        scatter(wp_sets{k}.x, wp_sets{k}.y, 100, wp_colors{k}, 's', 'filled', ...
-%                'MarkerEdgeColor', 'k');
-%    end
-%
-%    % BAŞLANGIÇ NOKTASI (YILDIZ)
-%    scatter(start_x, start_y, 300, 'g', 'p', 'filled', 'MarkerEdgeColor', 'k', 'LineWidth', 1.5);
-%
-%    xlabel('x (m)', 'FontWeight', 'bold', 'FontSize', 22, 'FontName', 'Times New Roman');
-%    ylabel('y (m)', 'FontWeight', 'bold', 'FontSize', 22, 'FontName', 'Times New Roman');
-%    
-%    view(0, 90);
-%    grid on; 
-%    axis equal; 
-%    axis tight;
-%    
-%    set(gca, 'FontName', 'Times New Roman', 'FontSize', 20, 'FontWeight', 'bold', 'LineWidth', 2.0);
-%
-%    % --- KAYDETME ---
-%    eps_name = fullfile(eps_folder, '16_drone1_article_ready.eps');
-%    exportgraphics(fig, eps_name, 'ContentType', 'vector');
-%    exportgraphics(fig, output_pdf, 'Append', true);
-%    fprintf('Makale formatında (Sıkıştırılmış, Yıldızlı) grafik oluşturuldu.\n');
-%else
-%    fprintf('HATA: Drone 1 log dosyası (%s) bulunamadı.\n', filename);
-%end
-%close(fig);
-%
-%
+if all(f2_ok)
+    tbl1 = multiComparisonTable(cellfun(@metrics, D_f2, 'UniformOutput', false), ...
+                                cellfun(@ctrlVar, fig2_ctrls, 'UniformOutput', false));
+    fprintf('\nTable 1: %s; RMSE mm, ISE x10^-3 m^2 s (fark %% = (diğeri - %s) / diğeri * 100)\n', ...
+            strjoin(f2_labels, ' vs '), f2_labels{1});
+    disp(tbl1);
+    writetable(tbl1, fullfile(out_folder, 'Table1.csv'));
+end
+if all(f8_ok) && mod(numel(fig8_ctrls), 2) == 0
+    if numel(fig8_nominal) ~= numel(fig8_ctrls) / 2
+        error('fig8_nominal her (ileri beslemeli, ileri beslemesiz) çifti için bir bozucusuz koşu içermeli.');
+    end
+    if ~all(cellfun(@(x) any([x.ok]), D_f8n))
+        warning('Table 2: bozucusuz koşular eksik (%s); ΔRMSE sütunları NaN.', strjoin(fig8_nominal, ', '));
+    end
+    tbl2 = disturbanceRejectionTable(cellfun(@metrics, D_f8, 'UniformOutput', false), ...
+                                     cellfun(@metrics, D_f8n, 'UniformOutput', false), ...
+                                     cellfun(@ctrlVar, fig8_ctrls, 'UniformOutput', false), ...
+                                     cellfun(@ctrlVar, fig8_nominal, 'UniformOutput', false));
+    fprintf(['\nTable 2: Bozucu bastırma - %s\n  RMSE mm, ISE x10^-3 m^2 s; dRMSE / dISE = bozucusuz koşuya göre ', ...
+             'artış; removed = ileri beslemenin giderdiği downwash payı (%%), yalnızca downwash etkisindeki İHA''lar\n'], ...
+            strjoin(f8_labels, ', '));
+    disp(tbl2);
+    writetable(tbl2, fullfile(out_folder, 'Table2.csv'));
+end
+
+%% === Table 4 - UYUMSUZ KOMPANZATÖR (Hakem 1) ===
+% Model tabanlı FF (simülatörle aynı model), NDOB (model yok, gözlemci kestirimi) ve kompanzasyonsuz koşu.
+%   dRMSE        = RMSE - bozucusuz RMSE (downwash'ın yarattığı ek hata)
+%   PD_NDOB_vs_PD_FF_pct = PD+NDOB'un PD+FF'ye göre RMSE artışı (%)
+%   residual_pct = kompanzasyondan sonra kalan downwash hatası / kompanzasyonsuz downwash hatası (%);
+%                  yalnızca downwash'a maruz kalan İHA'lar için (kompanzasyonsuz dRMSE > 0.1 mm).
+if any([D_none.ok]) && any([D_obs.ok]) && any([D_ff.ok])
+    M_ndob = metrics(D_obs);
+    M_none = metrics(D_none);
+    M_ff   = metrics(D_ff);
+    if any([D_nom.ok])
+        M_nom = metrics(D_nom);
+    else
+        M_nom = struct('rmse', nan(num_drones, 1));
+        warning('Table 4: bozucusuz loglar bulunamadı (%s); dRMSE sütunları NaN.', nominal_log_dir);
+    end
+    d_none = M_none.rmse - M_nom.rmse;
+    d_ndob = M_ndob.rmse - M_nom.rmse;
+    d_ff   = M_ff.rmse - M_nom.rmse;
+    disturbed = d_none > 1e-4;
+    res_ndob = nan(num_drones, 1); res_ff = res_ndob;
+    res_ndob(disturbed) = d_ndob(disturbed) ./ d_none(disturbed) * 100;
+    res_ff(disturbed)   = d_ff(disturbed) ./ d_none(disturbed) * 100;
+    Quadcopter = "Q " + string((1:num_drones)');
+    v = cellfun(@ctrlVar, mismatch_ctrls, 'UniformOutput', false);
+    tbl4 = table(Quadcopter, M_nom.rmse, M_none.rmse, M_ndob.rmse, M_ff.rmse, d_none, d_ndob, d_ff, ...
+                 (M_ndob.rmse - M_ff.rmse) ./ M_ff.rmse * 100, res_ndob, res_ff, ...
+                 'VariableNames', {'Quadcopter', 'DisturbanceFree_RMSE_m', [v{1} '_RMSE_m'], ...
+                                   [v{2} '_RMSE_m'], [v{3} '_RMSE_m'], [v{1} '_dRMSE_m'], [v{2} '_dRMSE_m'], ...
+                                   [v{3} '_dRMSE_m'], [v{2} '_vs_' v{3} '_pct'], [v{2} '_residual_pct'], ...
+                                   [v{3} '_residual_pct']});
+    fprintf('\nTable 4: Uyumsuz kompanzatör - %s\n', strjoin(cellfun(@ctrlLabel, mismatch_ctrls, 'UniformOutput', false), ' / '));
+    disp(tbl4);
+    writetable(tbl4, fullfile(out_folder, 'Table4_compensator_mismatch.csv'));
+
+    % NDOB kestirim hatası (z), downwash etkinken (|f_dist,z| > 0.05 N)
+    if hasNdobColumns(D_obs)
+        for i = fig9_drones
+            if ~D_obs(i).ok, continue; end
+            f_true = D_obs(i).T{:, "dist_f.z"};
+            f_est  = D_obs(i).T{:, "ndob_f.z"};
+            act = abs(f_true) > 0.05;
+            if ~any(act), continue; end
+            fprintf('NDOB kestirimi Q %d (downwash etkin, %.1f s): RMS hata %.3f N, RMS downwash %.3f N (%%%.0f)\n', ...
+                    i, sum(act) * mean(diff(D_obs(i).t)), sqrt(mean((f_est(act) - f_true(act)).^2)), ...
+                    sqrt(mean(f_true(act).^2)), ...
+                    100 * sqrt(mean((f_est(act) - f_true(act)).^2)) / sqrt(mean(f_true(act).^2)));
+        end
+    end
+else
+    warning('Table 4 atlandı: %s logları bulunamadı (log/ altında).', strjoin(mismatch_ctrls, ', '));
+end
+%% === Table S2 / Table S3 - SİMÜLASYON PARAMETRELERİ VE KONTROLCÜ KAZANÇLARI ===
+% Değerler doğrudan config/*.yaml ve launch/sequential_sim.launch dosyalarından okunur.
+try
+    [tblS2, tblS3] = parameterTables(config_dir, fullfile(pkg_dir, 'launch', 'sequential_sim.launch'));
+    fprintf('\nTable S2: Simülasyon parametreleri\n');
+    disp(tblS2);
+    writetable(tblS2, fullfile(out_folder, 'TableS2_parameters.csv'));
+    fprintf('\nTable S3: Kontrolcü kazançları\n');
+    disp(tblS3);
+    writetable(tblS3, fullfile(out_folder, 'TableS3_gains.csv'));
+catch err
+    warning('Table S2 / S3 atlandı: %s', err.message);
+end
+
+fprintf('=====================================================================\n');
+fprintf('Grafikler "%s" klasörüne ve "%s" dosyasına kaydedildi.\n', out_folder, output_pdf);
+
+
+%% =====================================================================
+%% YARDIMCI FONKSİYONLAR
+%% =====================================================================
+function D = readLogs(dir_path, num_drones, plot_step)
+    % droneN_log.txt dosyalarını okur; bulunamayanlar ok = false.
+    % T/t: tam veri (metrikler, çubuklar), Tp/tp: çizgi grafikleri için seyreltilmiş veri
+    D = repmat(struct('ok', false, 't', [], 'T', [], 'tp', [], 'Tp', []), num_drones, 1);
+    if isempty(dir_path) || ~isfolder(dir_path), return; end
+    for i = 1:num_drones
+        filename = fullfile(dir_path, sprintf('drone%d_log.txt', i));
+        if ~isfile(filename), continue; end
+        T = readtable(filename, 'VariableNamingRule', 'preserve');
+        D(i).ok = true;
+        D(i).T  = T;
+        D(i).t  = T{:, "time"} - T{1, "time"};
+        D(i).Tp = T(1:plot_step:end, :);
+        D(i).tp = D(i).t(1:plot_step:end);
+    end
+end
+
+function checkRunInfo(dir_path, D, label, ex)
+    % run_info.txt: koşunun kontrolcüsü, bozucu ve beta ayarı ve terminalde basılan RMS değerleri.
+    % Beklenen ayarlar (ex, bkz. expectedRun) ve loglardan hesaplanan RMS ile karşılaştırılır; fark ya da
+    % dosyanın olmaması logların başka bir koşudan geldiğini gösterir.
+    if isempty(dir_path) || ~any([D.ok]), return; end
+    info_file = fullfile(dir_path, 'run_info.txt');
+    if ~isfile(info_file)
+        warning('%s: %s yok. Loglar sıralı simülasyondan değil (eski ya da başka bir kaynaktan) olabilir.', ...
+                label, info_file);
+        return;
+    end
+    txt = fileread(info_file);
+    ctrl = regexp(txt, 'controller:\s*(\S+)', 'tokens', 'once');
+    dt   = regexp(txt, 'date:\s*([^\n]+)', 'tokens', 'once');
+    if isempty(ctrl), ctrl = {'?'}; end
+    if isempty(dt), dt = {'?'}; end
+    fprintf('%s: %s | controller = %s | %s\n', label, dir_path, ctrl{1}, strtrim(dt{1}));
+    if nargin > 3
+        dist = regexp(txt, 'disturbance_enabled:\s*(\S+)', 'tokens', 'once');
+        beta = regexp(txt, 'psi_filter_beta:\s*([-0-9.eE+]+)', 'tokens', 'once');
+        if ~strcmp(ctrl{1}, ex.ctrl)
+            warning('%s: koşu controller = %s, beklenen %s. Doğru klasör mü?', label, ctrl{1}, ex.ctrl);
+        end
+        if ~isempty(dist) && strcmp(dist{1}, 'true') ~= ex.dist
+            warning('%s: disturbance_enabled = %s, beklenen %d.', label, dist{1}, ex.dist);
+        end
+        if ~isempty(beta) && abs(str2double(beta{1}) - ex.beta) > 1e-9
+            warning('%s: psi_filter_beta = %s, beklenen %g.', label, beta{1}, ex.beta);
+        end
+    end
+    for i = 1:numel(D)
+        if ~D(i).ok, continue; end
+        tok = regexp(txt, sprintf('drone%d_rms:\\s*([-0-9.eE+]+)', i), 'tokens', 'once');
+        if isempty(tok), continue; end
+        rms_sim = str2double(tok{1});
+        rms_log = sqrt(mean(positionError(D(i).T).^2));
+        if abs(rms_sim - rms_log) > 1e-4
+            warning('%s: drone%d RMS logda %.5f, simülasyonda %.5f. Loglar bu koşuya ait değil olabilir.', ...
+                    label, i, rms_log, rms_sim);
+        end
+    end
+end
+
+function e = positionError(T)
+    e = sqrt((T{:, "a_pos.x"} - T{:, "r_pos.x"}).^2 + ...
+             (T{:, "a_pos.y"} - T{:, "r_pos.y"}).^2 + ...
+             (T{:, "a_pos.z"} - T{:, "r_pos.z"}).^2);
+end
+
+function ex = expectedRun(name, beta_default)
+    % Koşu adından beklenen ayarlar: <kontrolcü>[_nominal | _beta<değer>]
+    ex.ctrl = regexprep(name, '_(nominal|beta[-0-9.eE+]*)$', '');
+    ex.dist = ~endsWith(name, '_nominal');
+    tok = regexp(name, '_beta([-0-9.eE+]+)$', 'tokens', 'once');
+    if isempty(tok), ex.beta = beta_default; else, ex.beta = str2double(tok{1}); end
+end
+
+function s = ctrlLabel(name)
+    % Grafik etiketi: pid_ff -> PD+FF, se3 -> SE(3), pid_nominal -> PD (no disturbance), ...
+    ex = expectedRun(name, NaN);
+    switch ex.ctrl
+        case 'pid_ff', s = 'PD+FF';      % kazançlarda K_i = 0: kontrolcü fiilen PD
+        case 'pid',    s = 'PD';
+        case 'ndob',   s = 'PD+NDOB';
+        case 'se3',    s = 'SE(3)';
+        case 'se3_ff', s = 'SE(3)+FF';
+        otherwise,     s = ex.ctrl;
+    end
+    if ~ex.dist, s = [s ' (no disturbance)']; end
+    if ~isnan(ex.beta), s = sprintf('%s (\\beta = %g)', s, ex.beta); end
+end
+
+function s = ctrlVar(name)
+    % Tablo sütun adı: PD+FF -> PD_FF, SE(3)+FF -> SE3_FF
+    s = regexprep(strrep(ctrlLabel(name), '(3)', '3'), '[^A-Za-z0-9]+', '_');
+    s = regexprep(s, '^_+|_+$', '');
+end
+
+function tf = hasNdobColumns(Dx)
+    % Log, controller:=ndob koşusundan mı? (ndob_f.x sütunu var mı)
+    v = find([Dx.ok], 1);
+    tf = ~isempty(v) && ismember("ndob_f.x", Dx(v).T.Properties.VariableNames);
+end
+
+function M = metrics(D)
+    n = numel(D);
+    M = struct('rmse', nan(n, 1), 'ise', nan(n, 1), 'max', nan(n, 1));
+    for i = 1:n
+        if ~D(i).ok, continue; end
+        sq = positionError(D(i).T).^2;
+        dt = [0; diff(D(i).t)];
+        M.rmse(i) = sqrt(mean(sq));
+        M.ise(i)  = sum(sq .* dt);
+        M.max(i)  = sqrt(max(sq));
+    end
+end
+
+function [t_b, e_b] = windowRms(D1, window)
+    % Konum hatasının ardışık, örtüşmeyen pencerelerdeki RMS'i (pencere ortası zamanında).
+    % Pencere referansın güncelleme periyoduna eşitse (20 Hz -> 0.05 s) testere dişi düzlenir ve
+    % pencere RMS'lerinin karesel ortalaması RMSE'ye eşit olur.
+    [t_b, e_b] = windowRmsSignal(D1.t, positionError(D1.T), window);
+end
+
+function [t_b, e_b] = windowRmsSignal(t, e, window)
+    % Herhangi bir hata sinyalinin ardışık, örtüşmeyen pencerelerdeki RMS'i
+    t  = t(:); e = e(:);
+    dt = median(diff(t));
+    N  = max(1, round(window / dt));
+    n  = floor(numel(e) / N);
+    e_b = sqrt(mean(reshape(e(1:n * N).^2, N, n), 1))';
+    t_b = mean(reshape(t(1:n * N), N, n), 1)';
+end
+
+function c = ctrlColor(name)
+    % Kontrolcü başına sabit, canlı (doygun) renk (Fig. 2, 8, 9, F1): mavi, siyah, turuncu, yeşil, mor;
+    % birbirine yakın ton yok ve açık renkli faz bölgelerinin üstünde de belirgin.
+    ex = expectedRun(name, NaN);
+    switch ex.ctrl
+        case 'pid_ff', c = [0.00 0.40 1.00];   % canlı mavi
+        case 'se3_ff', c = [0.00 0.00 0.00];   % siyah
+        case 'ndob',   c = [1.00 0.50 0.00];   % turuncu
+        case 'pid',    c = [0.00 0.65 0.00];   % yeşil
+        case 'se3',    c = [0.50 0.00 0.75];   % mor (kesikli çizilir)
+        otherwise,     c = [0.55 0.35 0.15];   % kahverengi
+    end
+end
+
+function w = ctrlLineWidth(name)
+    % Katmanlı kalınlık: altta çizilenler kalın, üsttekiler ince; üst üste binen eğriler iç içe
+    % şeritler olarak birlikte görünür (çizim sırası: PD, PD+NDOB, SE(3)+FF, PD+FF, kesikli SE(3)).
+    ex = expectedRun(name, NaN);
+    switch ex.ctrl
+        case 'pid',    w = 3.5;
+        case 'ndob',   w = 3.0;
+        case 'se3_ff', w = 2.5;
+        case 'pid_ff', w = 2.0;
+        case 'se3',    w = 2.2;
+        otherwise,     w = 2.0;
+    end
+end
+
+function ls = ctrlLineStyle(name)
+    % SE(3) kesikli: bozucu altında PID ile, bozucusuz İHA'larda SE(3)+FF ile üst üste biner
+    ex = expectedRun(name, NaN);
+    if strcmp(ex.ctrl, 'se3'), ls = '--'; else, ls = '-'; end
+end
+
+function axs = stackedAxes(fig, n, top_px)
+    % n satırlık dikey eksen düzeni; her eksenin kendi x etiketi sığsın diye satırlar arasında
+    % sabit piksel boşluğu bırakır (üstte tek satırlık ortak açıklama için top_px piksel yer, varsayılan 60).
+    if nargin < 3, top_px = 60; end
+    H = fig.Position(4);
+    top = 1 - top_px / H; bottom = 85 / H; gap = 95 / H; left = 0.12; width = 0.85;
+    h = (top - bottom - (n - 1) * gap) / n;
+    axs = gobjects(n, 1);
+    for a = 1:n
+        axs(a) = axes(fig, 'Position', [left, top - a * h - (a - 1) * gap, width, h]);
+    end
+end
+
+function tbl = disturbanceRejectionTable(Ms, Mnom, names, nom_names)
+    % Çiftler sırayla (ileri beslemeli k, ileri beslemesiz k+1); Mnom{p}: p. çiftin bozucusuz koşusu.
+    % Her çift için RMSE (mm) ve ISE (x10^-3 m^2 s): bozucusuz koşu, ileri beslemesiz ve ileri beslemeli
+    % koşu; downwash'ın eklediği kısım dRMSE / dISE (bozucusuz koşuya göre artış) ve ileri beslemenin
+    % giderdiği pay removed = (1 - d_ff / d_noff) * 100 (yalnızca dRMSE_noff > 0.1 mm olan İHA'lar).
+    n = numel(Ms{1}.rmse);
+    tbl = table("Q " + string((1:n)'), 'VariableNames', {'Quadcopter'});
+    for p = 1:numel(Ms) / 2
+        A = Ms{2 * p - 1}; B = Ms{2 * p}; N0 = Mnom{p};
+        fa = names{2 * p - 1}; fb = names{2 * p}; fn = nom_names{p};
+        dRa = (A.rmse - N0.rmse) * 1e3;  dRb = (B.rmse - N0.rmse) * 1e3;
+        dIa = (A.ise - N0.ise) * 1e3;    dIb = (B.ise - N0.ise) * 1e3;
+        dist = dRb > 0.1;
+        remR = nan(n, 1); remR(dist) = (1 - dRa(dist) ./ dRb(dist)) * 100;
+        remI = nan(n, 1); remI(dist) = (1 - dIa(dist) ./ dIb(dist)) * 100;
+        tbl.([fn '_RMSE_mm'])         = N0.rmse * 1e3;
+        tbl.([fb '_RMSE_mm'])         = B.rmse * 1e3;
+        tbl.([fa '_RMSE_mm'])         = A.rmse * 1e3;
+        tbl.([fb '_dRMSE_mm'])        = dRb;
+        tbl.([fa '_dRMSE_mm'])        = dRa;
+        tbl.([fa '_removed_RMSE_pct']) = remR;
+        tbl.([fn '_ISE_milli_m2s'])   = N0.ise * 1e3;
+        tbl.([fb '_ISE_milli_m2s'])   = B.ise * 1e3;
+        tbl.([fa '_ISE_milli_m2s'])   = A.ise * 1e3;
+        tbl.([fb '_dISE_milli_m2s'])  = dIb;
+        tbl.([fa '_dISE_milli_m2s'])  = dIa;
+        tbl.([fa '_removed_ISE_pct']) = remI;
+    end
+end
+
+function hs = plotErrorLines(ax, runs, names, window)
+    % Konum hatasının pencere RMS'i (bkz. windowRms), kontrolcü başına sabit renk / kalınlık / çizgi tipiyle.
+    % Çizim sırası: düz çizgiler kalından inceye, sonra kesikli çizgiler; üst üste binen eğriler iç içe
+    % şeritler olarak birlikte görünür. hs names sırasındadır (çizilmeyenler boş grafik nesnesi).
+    hs = gobjects(1, numel(names));
+    is_dash = cellfun(@(n) strcmp(ctrlLineStyle(n), '--'), names);
+    w = cellfun(@ctrlLineWidth, names);
+    solid = find(~is_dash);
+    [~, o] = sort(w(solid), 'descend');
+    for k = [solid(o), find(is_dash)]
+        if ~runs{k}.ok, continue; end
+        [tb, eb] = windowRms(runs{k}, window);
+        hs(k) = plot(ax, tb, eb, ctrlLineStyle(names{k}), 'Color', ctrlColor(names{k}), 'LineWidth', w(k));
+    end
+end
+
+function styleErrorAxes(ax, drone, zones, zone_cols, S)
+    % Fig. 2 ve Fig. 8 panelleri: faz bölgeleri, eksen etiketleri ve İHA etiketi (sağ üstte, çerçevesiz,
+    % saydam; uçuşun sonunda hata küçük olduğundan eğrilerle çakışmaz)
+    yl = ylim(ax); ylim(ax, [0 yl(2) * 1.05]);
+    addZones(ax, zones, zone_cols);
+    xlim(ax, [0 S.t_max]);
+    set(ax, 'XTick', 0:10:S.t_max, 'FontName', S.font_name, 'FontSize', 16, 'FontWeight', 'bold', ...
+        'LineWidth', 1.5, 'Layer', 'top', 'Box', 'on');
+    text(ax, 0.985, 0.96, sprintf('Q %d', drone), 'Units', 'normalized', 'HorizontalAlignment', 'right', ...
+         'VerticalAlignment', 'top', 'FontWeight', 'bold', 'FontSize', 18, 'FontName', S.font_name, ...
+         'BackgroundColor', 'none', 'EdgeColor', 'none', 'Margin', 2);
+    xlabel(ax, 't (s)', 'FontWeight', 'bold', 'FontSize', 18, 'FontName', S.font_name);
+    ylabel(ax, '||e_p|| (m)', 'FontWeight', 'bold', 'FontSize', 18, 'FontName', S.font_name);
+end
+
+function tbl = multiComparisonTable(Ms, names)
+    % Her koşunun RMSE'si (mm) ve ISE'si (x10^-3 m^2 s), ilk koşunun diğerlerine göre iyileşmesi (%)
+    % = (diğeri - ilk) / diğeri * 100
+    n = numel(Ms{1}.rmse);
+    tbl = table("Q " + string((1:n)'), 'VariableNames', {'Quadcopter'});
+    for k = 1:numel(Ms)
+        tbl.([names{k} '_RMSE_mm'])        = Ms{k}.rmse * 1e3;
+        tbl.([names{k} '_ISE_milli_m2s'])  = Ms{k}.ise * 1e3;
+    end
+    A = Ms{1};
+    for k = 2:numel(Ms)
+        B = Ms{k};
+        tbl.([names{1} '_vs_' names{k} '_RMSE_pct']) = (B.rmse - A.rmse) ./ B.rmse * 100;
+        tbl.([names{1} '_vs_' names{k} '_ISE_pct'])  = (B.ise - A.ise) ./ B.ise * 100;
+    end
+end
+
+function e = dcmError(T)
+    % Geodesic yönelim hatası: acos((trace(R_ref' * R_act) - 1) / 2), Z-Y-X Euler
+    Rr = eulerToRotCols(T{:, "r_eul_ang.x"}, T{:, "r_eul_ang.y"}, T{:, "r_eul_ang.z"});
+    Ra = eulerToRotCols(T{:, "a_eul_ang.x"}, T{:, "a_eul_ang.y"}, T{:, "a_eul_ang.z"});
+    tr = sum(Rr .* Ra, 2);                    % trace(Rr' * Ra) = sum_ij Rr_ij * Ra_ij
+    e  = acos(max(min((tr - 1) / 2, 1), -1));
+end
+
+function R = eulerToRotCols(phi, theta, psi)
+    % R = Rz(psi) * Ry(theta) * Rx(phi); her satır [R11 R12 R13 R21 R22 R23 R31 R32 R33]
+    cf = cos(phi); sf = sin(phi); ct = cos(theta); st = sin(theta); cp = cos(psi); sp = sin(psi);
+    R = [cp.*ct, cp.*st.*sf - sp.*cf, cp.*st.*cf + sp.*sf, ...
+         sp.*ct, sp.*st.*sf + cp.*cf, sp.*st.*cf - cp.*sf, ...
+         -st,    ct.*sf,              ct.*cf];
+end
+
+function [hs, names] = errorBars(ax, runs, cols, labels, sparse_factor)
+    % Seyreltilmiş konum hatası çubukları (ilk koşu geniş/renkli, ikinci dar/koyu)
+    widths = [1.0 0.5 0.25];
+    alphas = [0.6 0.9 0.9];
+    hs = gobjects(0); names = {};
+    for k = 1:numel(runs)
+        if ~runs{k}.ok, continue; end
+        e = positionError(runs{k}.T);
+        idx = 1:sparse_factor:numel(e);
+        hs(end+1) = bar(ax, runs{k}.t(idx), e(idx), 'FaceColor', cols{k}, 'EdgeColor', 'none', ...
+                        'BarWidth', widths(k), 'FaceAlpha', alphas(k)); %#ok<AGROW>
+        names{end+1} = labels{k}; %#ok<AGROW>
+    end
+end
+
+function finishBarAxes(ax, zones, zone_cols, S, fs)
+    yl = ylim(ax);
+    ylim(ax, [0 yl(2) * 1.05]);
+    addZones(ax, zones, zone_cols);
+    xlim(ax, [0 S.t_max]);
+    set(ax, 'XTick', 0:10:S.t_max, 'FontName', S.font_name, 'FontSize', fs, 'FontWeight', 'bold', ...
+        'LineWidth', 1.5, 'Layer', 'top', 'Box', 'on');
+end
+
+function barLegend(ax, hs, names, ttl, font_name)
+    if isempty(hs), return; end
+    lgd = legend(ax, hs, names, 'Location', 'NorthEast', 'FontSize', 12, 'FontWeight', 'bold', ...
+                 'FontName', font_name, 'Box', 'on');
+    title(lgd, ttl);
+end
+
+function plotStateFigure(D, valid, act_prefix, ref_prefix, ylabels, zones, zone_cols, colors, S, ...
+                         out_folder, out_name, output_pdf, show_ref, mark_extrema)
+    % 3 eksenli gerçek (renkli) + istenen (siyah noktalı, üstte) zaman grafiği.
+    % show_ref = false: istenen değerler çizilmez (Fig. 5, Euler açıları).
+    % mark_extrema = true: ilk iki panelde (Fig. 5'te φ, θ) tüm İHA'lar arasındaki en büyük ve en küçük değer
+    % işaretlenir.
+    if nargin < 13, show_ref = true; end
+    if nargin < 14, mark_extrema = false; end
+    fig = figure('Position', [100, 100, 1000, 900]);
+    axs = stackedAxes(fig, 3);
+    axis_names = ["x", "y", "z"];
+    lgd_handles = gobjects(0);
+    for a = 1:3
+        ax = axs(a); hold(ax, 'on');
+        if a == 1 && show_ref
+            lgd_handles(end+1) = plot(ax, NaN, NaN, ':', 'Color', S.ref_col, 'LineWidth', S.ref_w, ...
+                                      'DisplayName', 'Desired'); %#ok<AGROW>
+        end
+        all_vals = [];
+        V = cell(1, numel(D)); R = V;
+        for i = valid
+            v = D(i).Tp{:, act_prefix + axis_names(a)};
+            r = D(i).Tp{:, ref_prefix + axis_names(a)};
+            if act_prefix == "a_eul_ang." && a == 3
+                % yaw: gerçek açı +/-pi'ye sarılı, referans sürekli -> ikisini de sürekli çiz
+                v = unwrap(v); r = unwrap(r);
+                k0 = round((r(1) - v(1)) / (2 * pi)); v = v + 2 * pi * k0;
+            end
+            V{i} = v; R{i} = r;
+            all_vals = [all_vals; v]; %#ok<AGROW>
+            if show_ref, all_vals = [all_vals; r]; end %#ok<AGROW>
+        end
+        for i = valid
+            h = plot(ax, D(i).tp, V{i}, '-', 'Color', colors(i,:), 'LineWidth', S.line_w, ...
+                     'DisplayName', sprintf('Q %d', i));
+            if a == 1, lgd_handles(end+1) = h; else, h.HandleVisibility = 'off'; end %#ok<AGROW>
+        end
+        if show_ref
+            for i = valid                         % istenen değerler (üstte, siyah noktalı)
+                plot(ax, D(i).tp, R{i}, ':', 'Color', S.ref_col, 'LineWidth', S.ref_w, 'HandleVisibility', 'off');
+            end
+        end
+        if mark_extrema && a < 3                 % ψ panelinde işaret yok (açılmış yaw'ın uç değeri anlamsız)
+            ylim(ax, padLimits(all_vals, 0.3));   % işaret yazıları için yer
+            markExtrema(ax, D, valid, V, colors, S);
+        else
+            ylim(ax, padLimits(all_vals, 0.1));
+        end
+        addZones(ax, zones, zone_cols);
+        styleAxes(ax, S);
+        ylabel(ax, ylabels(a), 'FontWeight', 'bold', 'FontSize', S.font_size, 'FontName', S.font_name);
+        xlabel(ax, 't (s)', 'FontWeight', 'bold', 'FontSize', S.font_size, 'FontName', S.font_name);
+    end
+    addTopLegend(lgd_handles, [0.1 0.94 0.8 0.05], S);
+    saveFigure(fig, out_folder, out_name, output_pdf);
+end
+
+function markExtrema(ax, D, valid, V, colors, S)
+    % Tüm İHA'lar arasında en büyük ve en küçük değer: işaret (dolgu = İHA rengi) ve yanında
+    % "max/min değer (İHA, zaman)" yazısı. V{i}: i. İHA'nın çizilen (seyreltilmiş) değerleri.
+    for kind = ["max", "min"]
+        best = [];
+        for i = valid
+            if kind == "max", [val, k] = max(V{i}); else, [val, k] = min(V{i}); end
+            if isempty(best) || (kind == "max" && val > best(1)) || (kind == "min" && val < best(1))
+                best = [val, i, D(i).tp(k)];
+            end
+        end
+        if isempty(best), continue; end
+        val = best(1); i = best(2); tt = best(3);
+        if kind == "max", mk = '^'; dy = 1; va = 'bottom'; else, mk = 'v'; dy = -1; va = 'top'; end
+        plot(ax, tt, val, mk, 'MarkerSize', 12, 'MarkerFaceColor', colors(i,:), 'MarkerEdgeColor', 'k', ...
+             'LineWidth', 1.5, 'HandleVisibility', 'off');
+        yl = ylim(ax);
+        if tt > 40, ha = 'right'; dx = -0.6; else, ha = 'left'; dx = 0.6; end   % sağ kenara taşmasın
+        text(ax, tt + dx, val + 0.03 * diff(yl) * dy, sprintf('%s %.2f rad (Q %d, %.1f s)', kind, val, i, tt), ...
+             'HorizontalAlignment', ha, 'VerticalAlignment', va, 'FontSize', 14, 'FontWeight', 'bold', ...
+             'FontName', S.font_name);
+    end
+end
+
+function wp = loadWaypointSets(config_dir, drone)
+    % trajectory_manager_droneN.yaml + all_trajectories.yaml dosyalarından waypoint setlerini okur
+    mgr = fileread(fullfile(config_dir, sprintf('trajectory_manager_drone%d.yaml', drone)));
+    lst = regexp(mgr, 'active_trajectories:\s*\[(.*?)\]', 'tokens', 'once');
+    names = regexp(lst{1}, '"([^"]+)"', 'tokens');
+    names = cellfun(@(c) c{1}, names, 'UniformOutput', false);
+
+    all_txt = fileread(fullfile(config_dir, 'all_trajectories.yaml'));
+    wp = struct('name', {}, 'x', {}, 'y', {}, 'z', {}, 'method', {});
+    for k = 1:numel(names)
+        pattern = ['\n\s*' regexptranslate('escape', names{k}) ':\s*\n(.*?)method:\s*"([^"]+)"'];
+        blk = regexp(all_txt, pattern, 'tokens', 'once');
+        if isempty(blk), error('%s all_trajectories.yaml içinde bulunamadı', names{k}); end
+        wp(k).name   = names{k};
+        wp(k).x      = yamlArray(blk{1}, 'points_x');
+        wp(k).y      = yamlArray(blk{1}, 'points_y');
+        wp(k).z      = yamlArray(blk{1}, 'points_z');
+        wp(k).method = blk{2};
+    end
+end
+
+function v = yamlArray(txt, key)
+    tok = regexp(txt, [key ':\s*\[([^\]]*)\]'], 'tokens', 'once');
+    v = str2double(strsplit(strtrim(tok{1}), ','));
+end
+
+function plotFigS5(Dd, wp, path_color, font_name, out_folder, output_pdf)
+    % Hibrit yörünge: 3B ve XY görünüm, waypoint setleri ve atlanan ara noktalar (numaralı)
+    wp_colors = {[1 0.2 0.2], [0.2 0.6 1], [0.2 0.8 0.2], [0.9 0.8 0]};
+    T = Dd.Tp;
+    px = T{:, "a_pos.x"}; py = T{:, "a_pos.y"}; pz = T{:, "a_pos.z"};
+
+    % Atlanan waypointler: yeni set geçiş segmentinin başında alındığı için sonraki noktalara
+    % ulaşılmaz (cubic_spline: segment 3, diğerleri: segment 5; ilk set dışındakilerin başına
+    % mevcut referans noktası eklenir). Son set tamamen uçulur.
+    skipped = cell(numel(wp), 1);
+    for k = 1:numel(wp) - 1
+        if strcmp(wp(k).method, 'cubic_spline'), s = 3; else, s = 5; end
+        first_skipped = s + 2 - double(k > 1);    % 1 tabanlı indeks
+        skipped{k} = first_skipped:numel(wp(k).x);
+    end
+
+    fig = figure('Position', [100, 100, 1200, 550]);
+    tl = tiledlayout(fig, 1, 2, 'TileSpacing', 'compact', 'Padding', 'compact');
+    for view_k = 1:2
+        ax = nexttile(tl); hold(ax, 'on'); box(ax, 'on');
+        if view_k == 1
+            plot3(ax, px, py, pz, '-', 'Color', path_color, 'LineWidth', 3.5);
+        else
+            plot(ax, px, py, '-', 'Color', path_color, 'LineWidth', 3.5);
+        end
+        label_no = 0;
+        for k = 1:numel(wp)
+            c = wp_colors{mod(k - 1, numel(wp_colors)) + 1};
+            if view_k == 1
+                scatter3(ax, wp(k).x, wp(k).y, wp(k).z, 100, c, 's', 'filled', 'MarkerEdgeColor', 'k');
+            else
+                scatter(ax, wp(k).x, wp(k).y, 100, c, 's', 'filled', 'MarkerEdgeColor', 'k');
+            end
+            for j = skipped{k}
+                label_no = label_no + 1;
+                if view_k == 1
+                    text(ax, wp(k).x(j), wp(k).y(j), wp(k).z(j), sprintf('  %d', label_no), ...
+                         'FontName', font_name, 'FontSize', 16, 'FontWeight', 'bold');
+                else
+                    text(ax, wp(k).x(j), wp(k).y(j), sprintf('  %d', label_no), ...
+                         'FontName', font_name, 'FontSize', 16, 'FontWeight', 'bold');
+                end
+            end
+        end
+        if view_k == 1
+            scatter3(ax, px(1), py(1), pz(1), 300, 'k', 'p', 'filled', 'MarkerEdgeColor', 'k', 'LineWidth', 1.5);
+            zlabel(ax, 'z (m)', 'FontWeight', 'bold', 'FontSize', 22, 'FontName', font_name);
+            view(ax, 45, 30);
+        else
+            scatter(ax, px(1), py(1), 300, 'g', 'p', 'filled', 'MarkerEdgeColor', 'k', 'LineWidth', 1.5);
+            view(ax, 0, 90);
+        end
+        xlabel(ax, 'x (m)', 'FontWeight', 'bold', 'FontSize', 22, 'FontName', font_name);
+        ylabel(ax, 'y (m)', 'FontWeight', 'bold', 'FontSize', 22, 'FontName', font_name);
+        grid(ax, 'on'); axis(ax, 'equal'); axis(ax, 'tight');
+        set(ax, 'FontName', font_name, 'FontSize', 20, 'FontWeight', 'bold', 'LineWidth', 2.0);
+    end
+    saveFigure(fig, out_folder, 'FigS5.svg', output_pdf);
+end
+
+function F = formationMetrics(D, r_N)
+    % Logları ortak zaman eksenine getirir ve formationCore'u çağırır
+    valid = find([D.ok]);
+    t = D(valid(1)).t;
+    N = numel(D);
+    Pa = nan(numel(t), 3, N);
+    Pr = Pa;
+    for i = valid
+        Ti = D(i).T; ti = D(i).t;
+        a = [Ti{:, "a_pos.x"}, Ti{:, "a_pos.y"}, Ti{:, "a_pos.z"}];
+        r = [Ti{:, "r_pos.x"}, Ti{:, "r_pos.y"}, Ti{:, "r_pos.z"}];
+        if numel(ti) ~= numel(t) || any(abs(ti - t) > 1e-9)
+            a = interp1(ti, a, t, 'linear', NaN);
+            r = interp1(ti, r, t, 'linear', NaN);
+        end
+        Pa(:, :, i) = a;
+        Pr(:, :, i) = r;
+    end
+    F = formationCore(t, Pa, Pr, r_N);
+end
+
+function F = formationCore(t, Pa, Pr, r_N)
+    % Pa, Pr: T x 3 x N gerçek / referans konumlar (dünya ekseni, başlangıç ofsetleri dahil)
+    N = size(Pa, 3);
+    pairs = nchoosek(1:N, 2);
+    sq_d = 0; sq_f = 0; cnt = 0;
+    pair_Ed = nan(size(pairs, 1), 1); pair_EF = pair_Ed;
+    pair_Ed_mean = pair_Ed; pair_EF_xy = pair_Ed; pair_EF_z = pair_Ed;
+    for k = 1:size(pairs, 1)
+        da = Pa(:, :, pairs(k, 1)) - Pa(:, :, pairs(k, 2));
+        dr = Pr(:, :, pairs(k, 1)) - Pr(:, :, pairs(k, 2));
+        nb = sqrt(sum(dr.^2, 2)) <= r_N;                       % zamana bağlı komşuluk
+        e_d = sqrt(sum(da.^2, 2)) - sqrt(sum(dr.^2, 2));       % bağıl mesafe hatası
+        ev  = da - dr;                                         % formasyon hatası vektörü e_ij = e_i - e_j
+        e_f = sqrt(sum(ev.^2, 2));                             % formasyon (bağıl konum) hatası
+        sq_d = sq_d + nb .* e_d.^2;
+        sq_f = sq_f + nb .* e_f.^2;
+        cnt  = cnt + nb;
+        if any(nb)                                             % çift bazında RMS (komşu oldukları süre)
+            pair_Ed(k) = sqrt(mean(e_d(nb).^2));
+            pair_EF(k) = sqrt(mean(e_f(nb).^2));
+            pair_Ed_mean(k) = mean(e_d(nb));                   % işaret: + uzak, - yakın
+            pair_EF_xy(k) = sqrt(mean(sum(ev(nb, 1:2).^2, 2))); % yatay bileşen RMS
+            pair_EF_z(k)  = sqrt(mean(ev(nb, 3).^2));           % dikey bileşen RMS
+        end
+    end
+    ok = cnt > 0;
+    F.t  = t(:);
+    F.Ed = nan(size(cnt)); F.Ed(ok) = sqrt(sq_d(ok) ./ cnt(ok));
+    F.EF = nan(size(cnt)); F.EF(ok) = sqrt(sq_f(ok) ./ cnt(ok));
+    F.rms_Ed = sqrt(mean(F.Ed(ok).^2)); F.max_Ed = max(F.Ed(ok));
+    F.rms_EF = sqrt(mean(F.EF(ok).^2)); F.max_EF = max(F.EF(ok));
+    F.pairs = pairs; F.pair_Ed = pair_Ed; F.pair_EF = pair_EF;
+    F.pair_Ed_mean = pair_Ed_mean; F.pair_EF_xy = pair_EF_xy; F.pair_EF_z = pair_EF_z;
+end
+
+function zones = interactionZones(D, thr, t_max)
+    % Downwash etkileşim bölgeleri: her an |f_dist| > thr olan İHA sayısından (bkz. interactionZonesCore)
+    valid = find([D.ok]);
+    t = D(valid(1)).t;
+    n_dist = zeros(numel(t), 1);
+    for i = valid
+        Ti = D(i).T;
+        F = sqrt(Ti{:, "dist_f.x"}.^2 + Ti{:, "dist_f.y"}.^2 + Ti{:, "dist_f.z"}.^2);
+        if numel(F) ~= numel(t)
+            F = interp1(D(i).t, F, t, 'previous', 0);
+        end
+        n_dist = n_dist + (F > thr);
+    end
+    zones = interactionZonesCore(t, n_dist, t_max);
+end
+
+function zones = interactionZonesCore(t, n_dist, t_max)
+    % yeşil: ilk etkilenme -> en az iki İHA'nın aynı anda etkilendiği son an; sarı: oradan t_max'a
+    % (0.1 s'ye yuvarlanır). Hiç etkileşim yoksa boş, iki İHA hiç aynı anda etkilenmiyorsa tek bölge.
+    k_on  = find(n_dist >= 1, 1, 'first');
+    k_two = find(n_dist >= 2, 1, 'last');
+    if isempty(k_on)
+        zones = zeros(0, 2);
+        return;
+    end
+    t_on = floor(t(k_on) * 10) / 10;
+    if isempty(k_two) || t(k_two) <= t(k_on)
+        zones = [t_on t_max];
+    else
+        t_mid = round(t(k_two) * 10) / 10;
+        zones = [t_on t_mid; t_mid t_max];
+    end
+end
+
+function [tblS2, tblS3] = parameterTables(config_dir, launch_file)
+    % Table S2 (simülasyon parametreleri) ve Table S3 (kazançlar), makaledeki sembollerle
+    q1 = fileread(fullfile(config_dir, 'quadcopter_params_1.yaml'));   % Q1
+    q2 = fileread(fullfile(config_dir, 'quadcopter_params_2.yaml'));   % Q2-Q5
+    ln = fileread(launch_file);
+    dyn1 = yamlSection(q1, 'state_derivative_solver_node');
+    dyn2 = yamlSection(q2, 'state_derivative_solver_node');
+    m  = [yamlNumber(dyn1, 'mass'), yamlNumber(dyn2, 'mass')];
+    g  = yamlArray(dyn1, 'g');
+    I  = yamlArray(dyn1, 'I');
+    A  = yamlArray(dyn1, 'A_trans');
+    C1 = yamlArray(dyn1, 'Cd_trans');
+    C2 = yamlArray(dyn2, 'Cd_trans');
+    if isequal(C1, C2)
+        cd_txt = sprintf('diag(%s)', numList(C1([1 5 9])));
+    else
+        cd_txt = sprintf('diag(%s) (Q1); diag(%s) (Q2-Q5)', numList(C1([1 5 9])), numList(C2([1 5 9])));
+    end
+    if isequal(I, yamlArray(dyn2, 'I')), I_txt = sprintf('diag(%s)', numList(I([1 5 9])));
+    else, I_txt = sprintf('diag(%s) (Q1); diag(%s) (Q2-Q5)', numList(I([1 5 9])), numList(yamlArray(dyn2, 'I')));
+    end
+    if m(1) == m(2), m_txt = numList(m(1)); else, m_txt = sprintf('%g - %g', min(m), max(m)); end
+    rows = {
+        'm',        m_txt,                                          'kg'
+        'g',        sprintf('[%s]^T', numList(g)),                  'm/s^2'
+        'rho',      numList(yamlNumber(dyn1, 'rho')),               'kg/m^3'
+        'C_d',      cd_txt,                                         '-'
+        'A',        sprintf('diag(%s)', numList(A([1 5 9]))),       'm^2'
+        'C_coup',   numList(launchParam(ln, 'c_coup')),             'm^2'
+        'kappa_lat', numList(launchParam(ln, 'r_lat')),             '-'
+        'z_0',      numList(launchParam(ln, 'z0')),                 'm'
+        'sigma',    numList(launchParam(ln, 'sigma')),              'm'
+        'lambda',   numList(launchParam(ln, 'turb_intensity')),     '-'
+        'I',        I_txt,                                          'kg m^2'
+        'T_m',      numList(yamlNumber(dyn1, 'tau_thrust')),        's'
+        'T_tau',    numList(yamlNumber(dyn1, 'tau_torque')),        's'
+        'beta',     numList(launchArg(ln, 'psi_filter_beta')),      '-'
+        };
+    tblS2 = cell2table(rows, 'VariableNames', {'Symbol', 'Value', 'Unit'});
+
+    % Kazançlar (Q1 ve Q2-Q5 aynı olmalı; farklıysa ikisi de yazılır)
+    sec = {'mid_level_controller', 'low_level_controller', 'se3_mid_level_controller', 'se3_low_level_controller'};
+    names = {'PD position (x, y, z)', 'PD attitude (phi, theta, psi)', ...
+             'SE(3) position k_x, k_v (x, y, z)', 'SE(3) attitude k_R, k_Omega (phi, theta, psi)'};
+    keys = {{'thrust_x', 'thrust_y', 'thrust_z'}, {'torque1', 'torque2', 'torque3'}, ...
+            {'thrust_x', 'thrust_y', 'thrust_z'}, {'torque1', 'torque2', 'torque3'}};
+    % Tüm integral kazançları 0 ise (kontrolcüler PD) kazançlar kp/kd olarak yazılır
+    with_ki = false;
+    for s = 1:numel(sec)
+        for a = 1:3
+            with_ki = with_ki || yamlNumber(yamlSection(q1, sec{s}), ['ki_' keys{s}{a}]) ~= 0 ...
+                              || yamlNumber(yamlSection(q2, sec{s}), ['ki_' keys{s}{a}]) ~= 0;
+        end
+    end
+    rows = cell(0, 2);
+    for s = 1:numel(sec)
+        g1 = gainText(yamlSection(q1, sec{s}), keys{s}, with_ki);
+        g2 = gainText(yamlSection(q2, sec{s}), keys{s}, with_ki);
+        if ~strcmp(g1, g2), g1 = sprintf('%s (Q1); %s (Q2-Q5)', g1, g2); end
+        rows(end+1, :) = {names{s}, g1}; %#ok<AGROW>
+    end
+    mid1 = yamlSection(q1, 'mid_level_controller');
+    lv = [yamlNumber(mid1, 'lv_x', 2.0), yamlNumber(mid1, 'lv_y', 2.0), yamlNumber(mid1, 'lv_z', 2.5)];
+    rows(end+1, :) = {'NDOB observer gain L = diag(l_x, l_y, l_z) (1/s)', sprintf('diag(%s)', numList(lv))};
+    rows(end+1, :) = {'Update rates trajectory / position / attitude / dynamics (Hz)', ...
+                      sprintf('%g / %g / %g / %g', 20, 1 / yamlNumber(mid1, 'dt'), ...
+                              1 / yamlNumber(yamlSection(q1, 'low_level_controller'), 'dt'), ...
+                              1 / yamlNumber(dyn1, 'dt'))};
+    if with_ki, vname = 'Value_kp_ki_kd'; else, vname = 'Value_kp_kd'; end
+    tblS3 = cell2table(rows, 'VariableNames', {'Gain', vname});
+end
+
+function txt = gainText(sec_txt, axis_keys, with_ki)
+    % Her eksen için "kp/ki/kd" (with_ki) ya da "kp/kd"; eksenler "; " ile
+    parts = cell(1, numel(axis_keys));
+    for a = 1:numel(axis_keys)
+        kp = yamlNumber(sec_txt, ['kp_' axis_keys{a}]);
+        kd = yamlNumber(sec_txt, ['kd_' axis_keys{a}]);
+        if with_ki
+            parts{a} = sprintf('%g/%g/%g', kp, yamlNumber(sec_txt, ['ki_' axis_keys{a}]), kd);
+        else
+            parts{a} = sprintf('%g/%g', kp, kd);
+        end
+    end
+    txt = strjoin(parts, '; ');
+end
+
+function sec_txt = yamlSection(txt, name)
+    % Sütun 0'daki "name:" satırından bir sonraki üst seviye anahtara kadar olan blok
+    lines_ = regexp(txt, '\r?\n', 'split');
+    k0 = find(strcmp(strtrim(lines_), [name ':']) & startsWith(lines_, name), 1);
+    if isempty(k0), error('yaml bölümü bulunamadı: %s', name); end
+    k1 = numel(lines_);
+    for k = k0 + 1:numel(lines_)
+        L = lines_{k};
+        if ~isempty(L) && ~isspace(L(1)) && L(1) ~= '#'
+            k1 = k - 1;
+            break;
+        end
+    end
+    sec_txt = strjoin(lines_(k0 + 1:k1), newline);
+end
+
+function v = yamlNumber(txt, key, default)
+    tok = regexp(txt, ['(?m)^\s*' key ':\s*([-+0-9.eE]+)'], 'tokens', 'once');
+    if isempty(tok)
+        if nargin > 2, v = default; return; end
+        error('yaml anahtarı bulunamadı: %s', key);
+    end
+    v = str2double(tok{1});
+end
+
+function v = launchParam(txt, name)
+    tok = regexp(txt, ['<param name="' name '" value="([^"]+)"'], 'tokens', 'once');
+    if isempty(tok), error('launch parametresi bulunamadı: %s', name); end
+    v = str2double(tok{1});
+end
+
+function v = launchArg(txt, name)
+    tok = regexp(txt, ['<arg name="' name '" default="([^"]+)"'], 'tokens', 'once');
+    if isempty(tok), error('launch argümanı bulunamadı: %s', name); end
+    v = str2double(tok{1});
+end
+
+function s = numList(v)
+    s = strjoin(arrayfun(@(x) sprintf('%g', x), v, 'UniformOutput', false), ', ');
+end
+
+function lim = padLimits(vals, frac)
+    vals = vals(isfinite(vals));
+    if isempty(vals), lim = [-1 1]; return; end
+    lo = min(vals); hi = max(vals);
+    span = hi - lo;
+    if span < 1e-9, span = max(abs(hi), 1) * 0.2; end
+    lim = [lo - frac * span, hi + frac * span];
+end
+
+function addZones(ax, zones, cols)
+    yl = ylim(ax);
+    p = gobjects(size(zones, 1), 1);
+    for z = 1:size(zones, 1)
+        p(z) = patch(ax, [zones(z, 1) zones(z, 2) zones(z, 2) zones(z, 1)], [yl(1) yl(1) yl(2) yl(2)], ...
+                     cols(z, :), 'EdgeColor', 'none', 'HandleVisibility', 'off');
+    end
+    uistack(p, 'bottom');
+    ylim(ax, yl);
+end
+
+function styleAxes(ax, S)
+    grid(ax, 'off');
+    xlim(ax, [0 S.t_max]);
+    set(ax, 'FontName', S.font_name, 'FontSize', S.font_size, 'FontWeight', 'bold', ...
+        'LineWidth', 2, 'Box', 'on', 'Layer', 'top');     % eksen çerçevesi 2 pt (veri çizgileri S.line_w)
+end
+
+function addTopLegend(handles, ~, S)
+    % Yatay açıklama, en üstteki grafiğin hemen üstünde ortalanır (ikinci argüman eski çağrılar için, kullanılmaz)
+    lgd = legend(handles, displayNames(handles), 'Orientation', 'horizontal', 'FontSize', S.font_size, ...
+                 'FontWeight', 'bold', 'Box', 'off', 'FontName', S.font_name);
+    placeAboveAxes(lgd);
+end
+
+function placeAboveAxes(lgd)
+    % Açıklamayı doğal boyutunda, figürdeki en üstteki eksenin 6 piksel üstüne ortalar
+    % (figürün dışına taşacaksa üst kenara dayanır)
+    fig = ancestor(lgd, 'figure');
+    drawnow;                                      % açıklamanın boyutu hesaplansın
+    axs = findobj(fig, 'Type', 'axes');
+    top = 0;
+    for k = 1:numel(axs)
+        p = get(axs(k), 'Position');
+        top = max(top, p(2) + p(4));
+    end
+    H  = fig.Position(4);
+    lp = lgd.Position;
+    y  = min(top + 6 / H, 1 - lp(4));
+    lgd.Position = [(1 - lp(3)) / 2, y, lp(3), lp(4)];
+end
+
+function names = displayNames(handles)
+    % Açıklama etiketleri hücre dizisi olarak (legend'a açıkça verilince 'Orientation' gibi özellik
+    % adları etiket sanılmaz)
+    names = get(handles, 'DisplayName');
+    if ~iscell(names), names = {names}; end   % tek nesnede get char döndürür
+end
+
+function saveFigure(fig, out_folder, out_name, output_pdf)
+    % Figürü SVG (vektör) olarak kaydeder; exportgraphics SVG yazamadığı için print kullanılır.
+    [~, base] = fileparts(out_name);
+    svg_file = fullfile(out_folder, [base '.svg']);
+    set(fig, 'PaperPositionMode', 'auto');                % ekrandaki boyut korunsun
+    try
+        print(fig, svg_file, '-dsvg', '-vector');         % R2022b ve sonrası
+    catch
+        print(fig, svg_file, '-dsvg', '-painters');       % eski sürümler
+    end
+    exportgraphics(fig, output_pdf, 'Append', true);
+    close(fig);
+end
